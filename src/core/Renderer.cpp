@@ -168,7 +168,7 @@ void Renderer::InitializePipeline()
 	shaderDesc.hintCount = 0;
 	shaderDesc.hints = nullptr;
 #endif
-	std::string shaderSource = Utility::LoadFileToString("shaders/triangle.wgsl");
+	std::string shaderSource = Utility::LoadFileToString("../src/shaders/triangle.wgsl");
 	// We use the extension mechanism to specify the WGSL part of the shader module descriptor
 	ShaderModuleWGSLDescriptor shaderCodeDesc;
 	// Set the chained struct's header
@@ -287,6 +287,9 @@ void Renderer::InitializePipeline()
 	pipelineDesc.layout = pipelineLayout;
 
 	pipeline = device.createRenderPipeline(pipelineDesc);
+	if (!pipeline) {
+		std::cout << "Failed to create render pipeline!" << std::endl;
+	}
 
 	uniformBufferStride = AlignTo(sizeof(Uniforms), static_cast<size_t>(uniformAlignment));
 	constexpr size_t kMaxUniformsPerFrame = 256;
@@ -313,7 +316,10 @@ void Renderer::InitializePipeline()
 		std::cout << "Failed to create uniform bind group." << std::endl;
 	}
 
-	// We no longer need to access the shader module
+	// Release the shader module after pipeline creation is confirmed
+	if (!pipeline) {
+		std::cout << "Failed to create render pipeline." << std::endl;
+	}
 	shaderModule.release();
 }
 

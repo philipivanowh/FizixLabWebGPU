@@ -5,7 +5,6 @@
 
 namespace math
 {
-
 	class Vec2
 	{
 	public:

@@ -1,6 +1,7 @@
 #pragma once
 
 #include <cmath>
+#include "Vec2.hpp"
 
 namespace math
 {
@@ -23,7 +24,7 @@ namespace math
             return std::fabs(a - b) <= kEpsilon;
         }
 
-        static bool NearlyEqualVec(const math::Vec2 &a, const math::Vec2 &b)
+        static bool NearlyEqualVec(const Vec2 &a, const Vec2 &b)
         {
             return NearlyEqual(a.x, b.x) && NearlyEqual(a.y, b.y);
         }

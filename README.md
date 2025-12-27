@@ -1,38 +1,16 @@
-## Setup
+LearnWebGPU - Code
+==================
 
-```sh
+This repository contains the reference code base accompanying the [Learn WebGPU](https://eliemichel.github.io/LearnWebGPU/) web book.
 
+Branch `step032`: This corresponds to the code at the end of the page [A first Vertex Attribute](https://eliemichel.github.io/LearnWebGPU/basic-3d-rendering/input-geometry/a-first-vertex-attribute.html).
 
-## Requirements
+Building
+--------
 
-<i>Instructions are for macOS; they will need to be adapted to work on Linux and Windows.</i>
-
-```sh
-# Make sure CMake and Emscripten are installed.
-brew install cmake emscripten
+```
+cmake . -B build
+cmake --build build
 ```
 
-## Specific platform build
-
-```sh
-# Build the app with CMake.
-cmake -B build && cmake --build build -j4
-
-# Run the app.
-./build/app
-```
-
-## Web build
-
-```sh
-# Build the app with Emscripten.
-emcmake cmake -B build-web && cmake --build build-web -j4
-
-# Run a server.
-npx http-server
-```
-
-```sh
-# Open the web app.
-open http://127.0.0.1:8080/build-web/app.html
-```
+Then run either `./build/App` (linux/macOS/MinGW) or `build\Debug\App.exe` (MSVC).

@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 3.0...3.25)
 project(
-	FizixEngine
+	LearnWebGPU
 	VERSION 0.1.0
 	LANGUAGES CXX C
 )
@@ -17,34 +17,21 @@ add_subdirectory(glfw3webgpu)
 
 add_executable(App
 	src/app/main.cpp
-	src/core/Renderer.cpp
 	src/core/Engine.cpp
+	src/core/Renderer.cpp
 	src/core/Scene.cpp
 	src/core/Utility.cpp
+	src/physics/Ball.cpp
 	src/physics/Body.cpp
 	src/physics/Box.cpp
-	src/physics/Ball.cpp
 	src/physics/Collisions.cpp
 )
 
+target_include_directories(App PRIVATE src)
 
 target_link_libraries(App PRIVATE glfw webgpu glfw3webgpu)
 
 target_copy_webgpu_binaries(App)
-
-target_include_directories(App PRIVATE ${CMAKE_SOURCE_DIR}/src)
-
-if (EMSCRIPTEN)
-	target_include_directories(App PRIVATE ${CMAKE_SOURCE_DIR}/third_party/webgpu/include)
-	target_include_directories(glfw3webgpu PRIVATE ${CMAKE_SOURCE_DIR}/third_party/webgpu/include)
-endif()
-
-add_custom_command(TARGET App POST_BUILD
-	COMMAND ${CMAKE_COMMAND} -E copy_directory
-		${CMAKE_SOURCE_DIR}/shaders
-		$<TARGET_FILE_DIR:App>/shaders
-)
-
 
 set_target_properties(App PROPERTIES
 	CXX_STANDARD 17
@@ -52,7 +39,6 @@ set_target_properties(App PROPERTIES
 	CXX_EXTENSIONS OFF
 	COMPILE_WARNING_AS_ERROR ON
 )
-
 
 if (MSVC)
 	target_compile_options(App PRIVATE /W4)
@@ -65,11 +51,9 @@ if (XCODE)
 		XCODE_GENERATE_SCHEME ON
 		XCODE_SCHEME_ENABLE_GPU_FRAME_CAPTURE_MODE "Metal"
 	)
-
 endif()
 
 if (EMSCRIPTEN)
 	set_target_properties(App PROPERTIES SUFFIX ".html")
 	target_link_options(App PRIVATE -sASYNCIFY)
-	target_link_options(App PRIVATE --preload-file ${CMAKE_SOURCE_DIR}/shaders@/shaders)
 endif()
