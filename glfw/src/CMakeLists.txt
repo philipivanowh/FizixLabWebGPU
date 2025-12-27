@@ -34,6 +34,7 @@ if (GLFW_BUILD_COCOA)
     target_sources(glfw PRIVATE cocoa_platform.h cocoa_joystick.h cocoa_init.m
                                 cocoa_joystick.m cocoa_monitor.m cocoa_window.m
                                 nsgl_context.m)
+    set_source_files_properties(context.c init.c input.c monitor.c platform.c window.c PROPERTIES LANGUAGE OBJC)
 endif()
 
 if (GLFW_BUILD_WIN32)

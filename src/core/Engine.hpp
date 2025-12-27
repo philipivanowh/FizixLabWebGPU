@@ -1,7 +1,7 @@
 #pragma once
 
 #include "core/Renderer.hpp"
-#include "core/Scene.hpp"
+#include "core/World.hpp"
 #include "math/Vec2.hpp"
 
 class Engine {
@@ -22,5 +22,5 @@ public:
 
 private:
 	Renderer renderer;
-	physics::Scene scene;
+	World world;
 };

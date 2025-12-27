@@ -3,13 +3,9 @@
 #include "core/Renderer.hpp"
 #include "core/Utility.hpp"
 
-#include "physics/Ball.hpp"
-#include "physics/Box.hpp"
-#include "physics/Body.hpp"
-#include "math/Vec2.hpp"
-
 #include <array>
 #include <cassert>
+#include <cmath>
 #include <cstdint>
 #include <string>
 #include <vector>
@@ -114,6 +110,7 @@ void Renderer::Terminate()
 	uniformBindGroup.release();
 	uniformBindGroupLayout.release();
 	pipelineLayout.release();
+	linePipeline.release();
 	pipeline.release();
 	surface.unconfigure();
 	queue.release();
@@ -168,7 +165,7 @@ void Renderer::InitializePipeline()
 	shaderDesc.hintCount = 0;
 	shaderDesc.hints = nullptr;
 #endif
-	std::string shaderSource = Utility::LoadFileToString("../src/shaders/triangle.wgsl");
+	std::string shaderSource = Utility::LoadFileToString("src/shaders/triangle.wgsl");
 	// We use the extension mechanism to specify the WGSL part of the shader module descriptor
 	ShaderModuleWGSLDescriptor shaderCodeDesc;
 	// Set the chained struct's header
@@ -290,6 +287,11 @@ void Renderer::InitializePipeline()
 	if (!pipeline) {
 		std::cout << "Failed to create render pipeline!" << std::endl;
 	}
+	pipelineDesc.primitive.topology = PrimitiveTopology::LineList;
+	linePipeline = device.createRenderPipeline(pipelineDesc);
+	if (!linePipeline) {
+		std::cout << "Failed to create line render pipeline!" << std::endl;
+	}
 
 	uniformBufferStride = AlignTo(sizeof(Uniforms), static_cast<size_t>(uniformAlignment));
 	constexpr size_t kMaxUniformsPerFrame = 256;
@@ -305,7 +307,7 @@ void Renderer::InitializePipeline()
 	uniformBindGroupEntry.binding = 0;
 	uniformBindGroupEntry.buffer = uniformBuffer;
 	uniformBindGroupEntry.offset = 0;
-	uniformBindGroupEntry.size = uniformBufferStride;
+	uniformBindGroupEntry.size = sizeof(Uniforms); // Size of each uniform block
 
 	BindGroupDescriptor uniformBindGroupDesc = {};
 	uniformBindGroupDesc.layout = uniformBindGroupLayout;
@@ -442,24 +444,25 @@ void Renderer::InitializeBuffers()
 	queue.writeBuffer(vertexBuffer, 0, vertexData.data(), bufferDesc.size);
 }
 
-void Renderer::DrawShape(const physics::Body &body)
+void Renderer::DrawShape(const physics::Rigidbody &Rigidbody)
 {
-	if (auto box = dynamic_cast<const physics::Box *>(&body))
+	if (auto box = dynamic_cast<const shape::Box *>(&Rigidbody))
 	{
 		DrawBox(*box);
 		return;
 	}
-	if (auto ball = dynamic_cast<const physics::Ball *>(&body))
+	if (auto ball = dynamic_cast<const shape::Ball *>(&Rigidbody))
 	{
 		DrawBall(*ball);
 		return;
 	}
 }
 
-void Renderer::DrawBox(const physics::Box &box)
+void Renderer::DrawBox(const shape::Box &box)
 {
+	renderPass.setPipeline(pipeline);
 
-	const std::vector<float> vertices = box.GetRect();
+	const std::vector<float> vertices = box.GetVertexLocalPos();
 	EnsureVertexBufferSize(vertices.size());
 
 	queue.writeBuffer(vertexBuffer, 0, vertices.data(), vertices.size() * sizeof(float));
@@ -490,11 +493,12 @@ void Renderer::EnsureVertexBufferSize(int size)
 }
 
 
-void Renderer::DrawBall(const physics::Ball &ball)
+void Renderer::DrawBall(const shape::Ball &ball)
 {
+	renderPass.setPipeline(pipeline);
 
-	const std::vector<float> vertices = ball.GetBall();
-	EnsureVertexBufferSize(vertices.size() * sizeof(float));
+	const std::vector<float> vertices = ball.GetVertexLocalPos();
+	EnsureVertexBufferSize(vertices.size());
 	
 	queue.writeBuffer(vertexBuffer, 0, vertices.data(), vertices.size() * sizeof(float));
 
@@ -508,10 +512,27 @@ void Renderer::DrawBall(const physics::Ball &ball)
 	renderPass.setBindGroup(0, uniformBindGroup, 1, &uniformOffset);
 	renderPass.setVertexBuffer(0, vertexBuffer, 0, vertexCount * 2 * sizeof(float));
 	renderPass.draw(vertexCount, 1, 0, 0);
+	
+	const float radiusLineX = ball.radius * std::cos(ball.rotation);
+	const float radiusLineY = ball.radius * std::sin(ball.rotation);
+	const std::array<float, 4> radiusLineColor{1.0f, 0.2f, 0.2f, 1.0f};
+	const std::vector<float> lineVertices = {0.0f, 0.0f, radiusLineX, radiusLineY};
+	EnsureVertexBufferSize(lineVertices.size());
+	queue.writeBuffer(vertexBuffer, 0, lineVertices.data(), lineVertices.size() * sizeof(float));
+
+	const uint32_t lineUniformOffset = UpdateUniforms(ball.pos, radiusLineColor);
+	renderPass.setPipeline(linePipeline);
+	renderPass.setBindGroup(0, uniformBindGroup, 1, &lineUniformOffset);
+	renderPass.setVertexBuffer(0, vertexBuffer, 0, lineVertices.size() * sizeof(float));
+	renderPass.draw(2, 1, 0, 0);
+
+	renderPass.setPipeline(pipeline);
+	std::cout << "Drawing ball with " << vertexCount << " vertices at position (" << ball.pos.x << ", " << ball.pos.y << ")" << std::endl;
 }
 
 void Renderer::DrawTestTriangle()
 {
+	renderPass.setPipeline(pipeline);
 	const math::Vec2 translation(500,500);
 	const std::array<float, 4> color{0.3f, 0.8f, 1.0f, 1.0f};
 	uint32_t uniformOffset = UpdateUniforms(translation, color);
@@ -529,6 +550,7 @@ void Renderer::DrawTestTriangle()
 
 void Renderer::DrawTest2Triangle()
 {
+	renderPass.setPipeline(pipeline);
 	const math::Vec2 translation(700,500);
 	const std::array<float, 4> color{0.1f, 0.8f, 1.0f, 1.0f};
 	uint32_t uniformOffset = UpdateUniforms(translation, color);

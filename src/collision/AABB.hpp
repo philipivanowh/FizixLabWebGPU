@@ -2,7 +2,7 @@
 
 #include "math/Vec2.hpp"
 
-namespace physics {
+namespace collision {
 
 struct AABB {
 	math::Vec2 min;

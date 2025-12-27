@@ -1,4 +1,4 @@
-#include "physics/Body.hpp"// Required for std::clamp
+#include "physics/Rigidbody.hpp"// Required for std::clamp
 #include <algorithm>
 
 namespace physics {
@@ -7,45 +7,45 @@ namespace {
 constexpr float kPixelsPerMeter = 100.0f;
 }
 
-Body::Body(const math::Vec2& position,
+Rigidbody::Rigidbody(const math::Vec2& position,
 		 const math::Vec2& initialLinearVel,
 		 const math::Vec2& initialLinearAcc,
-		 float bodyMass,
+		 float RigidbodyMass,
 		 float restitution,
-		 BodyType bodyTypeValue)
+		 RigidbodyType RigidbodyTypeValue)
 	: pos(position)
 	, linearVel(initialLinearVel * kPixelsPerMeter)
 	, linearAcc(initialLinearAcc * kPixelsPerMeter)
-	, bodyType(bodyTypeValue)
+	, bodyType(RigidbodyTypeValue)
 	, restitution(std::clamp(restitution, 0.0f, 1.0f)) {
-	mass = (bodyMass > 0.0f) ? bodyMass : 1.0f;
+	mass = (RigidbodyMass > 0.0f) ? RigidbodyMass : 1.0f;
 	area = 1.0f;
-	if (bodyType != BodyType::Static) {
+	if (bodyType != RigidbodyType::Static) {
 		invMass = 1.0f / mass;
 	} else {
 		invMass = 0.0f;
 	}
 }
 
-void Body::UpdateMassProperties() {
+void Rigidbody::UpdateMassProperties() {
 	inertia = ComputeInertia();
-	if (bodyType == BodyType::Static || inertia == 0.0f) {
+	if (bodyType == RigidbodyType::Static || inertia == 0.0f) {
 		invInertia = 0.0f;
 	} else {
 		invInertia = 1.0f / inertia;
 	}
 }
 
-float Body::ComputeInertia() const {
+float Rigidbody::ComputeInertia() const {
 	return 0.0f;
 }
 
-void Body::Update(float deltaMs, int iterations) {
-	if (bodyType == BodyType::Static) {
+void Rigidbody::Update(float deltaMs, int iterations) {
+	if (bodyType == RigidbodyType::Static) {
 		return;
 	}
 
-	if (bodyType == BodyType::Dynamic) {
+	if (bodyType == RigidbodyType::Dynamic) {
 		if (iterations <= 0) {
 			iterations = 1;
 		}
@@ -64,46 +64,43 @@ void Body::Update(float deltaMs, int iterations) {
 	}
 }
 
-void Body::Translate(const math::Vec2& amount) {
+void Rigidbody::Translate(const math::Vec2& amount) {
 	pos = pos + amount;
 	transformUpdateRequired = true;
 	aabbUpdateRequired = true;
 }
 
-void Body::TranslateTo(const math::Vec2& position) {
+void Rigidbody::TranslateTo(const math::Vec2& position) {
 	pos = position;
 	transformUpdateRequired = true;
 	aabbUpdateRequired = true;
 }
 
-void Body::RotateTo(float angleRadians) {
+void Rigidbody::RotateTo(float angleRadians) {
 	rotation = angleRadians;
 	transformUpdateRequired = true;
 	aabbUpdateRequired = true;
 }
 
-void Body::Rotate(float amountRadians) {
+void Rigidbody::Rotate(float amountRadians) {
 	rotation += amountRadians;
 	transformUpdateRequired = true;
 	aabbUpdateRequired = true;
 }
 
-void Body::ApplyForce(const math::Vec2& forceAmount) {
+void Rigidbody::ApplyForce(const math::Vec2& forceAmount) {
 	force = force + forceAmount;
 }
 
-void Body::ApplyGravity() {
+void Rigidbody::ApplyGravity() {
 	const float strength = GRAVITATIONAL_STRENGTH * kPixelsPerMeter;
 	const math::Vec2 gravityForce(0.0f, -mass * strength);
 	ApplyForce(gravityForce);
 }
 
-void Body::UpdateForce() {
+void Rigidbody::UpdateForce() {
 	ApplyGravity();
 
-}
-
-void Body::DrawShape() const {
 }
 
 } // namespace physics

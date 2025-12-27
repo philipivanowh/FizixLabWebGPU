@@ -1,12 +1,12 @@
-#include "physics/Collisions.hpp"
+#include "collision/Collisions.hpp"
 
-#include "physics/Ball.hpp"
-#include "physics/Box.hpp"
+#include "shape/Ball.hpp"
+#include "shape/Box.hpp"
 
 #include <cmath>
 #include <limits>
 
-namespace physics {
+namespace collision {
 
 namespace {
 constexpr float kEpsilon = 1e-5f;
@@ -175,7 +175,7 @@ math::Vec2 FindCircleCircleContactPoint(const math::Vec2& centerA,
 }
 } // namespace
 
-bool IntersectAABBs(const AABB& a, const AABB& b) {
+bool IntersectAABBs(const collision::AABB& a, const collision::AABB& b) {
 	if (a.max.x <= b.min.x || b.max.x <= a.min.x ||
 		a.max.y <= b.min.y || b.max.y <= a.min.y) {
 		return false;
@@ -184,15 +184,15 @@ bool IntersectAABBs(const AABB& a, const AABB& b) {
 	return true;
 }
 
-std::tuple<math::Vec2, math::Vec2, int> FindContactPoints(const Body& objectA, const Body& objectB) {
+std::tuple<math::Vec2, math::Vec2, int> FindContactPoints(const physics::Rigidbody& objectA, const physics::Rigidbody& objectB) {
 	math::Vec2 contact1 = math::Vec2();
 	math::Vec2 contact2 = math::Vec2();
 	int contactCount = 0;
 
-	const Box* boxA = dynamic_cast<const Box*>(&objectA);
-	const Box* boxB = dynamic_cast<const Box*>(&objectB);
-	const Ball* ballA = dynamic_cast<const Ball*>(&objectA);
-	const Ball* ballB = dynamic_cast<const Ball*>(&objectB);
+	const shape::Box* boxA = dynamic_cast<const shape::Box*>(&objectA);
+	const shape::Box* boxB = dynamic_cast<const shape::Box*>(&objectB);
+	const shape::Ball* ballA = dynamic_cast<const shape::Ball*>(&objectA);
+	const shape::Ball* ballB = dynamic_cast<const shape::Ball*>(&objectB);
 
 	if (boxA) {
 		if (boxB) {
@@ -230,13 +230,13 @@ std::tuple<math::Vec2, math::Vec2, int> FindContactPoints(const Body& objectA, c
 	return {contact1, contact2, contactCount};
 }
 
-HitInfo Collide(const Body& objectA, const Body& objectB) {
+HitInfo Collide(const physics::Rigidbody& objectA, const physics::Rigidbody& objectB) {
 	HitInfo hit;
 
-	const Box* boxA = dynamic_cast<const Box*>(&objectA);
-	const Box* boxB = dynamic_cast<const Box*>(&objectB);
-	const Ball* ballA = dynamic_cast<const Ball*>(&objectA);
-	const Ball* ballB = dynamic_cast<const Ball*>(&objectB);
+	const shape::Box* boxA = dynamic_cast<const shape::Box*>(&objectA);
+	const shape::Box* boxB = dynamic_cast<const shape::Box*>(&objectB);
+	const shape::Ball* ballA = dynamic_cast<const shape::Ball*>(&objectA);
+	const shape::Ball* ballB = dynamic_cast<const shape::Ball*>(&objectB);
 
 	if (boxA) {
 		if (boxB) {

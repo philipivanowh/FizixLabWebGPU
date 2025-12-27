@@ -2,7 +2,7 @@ cmake_minimum_required(VERSION 3.0...3.25)
 project(
 	LearnWebGPU
 	VERSION 0.1.0
-	LANGUAGES CXX C
+	LANGUAGES CXX C OBJC
 )
 
 if (NOT EMSCRIPTEN)
@@ -19,12 +19,12 @@ add_executable(App
 	src/app/main.cpp
 	src/core/Engine.cpp
 	src/core/Renderer.cpp
-	src/core/Scene.cpp
+	src/core/World.cpp
 	src/core/Utility.cpp
-	src/physics/Ball.cpp
-	src/physics/Body.cpp
-	src/physics/Box.cpp
-	src/physics/Collisions.cpp
+	src/shape/Ball.cpp
+	src/physics/Rigidbody.cpp
+	src/shape/Box.cpp
+	src/collision/Collisions.cpp
 )
 
 target_include_directories(App PRIVATE src)

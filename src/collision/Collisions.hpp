@@ -1,16 +1,13 @@
 #pragma once
 
-#include "physics/AABB.hpp"
-#include "physics/Body.hpp"
+#include "collision/AABB.hpp"
+#include "physics/Rigidbody.hpp"
 #include "math/Vec2.hpp"
 
 #include <tuple>
 #include <vector>
 
-namespace physics {
-
-class Box;
-class Ball;
+namespace collision {
 
 struct HitInfo {
 	bool result = false;
@@ -25,9 +22,9 @@ struct ProjectionRange {
 
 bool IntersectAABBs(const AABB& a, const AABB& b);
 
-std::tuple<math::Vec2, math::Vec2, int> FindContactPoints(const Body& objectA, const Body& objectB);
+std::tuple<math::Vec2, math::Vec2, int> FindContactPoints(const physics::Rigidbody& objectA, const physics::Rigidbody& objectB);
 
-HitInfo Collide(const Body& objectA, const Body& objectB);
+HitInfo Collide(const physics::Rigidbody& objectA, const physics::Rigidbody& objectB);
 
 HitInfo IntersectCirclePolygon(const math::Vec2& circleCenter,
 					   float circleRadius,

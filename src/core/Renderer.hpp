@@ -5,6 +5,10 @@
 
 #include <GLFW/glfw3.h>
 #include <glfw3webgpu.h>
+#include "shape/Ball.hpp"
+#include "shape/Box.hpp"
+#include "physics/Rigidbody.hpp"
+#include "math/Vec2.hpp"
 
 #include <array>
 #include <cstdint>
@@ -13,17 +17,8 @@
 
 using namespace wgpu;
 
-namespace math {
-class Vec2;
-}
-
-namespace physics {
-class Body;
-class Ball;
-class Box;
-}
-
-class Renderer {
+class Renderer
+{
 public:
 	// Initialize everything and return true if it went all right
 	bool Initialize();
@@ -38,9 +33,9 @@ public:
 	// Return true as long as the main loop should keep on running
 	bool IsRunning();
 
-	void DrawShape(const physics::Body& body);
-	void DrawBox(const physics::Box& box);
-	void DrawBall(const physics::Ball& ball);
+	void DrawShape(const physics::Rigidbody &Rigidbody);
+	void DrawBox(const shape::Box &box);
+	void DrawBall(const shape::Ball &ball);
 	void DrawTestTriangle();
 	void DrawTest2Triangle();
 
@@ -51,7 +46,7 @@ private:
 	wgpu::RequiredLimits GetRequiredLimits(Adapter adapter) const;
 	void InitializeBuffers();
 	void EnsureVertexBufferSize(int size);
-	uint32_t UpdateUniforms(const math::Vec2& position, const std::array<float, 4>& color);
+	uint32_t UpdateUniforms(const math::Vec2 &position, const std::array<float, 4> &color);
 
 private:
 	// We put here all the variables that are shared between init and main loop
@@ -63,6 +58,7 @@ private:
 	TextureFormat surfaceFormat = TextureFormat::Undefined;
 	RenderPassEncoder renderPass;
 	RenderPipeline pipeline;
+	RenderPipeline linePipeline;
 	PipelineLayout pipelineLayout;
 	BindGroupLayout uniformBindGroupLayout;
 	BindGroup uniformBindGroup;
@@ -71,7 +67,7 @@ private:
 	uint32_t vertexCount;
 	CommandEncoder encoder;
 	TextureView targetView;
-	//size_t vertexBufferSize = 0;
+	// size_t vertexBufferSize = 0;
 	uint32_t uniformAlignment = 1;
 	size_t uniformBufferStride = 0;
 	size_t uniformBufferSize = 0;
