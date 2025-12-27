@@ -140,10 +140,21 @@ void Engine::AddDefaultObjects()
 	));
 
 	world.Add(std::make_unique<shape::Ball>(
+		Vec2(906.0f, 770.0f),
+		Vec2(0.0f, 0.0f),
+		Vec2(0.0f, 0.0f),
+		50.0f,
+		warmRed,
+		50.0f,
+		0.5f,
+		RigidbodyType::Dynamic
+	));
+
+	world.Add(std::make_unique<shape::Ball>(
 		Vec2(500.0f, 700.0f),
 		Vec2(-1.0f, 0.0f),
 		Vec2(0.0f, 0.0f),
-		50.0f,
+		20.0f,
 		warmRed,
 		5.0f,
 		0.2f,

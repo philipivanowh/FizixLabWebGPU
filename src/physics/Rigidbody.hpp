@@ -1,7 +1,6 @@
 #pragma once
 
 #include "collision/AABB.hpp"
-#include "physics/PhysicsConstants.hpp"
 #include "math/Vec2.hpp"
 #include "math/Math.hpp"
 

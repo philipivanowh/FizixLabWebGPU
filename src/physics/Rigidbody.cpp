@@ -1,11 +1,8 @@
 #include "physics/Rigidbody.hpp"// Required for std::clamp
-#include <algorithm>
+#include "common/settings.hpp"
 
 namespace physics {
 
-namespace {
-constexpr float kPixelsPerMeter = 100.0f;
-}
 
 Rigidbody::Rigidbody(const math::Vec2& position,
 		 const math::Vec2& initialLinearVel,
@@ -14,10 +11,10 @@ Rigidbody::Rigidbody(const math::Vec2& position,
 		 float restitution,
 		 RigidbodyType RigidbodyTypeValue)
 	: pos(position)
-	, linearVel(initialLinearVel * kPixelsPerMeter)
-	, linearAcc(initialLinearAcc * kPixelsPerMeter)
+	, linearVel(initialLinearVel * SimulationConstants::PIXELS_PER_METER)
+	, linearAcc(initialLinearAcc * SimulationConstants::PIXELS_PER_METER)
 	, bodyType(RigidbodyTypeValue)
-	, restitution(std::clamp(restitution, 0.0f, 1.0f)) {
+	, restitution(math::Clamp(restitution, 0.0f, 1.0f)) {
 	mass = (RigidbodyMass > 0.0f) ? RigidbodyMass : 1.0f;
 	area = 1.0f;
 	if (bodyType != RigidbodyType::Static) {
@@ -93,7 +90,7 @@ void Rigidbody::ApplyForce(const math::Vec2& forceAmount) {
 }
 
 void Rigidbody::ApplyGravity() {
-	const float strength = GRAVITATIONAL_STRENGTH * kPixelsPerMeter;
+	const float strength = PhysicsConstants::GRAVITY * SimulationConstants::PIXELS_PER_METER;
 	const math::Vec2 gravityForce(0.0f, -mass * strength);
 	ApplyForce(gravityForce);
 }

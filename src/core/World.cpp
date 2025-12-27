@@ -1,21 +1,21 @@
 #include "core/World.hpp"
 
 #include "collision/Collisions.hpp"
-#include "physics/PhysicsConstants.hpp"
 #include "core/Renderer.hpp"
+#include "common/settings.hpp"
 
 #include <algorithm>
 #include <cmath>
 
 int World::ClampIterations(int value)
 {
-	if (value < physics::MIN_ITERATIONS)
+	if (value < SimulationConstants::MIN_PHYSICS_ITERATIONS)
 	{
-		return physics::MIN_ITERATIONS;
+		return SimulationConstants::MIN_PHYSICS_ITERATIONS;
 	}
-	if (value > physics::MAX_ITERATIONS)
+	if (value > SimulationConstants::MAX_PHYSICS_ITERATIONS)
 	{
-		return physics::MAX_ITERATIONS;
+		return SimulationConstants::MAX_PHYSICS_ITERATIONS;
 	}
 	return value;
 }
@@ -337,7 +337,7 @@ void World::ResolveCollisionWithRotationAndFriction(const collision::ContactMani
 
 		math::Vec2 tangent = relativeVelocity - (normal * math::Vec2::Dot(relativeVelocity, normal));
 
-		if (math::Math::NearlyEqualVec(tangent, math::Vec2(0.0f, 0.0f)))
+		if (math::NearlyEqualVec(tangent, math::Vec2(0.0f, 0.0f)))
 		{
 			continue;
 		}

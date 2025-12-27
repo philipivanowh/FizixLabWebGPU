@@ -5,28 +5,25 @@
 
 namespace math
 {
-    class Math
+
+    static constexpr float kEpsilon = 1e-5f;
+    inline float Clamp(float value, float min, float max)
     {
-    private:
-        static constexpr float kEpsilon = 1e-5f;
-    public:
-        static float Clamp(float value, float min, float max)
-        {
-            if (value < min)
-                return min;
-            if (value > max)
-                return max;
-            return value;
-        };
-
-        static bool NearlyEqual(float a, float b)
-        {
-            return std::fabs(a - b) <= kEpsilon;
-        }
-
-        static bool NearlyEqualVec(const Vec2 &a, const Vec2 &b)
-        {
-            return NearlyEqual(a.x, b.x) && NearlyEqual(a.y, b.y);
-        }
+        if (value < min)
+            return min;
+        if (value > max)
+            return max;
+        return value;
     };
+
+    inline bool NearlyEqual(float a, float b, float epsilon = kEpsilon)
+    {
+        return std::fabs(a - b) <= epsilon;
+    }
+
+    inline bool NearlyEqualVec(const math::Vec2 &a, const math::Vec2 &b, float epsilon = kEpsilon)
+    {
+        return NearlyEqual(a.x, b.x, epsilon) && NearlyEqual(a.y, b.y, epsilon);
+    }
+
 }

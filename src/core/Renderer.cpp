@@ -374,10 +374,9 @@ void Renderer::EndFrame()
 	CommandBuffer command = encoder.finish(cmdBufferDescriptor);
 	encoder.release();
 
-	std::cout << "Submitting command..." << std::endl;
+	
 	queue.submit(1, &command);
 	command.release();
-	std::cout << "Command submitted." << std::endl;
 
 	// At the end of the frame
 	targetView.release();
@@ -477,10 +476,6 @@ void Renderer::DrawBox(const shape::Box &box)
 	renderPass.setBindGroup(0, uniformBindGroup, 1, &uniformOffset);
 	renderPass.setVertexBuffer(0, vertexBuffer, 0, vertexCount * 2 * sizeof(float));
 	renderPass.draw(vertexCount, 1, 0, 0);
-
-
-	std::cout << "Drawing box with " << vertexCount << " vertices." << std::endl;
-	std::cout << "Drawing box at position (" << box.pos.x << ", " << box.pos.y << ")" << std::endl;
 }
 
 void Renderer::EnsureVertexBufferSize(int size)

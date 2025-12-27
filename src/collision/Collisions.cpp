@@ -2,22 +2,12 @@
 
 #include "shape/Ball.hpp"
 #include "shape/Box.hpp"
+#include "math/Math.hpp"
 
 #include <cmath>
 #include <limits>
 
 namespace collision {
-
-namespace {
-constexpr float kEpsilon = 1e-5f;
-
-bool NearlyEqual(float a, float b, float epsilon = kEpsilon) {
-	return std::fabs(a - b) <= epsilon;
-}
-
-bool NearlyEqualVec(const math::Vec2& a, const math::Vec2& b, float epsilon = kEpsilon) {
-	return NearlyEqual(a.x, b.x, epsilon) && NearlyEqual(a.y, b.y, epsilon);
-}
 
 std::pair<float, math::Vec2> PointSegmentDistance(const math::Vec2& p,
 							  const math::Vec2& a,
@@ -114,8 +104,8 @@ std::tuple<math::Vec2, math::Vec2, int> FindContactPointsFromPolygons(
 					     const math::Vec2& vb) {
 		auto [distSq, cp] = PointSegmentDistance(point, va, vb);
 
-		if (NearlyEqual(distSq, minDistSq)) {
-			if (!NearlyEqualVec(cp, contact1) && !NearlyEqualVec(cp, contact2)) {
+		if (math::NearlyEqual(distSq, minDistSq)) {
+			if (!math::NearlyEqualVec(cp, contact1) && !math::NearlyEqualVec(cp, contact2)) {
 				contact2 = cp;
 				contactCount = 2;
 			}
@@ -173,7 +163,6 @@ math::Vec2 FindCircleCircleContactPoint(const math::Vec2& centerA,
 	math::Vec2 dir = ab.Normalize();
 	return centerA + (dir * radiusA);
 }
-} // namespace
 
 bool IntersectAABBs(const collision::AABB& a, const collision::AABB& b) {
 	if (a.max.x <= b.min.x || b.max.x <= a.min.x ||
