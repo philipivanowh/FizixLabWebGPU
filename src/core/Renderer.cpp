@@ -2,6 +2,8 @@
 #define WEBGPU_CPP_IMPLEMENTATION
 #include "core/Renderer.hpp"
 #include "core/Utility.hpp"
+#include "math/Math.hpp"
+#include "common/settings.hpp"
 
 #include <array>
 #include <cassert>
@@ -12,27 +14,44 @@
 
 using namespace wgpu;
 
-namespace {
-struct Uniforms {
-	float resolution[2];
-	float translation[2];
-	float color[4];
-};
+namespace
+{
+	struct Uniforms
+	{
+		float resolution[2];
+		float translation[2];
+		float color[4];
+	};
 
-size_t AlignTo(size_t value, size_t alignment) {
-	return (value + alignment - 1) / alignment * alignment;
-}
+	size_t AlignTo(size_t value, size_t alignment)
+	{
+		return (value + alignment - 1) / alignment * alignment;
+	}
 } // namespace
 
 bool Renderer::Initialize()
 {
 	// Open window
-	glfwInit();
+	if (!glfwInit())
+	{
+		std::cerr << "Could not initialize GLFW!" << std::endl;
+		return false;
+	}
 	glfwWindowHint(GLFW_CLIENT_API, GLFW_NO_API);
 	glfwWindowHint(GLFW_RESIZABLE, GLFW_FALSE);
 	window = glfwCreateWindow(windowWidth, windowHeight, "FizixEngine", nullptr, nullptr);
+	if (!window)
+	{
+		std::cerr << "Could not open window!" << std::endl;
+		return false;
+	}
 
 	Instance instance = wgpuCreateInstance(nullptr);
+	if (!instance)
+	{
+		std::cerr << "Could not initialize WebGPU!" << std::endl;
+		return false;
+	}
 
 	surface = glfwGetWGPUSurface(instance, window);
 
@@ -153,7 +172,6 @@ TextureView Renderer::GetNextSurfaceTextureView()
 	// (NB: with wgpu-native, surface textures must not be manually released)
 	Texture(surfaceTexture.texture).release();
 #endif // WEBGPU_BACKEND_WGPU
-
 	return targetView;
 }
 
@@ -277,19 +295,21 @@ void Renderer::InitializePipeline()
 	uniformBindGroupLayout = device.createBindGroupLayout(uniformLayoutDesc);
 
 	PipelineLayoutDescriptor pipelineLayoutDesc = {};
-	WGPUBindGroupLayout bindGroupLayouts[] = { uniformBindGroupLayout };
+	WGPUBindGroupLayout bindGroupLayouts[] = {uniformBindGroupLayout};
 	pipelineLayoutDesc.bindGroupLayoutCount = 1;
 	pipelineLayoutDesc.bindGroupLayouts = bindGroupLayouts;
 	pipelineLayout = device.createPipelineLayout(pipelineLayoutDesc);
 	pipelineDesc.layout = pipelineLayout;
 
 	pipeline = device.createRenderPipeline(pipelineDesc);
-	if (!pipeline) {
+	if (!pipeline)
+	{
 		std::cout << "Failed to create render pipeline!" << std::endl;
 	}
 	pipelineDesc.primitive.topology = PrimitiveTopology::LineList;
 	linePipeline = device.createRenderPipeline(pipelineDesc);
-	if (!linePipeline) {
+	if (!linePipeline)
+	{
 		std::cout << "Failed to create line render pipeline!" << std::endl;
 	}
 
@@ -314,12 +334,14 @@ void Renderer::InitializePipeline()
 	uniformBindGroupDesc.entryCount = 1;
 	uniformBindGroupDesc.entries = &uniformBindGroupEntry;
 	uniformBindGroup = device.createBindGroup(uniformBindGroupDesc);
-	if (!uniformBindGroup) {
+	if (!uniformBindGroup)
+	{
 		std::cout << "Failed to create uniform bind group." << std::endl;
 	}
 
 	// Release the shader module after pipeline creation is confirmed
-	if (!pipeline) {
+	if (!pipeline)
+	{
 		std::cout << "Failed to create render pipeline." << std::endl;
 	}
 	shaderModule.release();
@@ -374,7 +396,6 @@ void Renderer::EndFrame()
 	CommandBuffer command = encoder.finish(cmdBufferDescriptor);
 	encoder.release();
 
-	
 	queue.submit(1, &command);
 	command.release();
 
@@ -395,7 +416,15 @@ RequiredLimits Renderer::GetRequiredLimits(Adapter adapter) const
 {
 	// Get adapter supported limits, in case we need them
 	SupportedLimits supportedLimits;
+#ifdef __EMSCRIPTEN__
+	// Error in Chrome: Aborted(TODO: wgpuAdapterGetLimits unimplemented)
+	// (as of September 4, 2023), so we hardcode values:
+	// These work for 99.95% of clients (source: https://web3dsurvey.com/webgpu)
+	supportedLimits.limits.minStorageBufferOffsetAlignment = 256;
+	supportedLimits.limits.minUniformBufferOffsetAlignment = 256;
+#else
 	adapter.getLimits(&supportedLimits);
+#endif
 
 	// Don't forget to = Default
 	RequiredLimits requiredLimits = Default;
@@ -425,10 +454,10 @@ void Renderer::InitializeBuffers()
 	// There are 2 floats per vertex, one for x and one for y.
 	std::vector<float> vertexData = {
 		// Define a first triangle:
-		-100,0,
-		100,0,
-		50,100
-	
+		-100, 0,
+		100, 0,
+		50, 100
+
 	};
 	vertexCount = static_cast<uint32_t>(vertexData.size() / 2);
 
@@ -443,17 +472,78 @@ void Renderer::InitializeBuffers()
 	queue.writeBuffer(vertexBuffer, 0, vertexData.data(), bufferDesc.size);
 }
 
-void Renderer::DrawShape(const physics::Rigidbody &Rigidbody)
+void Renderer::DrawShape(physics::Rigidbody &body)
 {
-	if (auto box = dynamic_cast<const shape::Box *>(&Rigidbody))
+	if (auto box = dynamic_cast<const shape::Box *>(&body))
 	{
 		DrawBox(*box);
+		DrawFBD(body);
 		return;
 	}
-	if (auto ball = dynamic_cast<const shape::Ball *>(&Rigidbody))
+	if (auto ball = dynamic_cast<const shape::Ball *>(&body))
 	{
 		DrawBall(*ball);
+		DrawFBD(body);
 		return;
+	}
+}
+
+void Renderer::DrawFBD(physics::Rigidbody &body)
+{
+	// Draw force arrow
+	if (body.forces.size() == 0)
+	{
+		return;
+	}
+
+	for (size_t i = 0; i < body.forces.size(); i++)
+	{
+		math::Vec2 currForce = body.forces[i].force;
+		const float arrowMin = 100.0f;
+		const float arrowMax = 250.0f;
+		const float forceMin = 50.0f;
+		const float forceMax = 10000.0f;
+		const float curveExponent = 4.0f;
+		float arrowThickness = 8.0f;
+		float arrowPointThickness = 16.0f;
+		float arrowPointExtending = 1.1f;
+		float theta = currForce.GetRadian();
+
+		const math::Vec2 scaledForce = currForce / SimulationConstants::PIXELS_PER_METER;
+		const math::Vec2 forceEnd = currForce.Normalize() * math::MapForceToLength(scaledForce, forceMin, forceMax, arrowMin, arrowMax, curveExponent);
+		const std::array<float, 4> forceColor{0.5f, 0.3f, 0.5f, 0.4f};
+		constexpr float PI = 3.14159265f; 
+
+		std::cout << "theta" << theta  << std::endl;
+		std::cout << arrowThickness/2.0f * std::cos(theta + PI/2.0f) << ", " << arrowThickness/2.0f * std::sin(theta + PI/2.0f) << std::endl;
+		const std::vector<float> forceVertices = {
+			
+			//†he rectangle part of the arrow
+			 arrowThickness/2.0f * std::cos(theta + PI/2.0f), arrowThickness/2.0f * std::sin(theta + PI/2.0f),
+			 -arrowThickness/2.0f * std::cos(theta + PI/2.0f), -arrowThickness/2.0f * std::sin(theta + PI/2.0f),
+			forceEnd.x-arrowThickness/2.0f * std::cos(theta + PI/2.0f), forceEnd.y-arrowThickness/2.0f * std::sin(theta + PI/2.0f),
+			
+			forceEnd.x-arrowThickness/2.0f * std::cos(theta + PI/2.0f), forceEnd.y-arrowThickness/2.0f * std::sin(theta + PI/2.0f),
+			forceEnd.x+arrowThickness/2.0f * std::cos(theta + PI/2.0f), forceEnd.y+arrowThickness/2.0f * std::sin(theta + PI/2.0f),
+			arrowThickness/2.0f * std::cos(theta + PI/2.0f), arrowThickness/2.0f * std::sin(theta + PI/2.0f),
+
+			//The pointing part of the arrow
+			forceEnd.x-arrowPointThickness/2.0f * std::cos(theta + PI/2.0f), forceEnd.y-arrowPointThickness/2.0f * std::sin(theta + PI/2.0f),
+			forceEnd.x+arrowPointThickness/2.0f * std::cos(theta + PI/2.0f), forceEnd.y+arrowPointThickness/2.0f * std::sin(theta + PI/2.0f),
+			forceEnd.x * arrowPointExtending, forceEnd.y * arrowPointExtending
+		};
+
+
+		vertexCount = static_cast<uint32_t>(forceVertices.size() / 2);
+
+		EnsureVertexBufferSize(forceVertices.size());
+		queue.writeBuffer(vertexBuffer, 0, forceVertices.data(), forceVertices.size() * sizeof(float));
+
+		const uint32_t forceUniformOffset = UpdateUniforms(body.pos, forceColor);
+		renderPass.setPipeline(pipeline);
+		renderPass.setBindGroup(0, uniformBindGroup, 1, &forceUniformOffset);
+		renderPass.setVertexBuffer(0, vertexBuffer, 0, forceVertices.size() * sizeof(float));
+		renderPass.draw(vertexCount, 1, 0, 0);
 	}
 }
 
@@ -469,7 +559,8 @@ void Renderer::DrawBox(const shape::Box &box)
 	vertexCount = static_cast<uint32_t>(vertices.size() / 2);
 	uint32_t uniformOffset = UpdateUniforms(box.pos, box.color);
 
-	if (!uniformBindGroup) {
+	if (!uniformBindGroup)
+	{
 		std::cout << "Uniform bind group is invalid; skipping draw." << std::endl;
 		return;
 	}
@@ -480,13 +571,12 @@ void Renderer::DrawBox(const shape::Box &box)
 
 void Renderer::EnsureVertexBufferSize(int size)
 {
- 	BufferDescriptor bufferDesc;
- 	bufferDesc.size = size * sizeof(float);
- 	bufferDesc.usage = BufferUsage::CopyDst | BufferUsage::Vertex;
- 	bufferDesc.mappedAtCreation = false;
+	BufferDescriptor bufferDesc;
+	bufferDesc.size = size * sizeof(float);
+	bufferDesc.usage = BufferUsage::CopyDst | BufferUsage::Vertex;
+	bufferDesc.mappedAtCreation = false;
 	vertexBuffer = device.createBuffer(bufferDesc);
 }
-
 
 void Renderer::DrawBall(const shape::Ball &ball)
 {
@@ -494,20 +584,26 @@ void Renderer::DrawBall(const shape::Ball &ball)
 
 	const std::vector<float> vertices = ball.GetVertexLocalPos();
 	EnsureVertexBufferSize(vertices.size());
-	
+
 	queue.writeBuffer(vertexBuffer, 0, vertices.data(), vertices.size() * sizeof(float));
 
 	vertexCount = static_cast<uint32_t>(vertices.size() / 2);
 	uint32_t uniformOffset = UpdateUniforms(ball.pos, ball.color);
 
-	if (!uniformBindGroup) {
+	if (!uniformBindGroup)
+	{
 		std::cout << "Uniform bind group is invalid; skipping draw." << std::endl;
 		return;
 	}
 	renderPass.setBindGroup(0, uniformBindGroup, 1, &uniformOffset);
 	renderPass.setVertexBuffer(0, vertexBuffer, 0, vertexCount * 2 * sizeof(float));
 	renderPass.draw(vertexCount, 1, 0, 0);
-	
+
+	DrawBallLine(ball);
+}
+
+void Renderer::DrawBallLine(const shape::Ball &ball)
+{
 	const float radiusLineX = ball.radius * std::cos(ball.rotation);
 	const float radiusLineY = ball.radius * std::sin(ball.rotation);
 	const std::array<float, 4> radiusLineColor{1.0f, 0.2f, 0.2f, 1.0f};
@@ -522,46 +618,43 @@ void Renderer::DrawBall(const shape::Ball &ball)
 	renderPass.draw(2, 1, 0, 0);
 
 	renderPass.setPipeline(pipeline);
-	std::cout << "Drawing ball with " << vertexCount << " vertices at position (" << ball.pos.x << ", " << ball.pos.y << ")" << std::endl;
 }
 
 void Renderer::DrawTestTriangle()
 {
 	renderPass.setPipeline(pipeline);
-	const math::Vec2 translation(500,500);
+	const math::Vec2 translation(500, 500);
 	const std::array<float, 4> color{0.3f, 0.8f, 1.0f, 1.0f};
 	uint32_t uniformOffset = UpdateUniforms(translation, color);
 
-	if (!uniformBindGroup) {
+	if (!uniformBindGroup)
+	{
 		std::cout << "Uniform bind group is invalid; skipping draw." << std::endl;
 		return;
 	}
 	renderPass.setBindGroup(0, uniformBindGroup, 1, &uniformOffset);
 	renderPass.setVertexBuffer(0, vertexBuffer, 0, vertexCount * 2 * sizeof(float));
 	renderPass.draw(vertexCount, 1, 0, 0);
-
-	
 }
 
 void Renderer::DrawTest2Triangle()
 {
 	renderPass.setPipeline(pipeline);
-	const math::Vec2 translation(700,500);
+	const math::Vec2 translation(700, 500);
 	const std::array<float, 4> color{0.1f, 0.8f, 1.0f, 1.0f};
 	uint32_t uniformOffset = UpdateUniforms(translation, color);
 
-	if (!uniformBindGroup) {
+	if (!uniformBindGroup)
+	{
 		std::cout << "Uniform bind group is invalid; skipping draw." << std::endl;
 		return;
 	}
 	renderPass.setBindGroup(0, uniformBindGroup, 1, &uniformOffset);
 	renderPass.setVertexBuffer(0, vertexBuffer, 0, vertexCount * 2 * sizeof(float));
 	renderPass.draw(vertexCount, 1, 0, 0);
-
-	
 }
 
-uint32_t Renderer::UpdateUniforms(const math::Vec2& position, const std::array<float, 4>& color)
+uint32_t Renderer::UpdateUniforms(const math::Vec2 &position, const std::array<float, 4> &color)
 {
 	Uniforms uniforms = {};
 	uniforms.resolution[0] = static_cast<float>(windowWidth);
@@ -570,14 +663,15 @@ uint32_t Renderer::UpdateUniforms(const math::Vec2& position, const std::array<f
 	uniforms.translation[1] = position.y;
 
 	const bool rgbNeedsNormalization = color[0] > 1.0f || color[1] > 1.0f ||
-		color[2] > 1.0f;
+									   color[2] > 1.0f;
 	const float rgbScale = rgbNeedsNormalization ? (1.0f / 255.0f) : 1.0f;
 	uniforms.color[0] = color[0] * rgbScale;
 	uniforms.color[1] = color[1] * rgbScale;
 	uniforms.color[2] = color[2] * rgbScale;
 	uniforms.color[3] = (color[3] > 1.0f) ? (color[3] * (1.0f / 255.0f)) : color[3];
 
-	if (uniformBufferOffset + uniformBufferStride > uniformBufferSize) {
+	if (uniformBufferOffset + uniformBufferStride > uniformBufferSize)
+	{
 		uniformBufferOffset = 0;
 	}
 	uint32_t offset = static_cast<uint32_t>(uniformBufferOffset);

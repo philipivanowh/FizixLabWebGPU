@@ -1,0 +1,10 @@
+/Users/lansmachine/Documents/GitHub/LearnWebGPU-Code/webBuild/CMakeFiles/App.dir
+/Users/lansmachine/Documents/GitHub/LearnWebGPU-Code/webBuild/CMakeFiles/edit_cache.dir
+/Users/lansmachine/Documents/GitHub/LearnWebGPU-Code/webBuild/CMakeFiles/rebuild_cache.dir
+/Users/lansmachine/Documents/GitHub/LearnWebGPU-Code/webBuild/webgpu/CMakeFiles/edit_cache.dir
+/Users/lansmachine/Documents/GitHub/LearnWebGPU-Code/webBuild/webgpu/CMakeFiles/rebuild_cache.dir
+/Users/lansmachine/Documents/GitHub/LearnWebGPU-Code/webBuild/_deps/webgpu-backend-emscripten-build/CMakeFiles/edit_cache.dir
+/Users/lansmachine/Documents/GitHub/LearnWebGPU-Code/webBuild/_deps/webgpu-backend-emscripten-build/CMakeFiles/rebuild_cache.dir
+/Users/lansmachine/Documents/GitHub/LearnWebGPU-Code/webBuild/glfw3webgpu/CMakeFiles/glfw3webgpu.dir
+/Users/lansmachine/Documents/GitHub/LearnWebGPU-Code/webBuild/glfw3webgpu/CMakeFiles/edit_cache.dir
+/Users/lansmachine/Documents/GitHub/LearnWebGPU-Code/webBuild/glfw3webgpu/CMakeFiles/rebuild_cache.dir

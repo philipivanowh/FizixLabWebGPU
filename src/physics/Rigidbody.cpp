@@ -48,14 +48,16 @@ void Rigidbody::Update(float deltaMs, int iterations) {
 		}
 		const float dtSeconds = (deltaMs / 1000.0f) / static_cast<float>(iterations);
 
+		ClearForces();
+		netForce = math::Vec2();
 		UpdateForce();
-		linearAcc = force / mass;
+		linearAcc = netForce / mass;
 		linearVel = linearVel + (linearAcc * dtSeconds) * 0.5;
 		pos = pos + (linearVel * dtSeconds);
 		linearVel = linearVel + (linearAcc * dtSeconds) * 0.5;
 		rotation = rotation + angularVel * dtSeconds;
 
-		force = math::Vec2();
+		netForce = math::Vec2();
 		transformUpdateRequired = true;
 		aabbUpdateRequired = true;
 	}
@@ -85,14 +87,19 @@ void Rigidbody::Rotate(float amountRadians) {
 	aabbUpdateRequired = true;
 }
 
-void Rigidbody::ApplyForce(const math::Vec2& forceAmount) {
-	force = force + forceAmount;
+void Rigidbody::ApplyForce(const math::Vec2& forceAmount, const ForceType type) {
+	forces.push_back(ForceInfo{forceAmount, type});
+	netForce += forceAmount;
+}
+
+void Rigidbody::ClearForces() {
+	forces.clear();
 }
 
 void Rigidbody::ApplyGravity() {
 	const float strength = PhysicsConstants::GRAVITY * SimulationConstants::PIXELS_PER_METER;
 	const math::Vec2 gravityForce(0.0f, -mass * strength);
-	ApplyForce(gravityForce);
+	ApplyForce(gravityForce, ForceType::Gravitational);
 }
 
 void Rigidbody::UpdateForce() {

@@ -1,0 +1,2 @@
+/Users/lansmachine/emsdk/upstream/emscripten/emar qc libglfw3webgpu.a CMakeFiles/glfw3webgpu.dir/glfw3webgpu.c.o
+/Users/lansmachine/emsdk/upstream/emscripten/emranlib libglfw3webgpu.a

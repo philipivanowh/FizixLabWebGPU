@@ -6,6 +6,7 @@ constexpr float TIME_STEP_MS = 16.67f; // Time step per frame in milliseconds
 constexpr int MAX_PHYSICS_ITERATIONS = 128; // Maximum physics iterations per frame
 constexpr int MIN_PHYSICS_ITERATIONS = 1;  // Minimum physics iterations per frame
 constexpr float PIXELS_PER_METER = 100.0f; // Conversion factor from meters to pixels
+constexpr float FBD_SCALER_ADJUSTMENT = 0.005;
 
 } // namespace constants
 

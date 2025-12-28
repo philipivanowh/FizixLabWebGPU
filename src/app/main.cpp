@@ -1,10 +1,10 @@
 #include "core/Engine.hpp"
 
+
+# include <chrono>
 #ifdef __EMSCRIPTEN__
 #  include <emscripten.h>
 #  include <emscripten/html5.h>
-#else
-#  include <chrono>
 #endif // __EMSCRIPTEN__
 
 
@@ -27,7 +27,7 @@ int main() {
 		const double nowMs = emscripten_get_now();
 		const float deltaMs = static_cast<float>(nowMs - state->lastTimeMs) * 0.5f;
 		state->lastTimeMs = nowMs;
-		state->engine->RunFrame(deltaMs, 0); // 4. We can use the engine object
+		state->engine->RunFrame(deltaMs, 10); // 4. We can use the engine object
 	};
 	emscripten_set_main_loop_arg(callback, &loopState, 0, true);
 #else // __EMSCRIPTEN__

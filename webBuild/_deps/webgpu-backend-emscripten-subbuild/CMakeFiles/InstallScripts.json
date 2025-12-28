@@ -1,0 +1,7 @@
+{
+	"InstallScripts" : 
+	[
+		"/Users/lansmachine/Documents/GitHub/LearnWebGPU-Code/webBuild/_deps/webgpu-backend-emscripten-subbuild/cmake_install.cmake"
+	],
+	"Parallel" : false
+}

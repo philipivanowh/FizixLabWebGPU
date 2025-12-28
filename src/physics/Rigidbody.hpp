@@ -3,6 +3,7 @@
 #include "collision/AABB.hpp"
 #include "math/Vec2.hpp"
 #include "math/Math.hpp"
+#include <vector>
 
 namespace physics
 {
@@ -10,6 +11,21 @@ namespace physics
 	{
 		Static,
 		Dynamic
+	};
+
+	enum ForceType
+	{
+		Normal,
+		Frictional,
+		Gravitational,
+		Tension,
+		Apply
+	};
+
+	struct ForceInfo
+	{
+		math::Vec2 force;
+		ForceType type;
 	};
 
 	class Rigidbody
@@ -28,8 +44,10 @@ namespace physics
 		void TranslateTo(const math::Vec2 &position);
 		void RotateTo(float angleRadians);
 		void Rotate(float amountRadians);
-		void ApplyForce(const math::Vec2 &forceAmount);
+		void ApplyForce(const math::Vec2 &forceAmount, const ForceType type);
 		void UpdateForce();
+		void ClearForces();
+
 
 		void UpdateMassProperties();
 		virtual float ComputeInertia() const;
@@ -43,7 +61,8 @@ namespace physics
 		float angularVel = 0.0f;
 		float angularAcc = 0.0f;
 		float restitution = 0.5f;
-		math::Vec2 force = math::Vec2();
+		math::Vec2 netForce = math::Vec2();
+		std::vector<ForceInfo> forces;
 		float area = 1.0f;
 		float inertia = 0.0f;
 		float invInertia = 0.0f;

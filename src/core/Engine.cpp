@@ -14,6 +14,7 @@ bool Engine::Initialize()
 		return false;
 	}
 	AddDefaultObjects();
+	//ComparisonScene();
 	return true;
 }
 
@@ -72,7 +73,7 @@ void Engine::AddDefaultObjects()
 		80.0f,
 		80.0f,
 		white,
-		15.0f,
+		1.0f,
 		0.5f,
 		RigidbodyType::Dynamic));
 
@@ -104,14 +105,14 @@ void Engine::AddDefaultObjects()
 	world.Add(std::move(slope));
 
 		world.Add(std::make_unique<shape::Box>(
-		Vec2(500.0f, 300.0f),
+		Vec2(500.0f, 700.0f),
 		Vec2(5.0f, 1.0f),
 		Vec2(0.0f, 0.0f),
-		50.0f,
-		50.0f,
-		warmRed,
-		5.0f,
-		0.5f,
+		200.0f,
+		200.0f,
+		white,
+		2000.0f,
+		1.0f,
 		RigidbodyType::Dynamic
 	));
 
@@ -159,6 +160,70 @@ void Engine::AddDefaultObjects()
 		5.0f,
 		0.2f,
 		RigidbodyType::Dynamic
+	));
+}
+
+void Engine::ComparisonScene(){
+	const std::array<float, 4> warmRed{18.0f, 46.0f, 56.0f, 1.0f};
+	const std::array<float, 4> white{255.0f, 255.0f, 255.0f, 1.0f};
+	const std::array<float, 4> skyBlue{80.0f, 160.0f, 255.0f, 1.0f};
+	const std::array<float, 4> yellow{255.0f, 200.0f, 20.0f, 1.0f};
+
+	world.Add(std::make_unique<shape::Box>(
+		Vec2(700.0f, 400.0f),
+		Vec2(0.0f, 0.0f),
+		Vec2(0.0f, 0.0f),
+		1600.0f,
+		50.0f,
+		skyBlue,
+		2000.0f,
+		0.0f,
+		physics::RigidbodyType::Static
+	));
+
+	world.Add(std::make_unique<shape::Box>(
+		Vec2(100.0f, 500.0f),
+		Vec2(0.0f, 0.0f),
+		Vec2(0.0f, 0.0f),
+		25.0f,
+		25.0f,
+		warmRed,
+		10.0f,
+		0.0f,
+		physics::RigidbodyType::Dynamic
+	));
+		world.Add(std::make_unique<shape::Box>(
+		Vec2(150.0f, 500.0f),
+		Vec2(0.0f, 0.0f),
+		Vec2(0.0f, 0.0f),
+		25.0f,
+		25.0f,
+		white,
+		1000.0f,
+		0.0f,
+		physics::RigidbodyType::Dynamic
+	));
+		world.Add(std::make_unique<shape::Box>(
+		Vec2(200.0f, 500.0f),
+		Vec2(0.0f, 0.0f),
+		Vec2(0.0f, 0.0f),
+		25.0f,
+		25.0f,
+		skyBlue,
+		100.0f,
+		0.0f,
+		physics::RigidbodyType::Dynamic
+	));
+		world.Add(std::make_unique<shape::Box>(
+		Vec2(250.0f, 500.0f),
+		Vec2(1.0f, 0.0f),
+		Vec2(0.0f, 0.0f),
+		25.0f,
+		25.0f,
+		yellow,
+		100.0f,
+		0.0f,
+		physics::RigidbodyType::Dynamic
 	));
 }
 

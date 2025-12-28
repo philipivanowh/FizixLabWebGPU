@@ -16,6 +16,8 @@ public:
 	bool IsRunning();
 	Renderer& GetRenderer();
 
+	void ComparisonScene();
+
 	void AddDefaultObjects();
 	void SpawnRandomBox();
 	void SpawnRandomBall();

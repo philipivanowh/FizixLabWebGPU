@@ -1,10 +1,24 @@
 #pragma once
 
-// Include the C++ wrapper instead of the raw header(s)
+// Suppress warnings and errors from the third-party Emscripten WebGPU header
+#ifdef __EMSCRIPTEN__
+	#pragma GCC diagnostic push
+	#pragma GCC diagnostic ignored "-w"
+#endif
+
 #include <webgpu/webgpu.hpp>
+
+#ifdef __EMSCRIPTEN__
+	#pragma GCC diagnostic pop
+#endif
 
 #include <GLFW/glfw3.h>
 #include <glfw3webgpu.h>
+
+#ifdef __EMSCRIPTEN__
+#	include <emscripten.h>
+#endif
+
 #include "shape/Ball.hpp"
 #include "shape/Box.hpp"
 #include "physics/Rigidbody.hpp"
@@ -33,9 +47,11 @@ public:
 	// Return true as long as the main loop should keep on running
 	bool IsRunning();
 
-	void DrawShape(const physics::Rigidbody &Rigidbody);
+	void DrawShape(physics::Rigidbody &Rigidbody);
 	void DrawBox(const shape::Box &box);
 	void DrawBall(const shape::Ball &ball);
+	void DrawBallLine(const shape::Ball &ball);
+	void DrawFBD(physics::Rigidbody &Rigidbody);
 	void DrawTestTriangle();
 	void DrawTest2Triangle();
 

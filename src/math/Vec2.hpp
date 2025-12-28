@@ -106,6 +106,11 @@ namespace math
 			return std::sqrt(x * x + y * y);
 		}
 
+		float GetRadian() const
+		{
+			return std::atan2(y,x);
+		}
+
 		constexpr float LengthSquared() const
 		{
 			return x * x + y * y;

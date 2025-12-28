@@ -1,0 +1,10 @@
+{
+	"InstallScripts" : 
+	[
+		"/Users/lansmachine/Documents/GitHub/LearnWebGPU-Code/webBuild/cmake_install.cmake",
+		"/Users/lansmachine/Documents/GitHub/LearnWebGPU-Code/webBuild/webgpu/cmake_install.cmake",
+		"/Users/lansmachine/Documents/GitHub/LearnWebGPU-Code/webBuild/_deps/webgpu-backend-emscripten-build/cmake_install.cmake",
+		"/Users/lansmachine/Documents/GitHub/LearnWebGPU-Code/webBuild/glfw3webgpu/cmake_install.cmake"
+	],
+	"Parallel" : false
+}

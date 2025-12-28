@@ -5911,7 +5911,7 @@ NK_LIB void nk_panel_alloc_space(struct nk_rect *bounds, const struct nk_context
 NK_LIB void nk_layout_peek(struct nk_rect *bounds, struct nk_context *ctx);
 
 /* popup */
-NK_LIB int nk_nonblock_begin(struct nk_context *ctx, nk_flags flags, struct nk_rect Rigidbody, struct nk_rect header, enum nk_panel_type panel_type);
+NK_LIB int nk_nonblock_begin(struct nk_context *ctx, nk_flags flags, struct nk_rect body, struct nk_rect header, enum nk_panel_type panel_type);
 
 /* text */
 struct nk_text {
@@ -7246,7 +7246,7 @@ nk_murmur_hash(const void * key, int len, nk_hash seed)
     const nk_byte *tail;
     int i;
 
-    /* Rigidbody */
+    /* body */
     if (!key) return 0;
     for (i = 0; i < nblocks; ++i, keyptr += bsize) {
         k1ptr = (nk_byte*)&k1;
@@ -15807,14 +15807,14 @@ nk_panel_begin(struct nk_context *ctx, const char *title, enum nk_panel_type pan
 
     /* draw window background */
     if (!(layout->flags & NK_WINDOW_MINIMIZED) && !(layout->flags & NK_WINDOW_DYNAMIC)) {
-        struct nk_rect Rigidbody;
-        Rigidbody.x = win->bounds.x;
-        Rigidbody.w = win->bounds.w;
-        Rigidbody.y = (win->bounds.y + layout->header_height);
-        Rigidbody.h = (win->bounds.h - layout->header_height);
+        struct nk_rect body;
+        body.x = win->bounds.x;
+        body.w = win->bounds.w;
+        body.y = (win->bounds.y + layout->header_height);
+        body.h = (win->bounds.h - layout->header_height);
         if (style->window.fixed_background.type == NK_STYLE_ITEM_IMAGE)
-            nk_draw_image(out, Rigidbody, &style->window.fixed_background.data.image, nk_white);
-        else nk_fill_rect(out, Rigidbody, 0, style->window.fixed_background.data.color);
+            nk_draw_image(out, body, &style->window.fixed_background.data.image, nk_white);
+        else nk_fill_rect(out, body, 0, style->window.fixed_background.data.color);
     }
 
     /* set clipping rectangle */
@@ -16896,7 +16896,7 @@ nk_popup_begin(struct nk_context *ctx, enum nk_popup_type type,
 }
 NK_LIB int
 nk_nonblock_begin(struct nk_context *ctx,
-    nk_flags flags, struct nk_rect Rigidbody, struct nk_rect header,
+    nk_flags flags, struct nk_rect body, struct nk_rect header,
     enum nk_panel_type panel_type)
 {
     struct nk_window *popup;
@@ -16925,15 +16925,15 @@ nk_nonblock_begin(struct nk_context *ctx,
         nk_command_buffer_init(&popup->buffer, &ctx->memory, NK_CLIPPING_ON);
     } else {
         /* close the popup if user pressed outside or in the header */
-        int pressed, in_Rigidbody, in_header;
+        int pressed, in_body, in_header;
 #ifdef NK_BUTTON_TRIGGER_ON_RELEASE
         pressed = nk_input_is_mouse_released(&ctx->input, NK_BUTTON_LEFT);
 #else
         pressed = nk_input_is_mouse_pressed(&ctx->input, NK_BUTTON_LEFT);
 #endif
-        in_Rigidbody = nk_input_is_mouse_hovering_rect(&ctx->input, Rigidbody);
+        in_body = nk_input_is_mouse_hovering_rect(&ctx->input, body);
         in_header = nk_input_is_mouse_hovering_rect(&ctx->input, header);
-        if (pressed && (!in_Rigidbody || in_header))
+        if (pressed && (!in_body || in_header))
             is_active = nk_false;
     }
     win->popup.header = header;
@@ -16947,7 +16947,7 @@ nk_nonblock_begin(struct nk_context *ctx,
         }
         return is_active;
     }
-    popup->bounds = Rigidbody;
+    popup->bounds = body;
     popup->parent = win;
     popup->layout = (struct nk_panel*)nk_create_panel(ctx);
     popup->flags = flags;
@@ -17068,7 +17068,7 @@ nk_contextual_begin(struct nk_context *ctx, nk_flags flags, struct nk_vec2 size,
 {
     struct nk_window *win;
     struct nk_window *popup;
-    struct nk_rect Rigidbody;
+    struct nk_rect body;
 
     NK_STORAGE const struct nk_rect null_rect = {-1,-1,0,0};
     int is_clicked = 0;
@@ -17100,17 +17100,17 @@ nk_contextual_begin(struct nk_context *ctx, nk_flags flags, struct nk_vec2 size,
     /* calculate contextual position on click */
     win->popup.active_con = win->popup.con_count;
     if (is_clicked) {
-        Rigidbody.x = ctx->input.mouse.pos.x;
-        Rigidbody.y = ctx->input.mouse.pos.y;
+        body.x = ctx->input.mouse.pos.x;
+        body.y = ctx->input.mouse.pos.y;
     } else {
-        Rigidbody.x = popup->bounds.x;
-        Rigidbody.y = popup->bounds.y;
+        body.x = popup->bounds.x;
+        body.y = popup->bounds.y;
     }
-    Rigidbody.w = size.x;
-    Rigidbody.h = size.y;
+    body.w = size.x;
+    body.h = size.y;
 
     /* start nonblocking contextual popup */
-    ret = nk_nonblock_begin(ctx, flags|NK_WINDOW_NO_SCROLLBAR, Rigidbody,
+    ret = nk_nonblock_begin(ctx, flags|NK_WINDOW_NO_SCROLLBAR, body,
             null_rect, NK_PANEL_CONTEXTUAL);
     if (ret) win->popup.type = NK_PANEL_CONTEXTUAL;
     else {
@@ -17256,16 +17256,16 @@ nk_contextual_end(struct nk_context *ctx)
         how big it will be. We therefore do not directly know when a
         click outside the non-blocking popup must close it at that direct frame.
         Instead it will be closed in the next frame.*/
-        struct nk_rect Rigidbody = {0,0,0,0};
+        struct nk_rect body = {0,0,0,0};
         if (panel->at_y < (panel->bounds.y + panel->bounds.h)) {
             struct nk_vec2 padding = nk_panel_get_padding(&ctx->style, panel->type);
-            Rigidbody = panel->bounds;
-            Rigidbody.y = (panel->at_y + panel->footer_height + panel->border + padding.y + panel->row.height);
-            Rigidbody.h = (panel->bounds.y + panel->bounds.h) - Rigidbody.y;
+            body = panel->bounds;
+            body.y = (panel->at_y + panel->footer_height + panel->border + padding.y + panel->row.height);
+            body.h = (panel->bounds.y + panel->bounds.h) - body.y;
         }
         {int pressed = nk_input_is_mouse_pressed(&ctx->input, NK_BUTTON_LEFT);
-        int in_Rigidbody = nk_input_is_mouse_hovering_rect(&ctx->input, Rigidbody);
-        if (pressed && in_Rigidbody)
+        int in_body = nk_input_is_mouse_hovering_rect(&ctx->input, body);
+        if (pressed && in_body)
             popup->flags |= NK_WINDOW_HIDDEN;
         }
     }
@@ -17358,7 +17358,7 @@ nk_menu_begin(struct nk_context *ctx, struct nk_window *win,
 {
     int is_open = 0;
     int is_active = 0;
-    struct nk_rect Rigidbody;
+    struct nk_rect body;
     struct nk_window *popup;
     nk_hash hash = nk_murmur_hash(id, (int)nk_strlen(id), NK_PANEL_MENU);
 
@@ -17368,17 +17368,17 @@ nk_menu_begin(struct nk_context *ctx, struct nk_window *win,
     if (!ctx || !ctx->current || !ctx->current->layout)
         return 0;
 
-    Rigidbody.x = header.x;
-    Rigidbody.w = size.x;
-    Rigidbody.y = header.y + header.h;
-    Rigidbody.h = size.y;
+    body.x = header.x;
+    body.w = size.x;
+    body.y = header.y + header.h;
+    body.h = size.y;
 
     popup = win->popup.win;
     is_open = popup ? nk_true : nk_false;
     is_active = (popup && (win->popup.name == hash) && win->popup.type == NK_PANEL_MENU);
     if ((is_clicked && is_open && !is_active) || (is_open && !is_active) ||
         (!is_open && !is_active && !is_clicked)) return 0;
-    if (!nk_nonblock_begin(ctx, NK_WINDOW_NO_SCROLLBAR, Rigidbody, header, NK_PANEL_MENU))
+    if (!nk_nonblock_begin(ctx, NK_WINDOW_NO_SCROLLBAR, body, header, NK_PANEL_MENU))
         return 0;
 
     win->popup.type = NK_PANEL_MENU;
@@ -24556,7 +24556,7 @@ nk_combo_begin(struct nk_context *ctx, struct nk_window *win,
     struct nk_window *popup;
     int is_open = 0;
     int is_active = 0;
-    struct nk_rect Rigidbody;
+    struct nk_rect body;
     nk_hash hash;
 
     NK_ASSERT(ctx);
@@ -24566,17 +24566,17 @@ nk_combo_begin(struct nk_context *ctx, struct nk_window *win,
         return 0;
 
     popup = win->popup.win;
-    Rigidbody.x = header.x;
-    Rigidbody.w = size.x;
-    Rigidbody.y = header.y + header.h-ctx->style.window.combo_border;
-    Rigidbody.h = size.y;
+    body.x = header.x;
+    body.w = size.x;
+    body.y = header.y + header.h-ctx->style.window.combo_border;
+    body.h = size.y;
 
     hash = win->popup.combo_count++;
     is_open = (popup) ? nk_true:nk_false;
     is_active = (popup && (win->popup.name == hash) && win->popup.type == NK_PANEL_COMBO);
     if ((is_clicked && is_open && !is_active) || (is_open && !is_active) ||
         (!is_open && !is_active && !is_clicked)) return 0;
-    if (!nk_nonblock_begin(ctx, 0, Rigidbody,
+    if (!nk_nonblock_begin(ctx, 0, body,
         (is_clicked && is_open)?nk_rect(0,0,0,0):header, NK_PANEL_COMBO)) return 0;
 
     win->popup.type = NK_PANEL_COMBO;
