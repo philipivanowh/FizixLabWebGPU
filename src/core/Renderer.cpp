@@ -491,46 +491,74 @@ void Renderer::DrawShape(physics::Rigidbody &body)
 void Renderer::DrawFBD(physics::Rigidbody &body)
 {
 	// Draw force arrow
-	if (body.forces.size() == 0)
+	std::vector<math::Vec2> forcesToDraw;
+	const auto &displayForces = body.GetForcesForDisplay();
+	forcesToDraw.reserve(displayForces.size());
+
+	for (const auto &forceInfo : displayForces)
+	{
+		forcesToDraw.push_back(forceInfo.force);
+	}
+
+	if (forcesToDraw.empty())
 	{
 		return;
 	}
 
-	for (size_t i = 0; i < body.forces.size(); i++)
-	{
-		math::Vec2 currForce = body.forces[i].force;
-		const float arrowMin = 100.0f;
-		const float arrowMax = 250.0f;
-		const float forceMin = 50.0f;
-		const float forceMax = 10000.0f;
-		const float curveExponent = 4.0f;
-		float arrowThickness = 8.0f;
-		float arrowPointThickness = 16.0f;
-		float arrowPointExtending = 1.1f;
-		float theta = currForce.GetRadian();
+	auto forceColorForType = [](physics::ForceType type) -> std::array<float, 4> {
+		switch (type)
+		{
+			case physics::ForceType::Normal:
+				return {0.3f, 0.7f, 0.9f, 0.6f};
+			case physics::ForceType::Frictional:
+				return {0.9f, 0.5f, 0.2f, 0.6f};
+			case physics::ForceType::Gravitational:
+				return {0.2f, 0.6f, 0.3f, 0.6f};
+			case physics::ForceType::Tension:
+				return {0.9f, 0.9f, 0.2f, 0.6f};
+			case physics::ForceType::Apply:
+			default:
+				return {0.5f, 0.3f, 0.5f, 0.4f};
+		}
+	};
 
-		const math::Vec2 scaledForce = currForce / SimulationConstants::PIXELS_PER_METER;
-		const math::Vec2 forceEnd = currForce.Normalize() * math::MapForceToLength(scaledForce, forceMin, forceMax, arrowMin, arrowMax, curveExponent);
-		const std::array<float, 4> forceColor{0.5f, 0.3f, 0.5f, 0.4f};
+	for (size_t i = 0; i < forcesToDraw.size(); i++)
+	{
+		const math::Vec2 force = forcesToDraw[i];
+		const float angleRadians = force.GetRadian();
+
+		const math::Vec2 scaledForce = force / SimulationConstants::PIXELS_PER_METER;
+		const math::Vec2 arrowEnd = force.Normalize() * math::MapForceToLength(
+			scaledForce,
+			VisualizationConstants::FBD_FORCE_MIN,
+			VisualizationConstants::FBD_FORCE_MAX,
+			VisualizationConstants::FBD_ARROW_MIN,
+			VisualizationConstants::FBD_ARROW_MAX,
+			VisualizationConstants::FBD_CURVE_EXPONENT);
+		const std::array<float, 4> forceColor = forceColorForType(displayForces[i].type);
 		constexpr float PI = 3.14159265f; 
 
-		std::cout << "theta" << theta  << std::endl;
-		std::cout << arrowThickness/2.0f * std::cos(theta + PI/2.0f) << ", " << arrowThickness/2.0f * std::sin(theta + PI/2.0f) << std::endl;
+		const float arrowHalfThickness = VisualizationConstants::FBD_ARROW_THICKNESS / 2.0f;
+		const float arrowHeadHalfThickness = VisualizationConstants::FBD_ARROW_HEAD_THICKNESS / 2.0f;
+		const float perpendicularX = std::cos(angleRadians + PI / 2.0f);
+		const float perpendicularY = std::sin(angleRadians + PI / 2.0f);
+		
 		const std::vector<float> forceVertices = {
 			
-			//†he rectangle part of the arrow
-			 arrowThickness/2.0f * std::cos(theta + PI/2.0f), arrowThickness/2.0f * std::sin(theta + PI/2.0f),
-			 -arrowThickness/2.0f * std::cos(theta + PI/2.0f), -arrowThickness/2.0f * std::sin(theta + PI/2.0f),
-			forceEnd.x-arrowThickness/2.0f * std::cos(theta + PI/2.0f), forceEnd.y-arrowThickness/2.0f * std::sin(theta + PI/2.0f),
+			// The rectangle part of the arrow
+			arrowHalfThickness * perpendicularX, arrowHalfThickness * perpendicularY,
+			-arrowHalfThickness * perpendicularX, -arrowHalfThickness * perpendicularY,
+			arrowEnd.x - arrowHalfThickness * perpendicularX, arrowEnd.y - arrowHalfThickness * perpendicularY,
 			
-			forceEnd.x-arrowThickness/2.0f * std::cos(theta + PI/2.0f), forceEnd.y-arrowThickness/2.0f * std::sin(theta + PI/2.0f),
-			forceEnd.x+arrowThickness/2.0f * std::cos(theta + PI/2.0f), forceEnd.y+arrowThickness/2.0f * std::sin(theta + PI/2.0f),
-			arrowThickness/2.0f * std::cos(theta + PI/2.0f), arrowThickness/2.0f * std::sin(theta + PI/2.0f),
+			arrowEnd.x - arrowHalfThickness * perpendicularX, arrowEnd.y - arrowHalfThickness * perpendicularY,
+			arrowEnd.x + arrowHalfThickness * perpendicularX, arrowEnd.y + arrowHalfThickness * perpendicularY,
+			arrowHalfThickness * perpendicularX, arrowHalfThickness * perpendicularY,
 
-			//The pointing part of the arrow
-			forceEnd.x-arrowPointThickness/2.0f * std::cos(theta + PI/2.0f), forceEnd.y-arrowPointThickness/2.0f * std::sin(theta + PI/2.0f),
-			forceEnd.x+arrowPointThickness/2.0f * std::cos(theta + PI/2.0f), forceEnd.y+arrowPointThickness/2.0f * std::sin(theta + PI/2.0f),
-			forceEnd.x * arrowPointExtending, forceEnd.y * arrowPointExtending
+			// The pointing part of the arrow
+			arrowEnd.x - arrowHeadHalfThickness * perpendicularX, arrowEnd.y - arrowHeadHalfThickness * perpendicularY,
+			arrowEnd.x + arrowHeadHalfThickness * perpendicularX, arrowEnd.y + arrowHeadHalfThickness * perpendicularY,
+			arrowEnd.x * VisualizationConstants::FBD_ARROW_HEAD_SCALE,
+			arrowEnd.y * VisualizationConstants::FBD_ARROW_HEAD_SCALE
 		};
 
 

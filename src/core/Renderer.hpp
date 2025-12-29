@@ -47,11 +47,11 @@ public:
 	// Return true as long as the main loop should keep on running
 	bool IsRunning();
 
-	void DrawShape(physics::Rigidbody &Rigidbody);
+	void DrawShape(physics::Rigidbody &body);
 	void DrawBox(const shape::Box &box);
 	void DrawBall(const shape::Ball &ball);
 	void DrawBallLine(const shape::Ball &ball);
-	void DrawFBD(physics::Rigidbody &Rigidbody);
+	void DrawFBD(physics::Rigidbody &body);
 	void DrawTestTriangle();
 	void DrawTest2Triangle();
 

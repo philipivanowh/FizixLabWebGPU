@@ -173,15 +173,15 @@ bool IntersectAABBs(const collision::AABB& a, const collision::AABB& b) {
 	return true;
 }
 
-std::tuple<math::Vec2, math::Vec2, int> FindContactPoints(const physics::Rigidbody& objectA, const physics::Rigidbody& objectB) {
+std::tuple<math::Vec2, math::Vec2, int> FindContactPoints(const physics::Rigidbody& bodyA, const physics::Rigidbody& bodyB) {
 	math::Vec2 contact1 = math::Vec2();
 	math::Vec2 contact2 = math::Vec2();
 	int contactCount = 0;
 
-	const shape::Box* boxA = dynamic_cast<const shape::Box*>(&objectA);
-	const shape::Box* boxB = dynamic_cast<const shape::Box*>(&objectB);
-	const shape::Ball* ballA = dynamic_cast<const shape::Ball*>(&objectA);
-	const shape::Ball* ballB = dynamic_cast<const shape::Ball*>(&objectB);
+	const shape::Box* boxA = dynamic_cast<const shape::Box*>(&bodyA);
+	const shape::Box* boxB = dynamic_cast<const shape::Box*>(&bodyB);
+	const shape::Ball* ballA = dynamic_cast<const shape::Ball*>(&bodyA);
+	const shape::Ball* ballB = dynamic_cast<const shape::Ball*>(&bodyB);
 
 	if (boxA) {
 		if (boxB) {
@@ -219,13 +219,13 @@ std::tuple<math::Vec2, math::Vec2, int> FindContactPoints(const physics::Rigidbo
 	return {contact1, contact2, contactCount};
 }
 
-HitInfo Collide(const physics::Rigidbody& objectA, const physics::Rigidbody& objectB) {
+HitInfo Collide(const physics::Rigidbody& bodyA, const physics::Rigidbody& bodyB) {
 	HitInfo hit;
 
-	const shape::Box* boxA = dynamic_cast<const shape::Box*>(&objectA);
-	const shape::Box* boxB = dynamic_cast<const shape::Box*>(&objectB);
-	const shape::Ball* ballA = dynamic_cast<const shape::Ball*>(&objectA);
-	const shape::Ball* ballB = dynamic_cast<const shape::Ball*>(&objectB);
+	const shape::Box* boxA = dynamic_cast<const shape::Box*>(&bodyA);
+	const shape::Box* boxB = dynamic_cast<const shape::Box*>(&bodyB);
+	const shape::Ball* ballA = dynamic_cast<const shape::Ball*>(&bodyA);
+	const shape::Ball* ballB = dynamic_cast<const shape::Ball*>(&bodyB);
 
 	if (boxA) {
 		if (boxB) {

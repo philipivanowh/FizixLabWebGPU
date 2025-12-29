@@ -18,6 +18,8 @@ add_subdirectory(glfw3webgpu)
 add_executable(App
 	src/app/main.cpp
 	src/core/Engine.cpp
+	src/core/CollisionPipeline.cpp
+	src/core/CollisionSolver.cpp
 	src/core/Renderer.cpp
 	src/core/World.cpp
 	src/core/Utility.cpp
@@ -44,13 +46,6 @@ if (MSVC)
 	target_compile_options(App PRIVATE /W4)
 else()
 	target_compile_options(App PRIVATE -Wall -Wextra -pedantic)
-endif()
-
-if (XCODE)
-	set_target_properties(App PROPERTIES
-		XCODE_GENERATE_SCHEME ON
-		XCODE_SCHEME_ENABLE_GPU_FRAME_CAPTURE_MODE "Metal"
-	)
 endif()
 
 if (EMSCRIPTEN)

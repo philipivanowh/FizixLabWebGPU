@@ -3,6 +3,7 @@
 #include "collision/AABB.hpp"
 #include "math/Vec2.hpp"
 #include "math/Math.hpp"
+#include <memory>
 #include <vector>
 
 namespace physics
@@ -28,6 +29,13 @@ namespace physics
 		ForceType type;
 	};
 
+	class ForceGenerator
+	{
+	public:
+		virtual ~ForceGenerator() = default;
+		virtual void Apply(class Rigidbody &body, float deltaMs) = 0;
+	};
+
 	class Rigidbody
 	{
 	public:
@@ -45,7 +53,14 @@ namespace physics
 		void RotateTo(float angleRadians);
 		void Rotate(float amountRadians);
 		void ApplyForce(const math::Vec2 &forceAmount, const ForceType type);
-		void UpdateForce();
+		void AddDisplayForce(const math::Vec2 &forceAmount, const ForceType type);
+		void AddForceGenerator(std::unique_ptr<ForceGenerator> generator);
+		void UpdateForces(float deltaMs);
+		void BeginFrameForces();
+		void AccumulateNormalImpulse(const math::Vec2 &normalImpulse);
+		void FinalizeForces(float deltaMs);
+		math::Vec2 GetNormalForce() const;
+		const std::vector<ForceInfo> &GetForcesForDisplay() const;
 		void ClearForces();
 
 
@@ -71,11 +86,14 @@ namespace physics
 		float invMass = 0.0f;
 		float staticFriction = 0.6f;
 		float kineticFriction = 0.3f;
+		math::Vec2 normalImpulseAccum = math::Vec2();
+		math::Vec2 normalForce = math::Vec2();
+		std::vector<std::unique_ptr<ForceGenerator>> forceGenerators;
 		mutable bool transformUpdateRequired = true;
 		mutable bool aabbUpdateRequired = true;
 
 	protected:
-		void ApplyGravity();
+		void UpdateGravity();
 	};
 
 } // namespace physics

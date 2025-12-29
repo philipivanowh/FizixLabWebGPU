@@ -1,6 +1,9 @@
 #include "physics/Rigidbody.hpp"// Required for std::clamp
 #include "common/settings.hpp"
 
+#include <cmath>
+#include <cstdint>
+
 namespace physics {
 
 
@@ -50,7 +53,7 @@ void Rigidbody::Update(float deltaMs, int iterations) {
 
 		ClearForces();
 		netForce = math::Vec2();
-		UpdateForce();
+		UpdateForces(deltaMs);
 		linearAcc = netForce / mass;
 		linearVel = linearVel + (linearAcc * dtSeconds) * 0.5;
 		pos = pos + (linearVel * dtSeconds);
@@ -92,18 +95,61 @@ void Rigidbody::ApplyForce(const math::Vec2& forceAmount, const ForceType type) 
 	netForce += forceAmount;
 }
 
+void Rigidbody::AddDisplayForce(const math::Vec2& forceAmount, const ForceType type) {
+	forces.push_back(ForceInfo{forceAmount, type});
+}
+
+void Rigidbody::AddForceGenerator(std::unique_ptr<ForceGenerator> generator) {
+	forceGenerators.push_back(std::move(generator));
+}
+
+void Rigidbody::BeginFrameForces() {
+	ClearForces();
+	normalImpulseAccum = math::Vec2();
+	normalForce = math::Vec2();
+}
+
+void Rigidbody::AccumulateNormalImpulse(const math::Vec2& normalImpulse) {
+	normalImpulseAccum = normalImpulse;
+	std::cout << normalImpulseAccum.x << std::endl;
+}
+
+void Rigidbody::FinalizeForces(float deltaMs) {
+	if (deltaMs > 0.0f) {
+		normalForce = normalImpulseAccum / deltaMs;
+	} else {
+		normalForce = math::Vec2();
+	}
+	if (!math::NearlyEqualVec(normalForce, math::Vec2(0.0f, 0.0f))) {
+		AddDisplayForce(normalForce, ForceType::Normal);
+	}
+}
+
+math::Vec2 Rigidbody::GetNormalForce() const {
+	return normalForce;
+}
+
+const std::vector<ForceInfo> &Rigidbody::GetForcesForDisplay() const {
+	return forces;
+}
+
 void Rigidbody::ClearForces() {
 	forces.clear();
 }
 
-void Rigidbody::ApplyGravity() {
+void Rigidbody::UpdateGravity() {
 	const float strength = PhysicsConstants::GRAVITY * SimulationConstants::PIXELS_PER_METER;
 	const math::Vec2 gravityForce(0.0f, -mass * strength);
 	ApplyForce(gravityForce, ForceType::Gravitational);
 }
 
-void Rigidbody::UpdateForce() {
-	ApplyGravity();
+void Rigidbody::UpdateForces(float deltaMs) {
+	UpdateGravity();
+	for (const auto &generator : forceGenerators) {
+		generator->Apply(*this, deltaMs);
+	}
+	
+	//Update
 
 }
 

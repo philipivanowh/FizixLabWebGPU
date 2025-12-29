@@ -22,9 +22,9 @@ struct ProjectionRange {
 
 bool IntersectAABBs(const AABB& a, const AABB& b);
 
-std::tuple<math::Vec2, math::Vec2, int> FindContactPoints(const physics::Rigidbody& objectA, const physics::Rigidbody& objectB);
+std::tuple<math::Vec2, math::Vec2, int> FindContactPoints(const physics::Rigidbody& bodyA, const physics::Rigidbody& bodyB);
 
-HitInfo Collide(const physics::Rigidbody& objectA, const physics::Rigidbody& objectB);
+HitInfo Collide(const physics::Rigidbody& bodyA, const physics::Rigidbody& bodyB);
 
 HitInfo IntersectCirclePolygon(const math::Vec2& circleCenter,
 					   float circleRadius,

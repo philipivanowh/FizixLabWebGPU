@@ -17,4 +17,16 @@ namespace PhysicsConstants{
  inline constexpr float MIN_DENSITY = 0.5f;
  inline constexpr float MAX_DENSITY = 21.4f;
  inline constexpr float DEFAULT_RESTITUTION = 0.4f;
+ inline constexpr float MAX_PENETRATION_CORRECTION = 5.0f;
+}
+
+namespace VisualizationConstants{
+ constexpr float FBD_ARROW_MIN = 100.0f;
+ constexpr float FBD_ARROW_MAX = 250.0f;
+ constexpr float FBD_FORCE_MIN = 50.0f;
+ constexpr float FBD_FORCE_MAX = 10000.0f;
+ constexpr float FBD_CURVE_EXPONENT = 4.0f;
+ constexpr float FBD_ARROW_THICKNESS = 8.0f;
+ constexpr float FBD_ARROW_HEAD_THICKNESS = 16.0f;
+ constexpr float FBD_ARROW_HEAD_SCALE = 1.1f;
 }
