@@ -111,7 +111,6 @@ void Rigidbody::BeginFrameForces() {
 
 void Rigidbody::AccumulateNormalImpulse(const math::Vec2& normalImpulse) {
 	normalImpulseAccum = normalImpulse;
-	std::cout << normalImpulseAccum.x << std::endl;
 }
 
 void Rigidbody::FinalizeForces(float deltaMs) {
@@ -148,8 +147,6 @@ void Rigidbody::UpdateForces(float deltaMs) {
 	for (const auto &generator : forceGenerators) {
 		generator->Apply(*this, deltaMs);
 	}
-	
-	//Update
 
 }
 

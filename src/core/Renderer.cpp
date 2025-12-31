@@ -46,6 +46,10 @@ bool Renderer::Initialize()
 		return false;
 	}
 
+	glfwGetFramebufferSize(window,
+						   reinterpret_cast<int *>(&framebufferWidth),
+						   reinterpret_cast<int *>(&framebufferHeight));
+
 	Instance instance = wgpuCreateInstance(nullptr);
 	if (!instance)
 	{
@@ -98,10 +102,13 @@ bool Renderer::Initialize()
 	SurfaceConfiguration config = {};
 
 	// Configuration of the textures created for the underlying swap chain
-	config.width = windowWidth;
-	config.height = windowHeight;
+	config.width = framebufferWidth;
+	config.height = framebufferHeight;
 	config.usage = TextureUsage::RenderAttachment;
-	surfaceFormat = surface.getPreferredFormat(adapter);
+	SurfaceCapabilities surfaceCapabilities;
+	surface.getCapabilities(adapter, &surfaceCapabilities);
+	surfaceFormat = surfaceCapabilities.formats[0];
+	surfaceCapabilities.freeMembers();
 	config.format = surfaceFormat;
 
 	// And we do not need any particular view format:
@@ -121,6 +128,7 @@ bool Renderer::Initialize()
 
 	return true;
 }
+
 
 void Renderer::Terminate()
 {
@@ -351,6 +359,32 @@ void Renderer::BeginFrame()
 {
 	glfwPollEvents();
 
+	uint32_t newFramebufferWidth = framebufferWidth;
+	uint32_t newFramebufferHeight = framebufferHeight;
+	glfwGetFramebufferSize(window,
+						   reinterpret_cast<int *>(&newFramebufferWidth),
+						   reinterpret_cast<int *>(&newFramebufferHeight));
+	if (newFramebufferWidth != framebufferWidth || newFramebufferHeight != framebufferHeight)
+	{
+		framebufferWidth = newFramebufferWidth;
+		framebufferHeight = newFramebufferHeight;
+		if (framebufferWidth == 0 || framebufferHeight == 0)
+		{
+			return;
+		}
+		SurfaceConfiguration config = {};
+		config.width = framebufferWidth;
+		config.height = framebufferHeight;
+		config.usage = TextureUsage::RenderAttachment;
+		config.format = surfaceFormat;
+		config.viewFormatCount = 0;
+		config.viewFormats = nullptr;
+		config.device = device;
+		config.presentMode = PresentMode::Fifo;
+		config.alphaMode = CompositeAlphaMode::Auto;
+		surface.configure(config);
+	}
+
 	// Get the next target texture view
 	targetView = GetNextSurfaceTextureView();
 	if (!targetView)
@@ -383,10 +417,68 @@ void Renderer::BeginFrame()
 	renderPass = encoder.beginRenderPass(renderPassDesc);
 	renderPass.setPipeline(pipeline);
 	uniformBufferOffset = 0;
+
+	DrawGrid();
+}
+
+void Renderer::DrawGrid()
+{
+	constexpr float kGridSpacing = 50.0f;
+	constexpr float kMajorSpacing = 200.0f;
+	const std::array<float, 4> minorColor{0.1f, 0.5f, 0.6f, 0.25f};
+	const std::array<float, 4> majorColor{0.2f, 0.7f, 0.8f, 0.45f};
+
+	std::vector<float> minorVertices;
+	std::vector<float> majorVertices;
+
+	for (float x = 0.0f; x <= windowWidth; x += kGridSpacing)
+	{
+		const bool isMajor = std::fmod(x, kMajorSpacing) < 0.5f;
+		auto& vertices = isMajor ? majorVertices : minorVertices;
+		vertices.push_back(x);
+		vertices.push_back(0.0f);
+		vertices.push_back(x);
+		vertices.push_back(static_cast<float>(windowHeight));
+	}
+
+	for (float y = 0.0f; y <= windowHeight; y += kGridSpacing)
+	{
+		const bool isMajor = std::fmod(y, kMajorSpacing) < 0.5f;
+		auto& vertices = isMajor ? majorVertices : minorVertices;
+		vertices.push_back(0.0f);
+		vertices.push_back(y);
+		vertices.push_back(static_cast<float>(windowWidth));
+		vertices.push_back(y);
+	}
+
+	const math::Vec2 gridOrigin(0.0f, 0.0f);
+
+	auto drawLines = [&](const std::vector<float>& vertices, const std::array<float, 4>& color)
+	{
+		if (vertices.empty())
+		{
+			return;
+		}
+
+		EnsureVertexBufferSize(static_cast<int>(vertices.size()));
+		queue.writeBuffer(vertexBuffer, 0, vertices.data(), vertices.size() * sizeof(float));
+
+		const uint32_t uniformOffset = UpdateUniforms(gridOrigin, color);
+		renderPass.setPipeline(linePipeline);
+		renderPass.setBindGroup(0, uniformBindGroup, 1, &uniformOffset);
+		renderPass.setVertexBuffer(0, vertexBuffer, 0, vertices.size() * sizeof(float));
+		renderPass.draw(static_cast<uint32_t>(vertices.size() / 2), 1, 0, 0);
+	};
+
+	drawLines(minorVertices, minorColor);
+	drawLines(majorVertices, majorColor);
+
+	renderPass.setPipeline(pipeline);
 }
 
 void Renderer::EndFrame()
 {
+
 	renderPass.end();
 	renderPass.release();
 
@@ -443,6 +535,8 @@ RequiredLimits Renderer::GetRequiredLimits(Adapter adapter) const
 	// limits.
 	requiredLimits.limits.minUniformBufferOffsetAlignment = supportedLimits.limits.minUniformBufferOffsetAlignment;
 	requiredLimits.limits.minStorageBufferOffsetAlignment = supportedLimits.limits.minStorageBufferOffsetAlignment;
+
+	requiredLimits.limits.maxBindGroups = 2;
 
 	return requiredLimits;
 }
@@ -505,20 +599,21 @@ void Renderer::DrawFBD(physics::Rigidbody &body)
 		return;
 	}
 
-	auto forceColorForType = [](physics::ForceType type) -> std::array<float, 4> {
+	auto forceColorForType = [](physics::ForceType type) -> std::array<float, 4>
+	{
 		switch (type)
 		{
-			case physics::ForceType::Normal:
-				return {0.3f, 0.7f, 0.9f, 0.6f};
-			case physics::ForceType::Frictional:
-				return {0.9f, 0.5f, 0.2f, 0.6f};
-			case physics::ForceType::Gravitational:
-				return {0.2f, 0.6f, 0.3f, 0.6f};
-			case physics::ForceType::Tension:
-				return {0.9f, 0.9f, 0.2f, 0.6f};
-			case physics::ForceType::Apply:
-			default:
-				return {0.5f, 0.3f, 0.5f, 0.4f};
+		case physics::ForceType::Normal:
+			return {0.3f, 0.7f, 0.9f, 0.6f};
+		case physics::ForceType::Frictional:
+			return {0.9f, 0.5f, 0.2f, 0.6f};
+		case physics::ForceType::Gravitational:
+			return {0.2f, 0.6f, 0.3f, 0.6f};
+		case physics::ForceType::Tension:
+			return {0.9f, 0.9f, 0.2f, 0.6f};
+		case physics::ForceType::Apply:
+		default:
+			return {0.5f, 0.3f, 0.5f, 0.4f};
 		}
 	};
 
@@ -529,27 +624,27 @@ void Renderer::DrawFBD(physics::Rigidbody &body)
 
 		const math::Vec2 scaledForce = force / SimulationConstants::PIXELS_PER_METER;
 		const math::Vec2 arrowEnd = force.Normalize() * math::MapForceToLength(
-			scaledForce,
-			VisualizationConstants::FBD_FORCE_MIN,
-			VisualizationConstants::FBD_FORCE_MAX,
-			VisualizationConstants::FBD_ARROW_MIN,
-			VisualizationConstants::FBD_ARROW_MAX,
-			VisualizationConstants::FBD_CURVE_EXPONENT);
+															scaledForce,
+															VisualizationConstants::FBD_FORCE_MIN,
+															VisualizationConstants::FBD_FORCE_MAX,
+															VisualizationConstants::FBD_ARROW_MIN,
+															VisualizationConstants::FBD_ARROW_MAX,
+															VisualizationConstants::FBD_CURVE_EXPONENT);
 		const std::array<float, 4> forceColor = forceColorForType(displayForces[i].type);
-		constexpr float PI = 3.14159265f; 
+		constexpr float PI = 3.14159265f;
 
 		const float arrowHalfThickness = VisualizationConstants::FBD_ARROW_THICKNESS / 2.0f;
 		const float arrowHeadHalfThickness = VisualizationConstants::FBD_ARROW_HEAD_THICKNESS / 2.0f;
 		const float perpendicularX = std::cos(angleRadians + PI / 2.0f);
 		const float perpendicularY = std::sin(angleRadians + PI / 2.0f);
-		
+
 		const std::vector<float> forceVertices = {
-			
+
 			// The rectangle part of the arrow
 			arrowHalfThickness * perpendicularX, arrowHalfThickness * perpendicularY,
 			-arrowHalfThickness * perpendicularX, -arrowHalfThickness * perpendicularY,
 			arrowEnd.x - arrowHalfThickness * perpendicularX, arrowEnd.y - arrowHalfThickness * perpendicularY,
-			
+
 			arrowEnd.x - arrowHalfThickness * perpendicularX, arrowEnd.y - arrowHalfThickness * perpendicularY,
 			arrowEnd.x + arrowHalfThickness * perpendicularX, arrowEnd.y + arrowHalfThickness * perpendicularY,
 			arrowHalfThickness * perpendicularX, arrowHalfThickness * perpendicularY,
@@ -558,9 +653,7 @@ void Renderer::DrawFBD(physics::Rigidbody &body)
 			arrowEnd.x - arrowHeadHalfThickness * perpendicularX, arrowEnd.y - arrowHeadHalfThickness * perpendicularY,
 			arrowEnd.x + arrowHeadHalfThickness * perpendicularX, arrowEnd.y + arrowHeadHalfThickness * perpendicularY,
 			arrowEnd.x * VisualizationConstants::FBD_ARROW_HEAD_SCALE,
-			arrowEnd.y * VisualizationConstants::FBD_ARROW_HEAD_SCALE
-		};
-
+			arrowEnd.y * VisualizationConstants::FBD_ARROW_HEAD_SCALE};
 
 		vertexCount = static_cast<uint32_t>(forceVertices.size() / 2);
 

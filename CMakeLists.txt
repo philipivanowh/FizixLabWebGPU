@@ -14,15 +14,18 @@ endif()
 
 add_subdirectory(webgpu)
 add_subdirectory(glfw3webgpu)
+add_subdirectory(imgui)
+
 
 add_executable(App
 	src/app/main.cpp
 	src/core/Engine.cpp
-	src/core/CollisionPipeline.cpp
-	src/core/CollisionSolver.cpp
+	src/collision/CollisionPipeline.cpp
+	src/collision/CollisionSolver.cpp
 	src/core/Renderer.cpp
 	src/core/World.cpp
 	src/core/Utility.cpp
+	src/core/UIManager.cpp
 	src/shape/Ball.cpp
 	src/physics/Rigidbody.cpp
 	src/shape/Box.cpp
@@ -31,7 +34,7 @@ add_executable(App
 
 target_include_directories(App PRIVATE src)
 
-target_link_libraries(App PRIVATE glfw webgpu glfw3webgpu)
+target_link_libraries(App PRIVATE glfw webgpu glfw3webgpu imgui)
 
 target_copy_webgpu_binaries(App)
 

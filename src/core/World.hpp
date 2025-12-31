@@ -1,7 +1,7 @@
 #pragma once
 
-#include "core/CollisionPipeline.hpp"
-#include "core/CollisionSolver.hpp"
+#include "collision/CollisionPipeline.hpp"
+#include "collision/CollisionSolver.hpp"
 #include "physics/Rigidbody.hpp"
 
 #include <cstddef>

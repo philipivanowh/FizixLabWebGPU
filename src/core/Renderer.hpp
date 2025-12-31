@@ -55,6 +55,14 @@ public:
 	void DrawTestTriangle();
 	void DrawTest2Triangle();
 
+	GLFWwindow* GetWindow() const { return window; }
+	Device GetDevice() const { return device; }
+	Queue GetQueue() const { return queue; }
+	RenderPassEncoder GetRenderPass() const {return renderPass;};
+	TextureFormat GetSurfaceFormat() const {return surfaceFormat;};
+
+
+
 private:
 	wgpu::TextureView GetNextSurfaceTextureView();
 	// Substep of Initialize() that creates the render pipeline
@@ -63,6 +71,7 @@ private:
 	void InitializeBuffers();
 	void EnsureVertexBufferSize(int size);
 	uint32_t UpdateUniforms(const math::Vec2 &position, const std::array<float, 4> &color);
+	void DrawGrid();
 
 private:
 	// We put here all the variables that are shared between init and main loop
@@ -83,12 +92,13 @@ private:
 	uint32_t vertexCount;
 	CommandEncoder encoder;
 	TextureView targetView;
-	// size_t vertexBufferSize = 0;
 	uint32_t uniformAlignment = 1;
 	size_t uniformBufferStride = 0;
 	size_t uniformBufferSize = 0;
 	size_t uniformBufferOffset = 0;
 	uint32_t windowWidth = 1470;
 	uint32_t windowHeight = 956;
+	uint32_t framebufferWidth = 1470;
+	uint32_t framebufferHeight = 956;
 	const WGPUColor backgroundColor = WGPUColor{0.015, 0.016, 0.02, 1.0};
 };
