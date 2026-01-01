@@ -18,4 +18,5 @@ public:
 
 private:
 	std::vector<Pair> pairs;
+	float cellSize = 200.0f;
 };

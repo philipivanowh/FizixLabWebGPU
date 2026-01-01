@@ -62,31 +62,6 @@ namespace shape
 		return out;
 	}
 
-	collision::AABB Shape::GetAABB() const
-	{
-		if (aabbUpdateRequired)
-		{
-			float minX = std::numeric_limits<float>::infinity();
-			float minY = std::numeric_limits<float>::infinity();
-			float maxX = -std::numeric_limits<float>::infinity();
-			float maxY = -std::numeric_limits<float>::infinity();
-
-			std::vector<math::Vec2> verts = GetVertexWorldPos();
-
-			for (const auto &v : verts)
-			{
-				minX = std::min(minX, v.x);
-				minY = std::min(minY, v.y);
-				maxX = std::max(maxX, v.x);
-				maxY = std::max(maxY, v.y);
-			}
-
-			aabb = collision::AABB(minX, minY, maxX, maxY);
-			aabbUpdateRequired = false;
-		}
-		return aabb;
-	}
-
 	float Box::ComputeInertia() const
 	{
 		if (mass <= 0.0f)

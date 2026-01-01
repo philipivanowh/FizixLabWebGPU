@@ -129,7 +129,6 @@ bool Renderer::Initialize()
 	return true;
 }
 
-
 void Renderer::Terminate()
 {
 	vertexBuffer.release();
@@ -434,7 +433,7 @@ void Renderer::DrawGrid()
 	for (float x = 0.0f; x <= windowWidth; x += kGridSpacing)
 	{
 		const bool isMajor = std::fmod(x, kMajorSpacing) < 0.5f;
-		auto& vertices = isMajor ? majorVertices : minorVertices;
+		auto &vertices = isMajor ? majorVertices : minorVertices;
 		vertices.push_back(x);
 		vertices.push_back(0.0f);
 		vertices.push_back(x);
@@ -444,7 +443,7 @@ void Renderer::DrawGrid()
 	for (float y = 0.0f; y <= windowHeight; y += kGridSpacing)
 	{
 		const bool isMajor = std::fmod(y, kMajorSpacing) < 0.5f;
-		auto& vertices = isMajor ? majorVertices : minorVertices;
+		auto &vertices = isMajor ? majorVertices : minorVertices;
 		vertices.push_back(0.0f);
 		vertices.push_back(y);
 		vertices.push_back(static_cast<float>(windowWidth));
@@ -453,7 +452,7 @@ void Renderer::DrawGrid()
 
 	const math::Vec2 gridOrigin(0.0f, 0.0f);
 
-	auto drawLines = [&](const std::vector<float>& vertices, const std::array<float, 4>& color)
+	auto drawLines = [&](const std::vector<float> &vertices, const std::array<float, 4> &color)
 	{
 		if (vertices.empty())
 		{
@@ -574,11 +573,21 @@ void Renderer::DrawShape(physics::Rigidbody &body)
 		DrawFBD(body);
 		return;
 	}
-	if (auto ball = dynamic_cast<const shape::Ball *>(&body))
+	else if (auto ball = dynamic_cast<const shape::Ball *>(&body))
 	{
 		DrawBall(*ball);
 		DrawFBD(body);
 		return;
+	}
+	else if (auto canon = dynamic_cast<const shape::Canon *>(&body))
+	{
+		DrawCanon(*canon);
+		return;
+	}
+	else if (auto incline = dynamic_cast<const shape::Incline *>(&body))
+	{
+		DrawIncline(*incline);
+		DrawFBD(body);
 	}
 }
 
@@ -631,12 +640,11 @@ void Renderer::DrawFBD(physics::Rigidbody &body)
 															VisualizationConstants::FBD_ARROW_MAX,
 															VisualizationConstants::FBD_CURVE_EXPONENT);
 		const std::array<float, 4> forceColor = forceColorForType(displayForces[i].type);
-		constexpr float PI = 3.14159265f;
 
 		const float arrowHalfThickness = VisualizationConstants::FBD_ARROW_THICKNESS / 2.0f;
 		const float arrowHeadHalfThickness = VisualizationConstants::FBD_ARROW_HEAD_THICKNESS / 2.0f;
-		const float perpendicularX = std::cos(angleRadians + PI / 2.0f);
-		const float perpendicularY = std::sin(angleRadians + PI / 2.0f);
+		const float perpendicularX = std::cos(angleRadians + math::PI / 2.0f);
+		const float perpendicularY = std::sin(angleRadians + math::PI / 2.0f);
 
 		const std::vector<float> forceVertices = {
 
@@ -668,6 +676,15 @@ void Renderer::DrawFBD(physics::Rigidbody &body)
 	}
 }
 
+void Renderer::EnsureVertexBufferSize(int size)
+{
+	BufferDescriptor bufferDesc;
+	bufferDesc.size = size * sizeof(float);
+	bufferDesc.usage = BufferUsage::CopyDst | BufferUsage::Vertex;
+	bufferDesc.mappedAtCreation = false;
+	vertexBuffer = device.createBuffer(bufferDesc);
+}
+
 void Renderer::DrawBox(const shape::Box &box)
 {
 	renderPass.setPipeline(pipeline);
@@ -690,13 +707,26 @@ void Renderer::DrawBox(const shape::Box &box)
 	renderPass.draw(vertexCount, 1, 0, 0);
 }
 
-void Renderer::EnsureVertexBufferSize(int size)
+void Renderer::DrawIncline(const shape::Incline &incline)
 {
-	BufferDescriptor bufferDesc;
-	bufferDesc.size = size * sizeof(float);
-	bufferDesc.usage = BufferUsage::CopyDst | BufferUsage::Vertex;
-	bufferDesc.mappedAtCreation = false;
-	vertexBuffer = device.createBuffer(bufferDesc);
+	renderPass.setPipeline(pipeline);
+
+	const std::vector<float> verticies = incline.GetVertexLocalPos();
+	EnsureVertexBufferSize(verticies.size());
+
+	queue.writeBuffer(vertexBuffer, 0, verticies.data(), verticies.size() * sizeof(float));
+
+	vertexCount = static_cast<uint32_t>(verticies.size() / 2);
+	uint32_t uniformOffset = UpdateUniforms(incline.pos, incline.color);
+
+	if (!uniformBindGroup)
+	{
+		std::cout << "Uniform bind group is invalid; skipping draw." << std::endl;
+		return;
+	}
+	renderPass.setBindGroup(0, uniformBindGroup, 1, &uniformOffset);
+	renderPass.setVertexBuffer(0, vertexBuffer, 0, vertexCount * 2 * sizeof(float));
+	renderPass.draw(vertexCount, 1, 0, 0);
 }
 
 void Renderer::DrawBall(const shape::Ball &ball)
@@ -721,6 +751,43 @@ void Renderer::DrawBall(const shape::Ball &ball)
 	renderPass.draw(vertexCount, 1, 0, 0);
 
 	DrawBallLine(ball);
+}
+
+void Renderer::DrawCanon(const shape::Canon &canon)
+{
+	renderPass.setPipeline(pipeline);
+
+	// Draw the Barrel
+	const std::vector<float> barrelVertices = canon.GetBarrelVertexLocalPos();
+	EnsureVertexBufferSize(barrelVertices.size());
+
+	queue.writeBuffer(vertexBuffer, 0, barrelVertices.data(), barrelVertices.size() * sizeof(float));
+
+	vertexCount = static_cast<uint32_t>(barrelVertices.size() / 2);
+	uint32_t uniformOffset = UpdateUniforms(canon.pos, canon.barrelColor);
+
+	if (!uniformBindGroup)
+	{
+		std::cout << "Uniform bind group is invalid; skipping draw." << std::endl;
+		return;
+	}
+
+	renderPass.setBindGroup(0, uniformBindGroup, 1, &uniformOffset);
+	renderPass.setVertexBuffer(0, vertexBuffer, 0, vertexCount * 2 * sizeof(float));
+	renderPass.draw(vertexCount, 1, 0, 0);
+
+	// Draw the wheel
+	const std::vector<float> wheelVertices = canon.GetWheelVertexLocalPos();
+	EnsureVertexBufferSize(wheelVertices.size());
+
+	queue.writeBuffer(vertexBuffer, 0, wheelVertices.data(), wheelVertices.size() * sizeof(float));
+
+	vertexCount = static_cast<uint32_t>(wheelVertices.size() / 2);
+	uniformOffset = UpdateUniforms(canon.pos, canon.wheelColor);
+
+	renderPass.setBindGroup(0, uniformBindGroup, 1, &uniformOffset);
+	renderPass.setVertexBuffer(0, vertexBuffer, 0, vertexCount * 2 * sizeof(float));
+	renderPass.draw(vertexCount, 1, 0, 0);
 }
 
 void Renderer::DrawBallLine(const shape::Ball &ball)

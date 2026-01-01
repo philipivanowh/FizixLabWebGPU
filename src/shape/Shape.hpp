@@ -6,8 +6,10 @@ namespace shape
 {
     enum class ShapeType
     {
-        Circle,
-        Box
+        Ball,
+        Incline,
+        Box,
+        Canon
     };
 
     class Shape : public physics::Rigidbody

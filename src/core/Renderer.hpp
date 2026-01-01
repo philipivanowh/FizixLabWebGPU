@@ -21,6 +21,8 @@
 
 #include "shape/Ball.hpp"
 #include "shape/Box.hpp"
+#include "shape/Canon.hpp"
+#include "shape/Incline.hpp"
 #include "physics/Rigidbody.hpp"
 #include "math/Vec2.hpp"
 
@@ -50,6 +52,8 @@ public:
 	void DrawShape(physics::Rigidbody &body);
 	void DrawBox(const shape::Box &box);
 	void DrawBall(const shape::Ball &ball);
+	void DrawCanon(const shape::Canon &canon);
+	void DrawIncline(const shape::Incline &incline);
 	void DrawBallLine(const shape::Ball &ball);
 	void DrawFBD(physics::Rigidbody &body);
 	void DrawTestTriangle();
@@ -100,5 +104,5 @@ private:
 	uint32_t windowHeight = 956;
 	uint32_t framebufferWidth = 1470;
 	uint32_t framebufferHeight = 956;
-	const WGPUColor backgroundColor = WGPUColor{0.015, 0.016, 0.02, 1.0};
+	const WGPUColor backgroundColor = WGPUColor{0.025, 0.088, 0.11, 1.0};
 };

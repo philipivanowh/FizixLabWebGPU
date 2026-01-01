@@ -14,8 +14,11 @@ struct SpawnSettings {
     math::Vec2 velocity{0.0f, 0.0f};
     float boxWidth = 60.0f;
     float boxHeight = 60.0f;
+    float base = 300.0f;
+    float angle = 30.0f;
     float radius = 30.0f;
     float mass = 10.0f;
+    bool flip = true;
     std::array<float, 4> color = {255.0f, 255.0f, 255.0f, 1.0f};
     float restitution = 0.4f;
     physics::RigidbodyType bodyType = physics::RigidbodyType::Dynamic;

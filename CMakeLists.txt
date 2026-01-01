@@ -29,6 +29,9 @@ add_executable(App
 	src/shape/Ball.cpp
 	src/physics/Rigidbody.cpp
 	src/shape/Box.cpp
+	src/shape/Canon.cpp
+	src/shape/Incline.cpp
+	src/shape/Shape.cpp
 	src/collision/Collisions.cpp
 )
 

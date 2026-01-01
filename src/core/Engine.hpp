@@ -21,6 +21,7 @@ public:
 	void ComparisonScene();
 
 	void AddDefaultObjects();
+	void InclineProblemScene();
 	//void SpawnBox(const math::Vec2& pos, const math::Vec2& vel, float width, float height, float mass, float restitution);
 	//void SpawnBall(const math::Vec2& pos, const math::Vec2& vel, float radius, float mass, float restitution);
 	void CheckSpawning();

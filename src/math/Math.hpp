@@ -9,6 +9,7 @@ namespace math
 {
 
     static constexpr float kEpsilon = 1e-5f;
+    static constexpr float PI = 3.14159265358979323846f;
     inline float Clamp(float value, float min, float max)
     {
         if (value < min)

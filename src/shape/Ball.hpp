@@ -2,6 +2,7 @@
 
 #include "physics/Rigidbody.hpp"
 #include "shape/Shape.hpp"
+#include "math/Math.hpp"
 
 #include <array>
 #include <vector>
@@ -22,13 +23,14 @@ public:
 		
 	void GenerateVertices() const;
 	std::vector<float> GetVertexLocalPos() const override;
+	std::vector<math::Vec2> GetVertexWorldPos() const override;
 	float ComputeInertia() const override;
 	collision::AABB GetAABB() const override;
 
 	float radius = 0.0f;
 	std::array<float, 4> color{0.0f, 0.0f, 0.0f, 1.0f};
 	int steps = 40;
-	float angle = 0.0f;
+	float angle = (math::PI * 2.0f) / static_cast<float>(steps);
 	int verticesSize = 0;
 };
 

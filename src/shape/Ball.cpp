@@ -1,6 +1,7 @@
 #include "shape/Ball.hpp"
 #include "collision/AABB.hpp"
 #include "physics/Rigidbody.hpp"
+
 #include <algorithm>
 #include <cmath>
 
@@ -17,9 +18,7 @@ namespace shape
 			   physics::RigidbodyType RigidbodyType)
 		: Shape(pos, vel, acc, massValue, restitution, RigidbodyType), radius(radiusValue), color(colorValue)
 	{
-		steps = 40;
-		constexpr float kPi = 3.14159265358979323846f;
-		angle = (kPi * 2.0f) / static_cast<float>(steps);
+		
 		GenerateVertices();
 		verticesSize = static_cast<int>(vertices.size());
 
@@ -64,19 +63,7 @@ namespace shape
 		return out;
 	}
 
-	std::vector<float> Shape::GetVertexLocalPos() const
-	{
-		std::vector<float> out;
-		out.reserve(vertices.size() * 2);
-		for (const auto &v : vertices)
-		{
-			out.push_back(v.x);
-			out.push_back(v.y);
-		}
-		return out;
-	}
-
-	std::vector<math::Vec2> Shape::GetVertexWorldPos() const
+	std::vector<math::Vec2> Ball::GetVertexWorldPos() const
 	{
 		std::vector<math::Vec2> out;
 		out.reserve(vertices.size());
