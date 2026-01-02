@@ -18,6 +18,8 @@ struct SpawnSettings {
     float angle = 30.0f;
     float radius = 30.0f;
     float mass = 10.0f;
+    float staticFriction = 1.0f;
+    float kineticFriction = 0.7f;
     bool flip = true;
     std::array<float, 4> color = {255.0f, 255.0f, 255.0f, 1.0f};
     float restitution = 0.4f;

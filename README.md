@@ -8,10 +8,6 @@ Building Instruction
 --------
 
 ```
-# Build using wgpu-native backend
-cmake -B build-wgpu -DWEBGPU_BACKEND=WGPU
-cmake --build build-wgpu
-
 # Build using Dawn backend
 cmake -B build-dawn -DWEBGPU_BACKEND=DAWN
 cmake --build build-dawn

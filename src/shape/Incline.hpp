@@ -16,7 +16,9 @@ public:
 	    float base,
         float angle,
 		bool flip,
-	    const std::array<float, 4>& color);
+	    const std::array<float, 4>& color,
+		float staticFrictionValue,
+		float kineticFrictionValue);
 	~Incline() override = default;
 	
 	float ComputeInertia() const override;

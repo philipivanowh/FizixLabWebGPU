@@ -116,6 +116,12 @@ void UIManager::RenderSpawnPhysicsControls()
     ImGui::ColorEdit3("Body color", reinterpret_cast<float *>(&bodyColor));
     FromImGuiColor(bodyColor, spawnSettings.color);
 
+    if (spawnSettings.shapeType == shape::ShapeType::Incline)
+    {
+        ImGui::DragFloat("Static Friction", &spawnSettings.staticFriction, 0.05f, 0.0f, 2.0f);
+        ImGui::DragFloat("Kinetic Friction", &spawnSettings.kineticFriction, 0.05f, 0.0f, 2.0f);
+    }
+
     if (spawnSettings.shapeType == shape::ShapeType::Box || spawnSettings.shapeType == shape::ShapeType::Ball)
     {
         int bodyTypeIndex = static_cast<int>(spawnSettings.bodyType);

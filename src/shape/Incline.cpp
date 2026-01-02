@@ -16,9 +16,14 @@ namespace shape
 					 float base,
 					 float angle,
 					 bool flip,
-					 const std::array<float, 4> &colorValue)
+					 const std::array<float, 4> &colorValue,
+					 float staticFrictionValue,
+					 float kineticFrictionValue)
 		: Shape(pos, vel, acc, 1, 0, physics::RigidbodyType::Static), base(base), height(std::tan(angle * math::PI / 180.0f) * base), angle(angle * math::PI / 180.0f), flip(flip), color(colorValue)
 	{
+
+		staticFriction = staticFrictionValue;
+		kineticFriction = kineticFrictionValue;
 		verticesSize = 3;
 		UpdateMassProperties();
 

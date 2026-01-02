@@ -71,7 +71,9 @@ void Engine::CheckSpawning()
 				req.base,
 				req.angle,
 				req.flip,
-				req.color));
+				req.color,
+				req.staticFriction,
+				req.kineticFriction));
 		}
 		else if (req.shapeType == shape::ShapeType::Canon)
 		{
@@ -311,7 +313,9 @@ void Engine::InclineProblemScene()
 		600.0f,
 		20.0f, // degree input but it will be converted to radian in the simulation
 		true,
-		warmRed));
+		warmRed,
+		0.5,
+		0.3));
 
 	world.Add(std::make_unique<shape::Canon>(
 		Vec2(520.0f, 280.0f),
