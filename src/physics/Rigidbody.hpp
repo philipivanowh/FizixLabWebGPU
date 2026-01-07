@@ -52,7 +52,6 @@ namespace physics
 		void TranslateTo(const math::Vec2 &position);
 		void RotateTo(float angleRadians);
 		void Rotate(float amountRadians);
-		void ApplyForce(const math::Vec2 &forceAmount, const ForceType type);
 		void AddDisplayForce(const math::Vec2 &forceAmount, const ForceType type);
 		void AddForceGenerator(std::unique_ptr<ForceGenerator> generator);
 		void UpdateForces(float deltaMs);
@@ -88,6 +87,7 @@ namespace physics
 		float kineticFriction = 1.5f;
 		math::Vec2 normalImpulseAccum = math::Vec2();
 		math::Vec2 normalForce = math::Vec2();
+		math::Vec2 dragForce = math::Vec2();
 		std::vector<std::unique_ptr<ForceGenerator>> forceGenerators;
 		mutable bool transformUpdateRequired = true;
 		mutable bool aabbUpdateRequired = true;

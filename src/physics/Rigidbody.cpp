@@ -7,6 +7,31 @@
 namespace physics {
 
 
+	class GravityForceGenerator final : public ForceGenerator
+	{
+	public:
+		void Apply(Rigidbody& body, float) override
+		{
+			const float strength = PhysicsConstants::GRAVITY * SimulationConstants::PIXELS_PER_METER;
+			const math::Vec2 gravityForce(0.0f, -body.mass * strength);
+			body.netForce += gravityForce;
+			body.AddDisplayForce(gravityForce, ForceType::Gravitational);
+		}
+	};
+
+	class DragForceGenerator final : public ForceGenerator
+	{
+		public:
+			void Apply(Rigidbody& body,float ) override
+			{
+				//std::cout<<body.dragForce.x<<std::endl;
+				body.netForce += body.dragForce;
+				//body.AddDisplayForce(gravityForce, ForceType::Apply);
+			}
+	};
+
+
+
 Rigidbody::Rigidbody(const math::Vec2& position,
 		 const math::Vec2& initialLinearVel,
 		 const math::Vec2& initialLinearAcc,
@@ -25,6 +50,8 @@ Rigidbody::Rigidbody(const math::Vec2& position,
 	} else {
 		invMass = 0.0f;
 	}
+	AddForceGenerator(std::make_unique<GravityForceGenerator>());
+	AddForceGenerator(std::make_unique<DragForceGenerator>());
 }
 
 void Rigidbody::UpdateMassProperties() {
@@ -52,7 +79,6 @@ void Rigidbody::Update(float deltaMs, int iterations) {
 		const float dtSeconds = (deltaMs / 1000.0f) / static_cast<float>(iterations);
 
 		ClearForces();
-		netForce = math::Vec2();
 		UpdateForces(deltaMs);
 		linearAcc = netForce / mass;
 		linearVel = linearVel + (linearAcc * dtSeconds) * 0.5;
@@ -61,6 +87,7 @@ void Rigidbody::Update(float deltaMs, int iterations) {
 		rotation = rotation + angularVel * dtSeconds;
 
 		netForce = math::Vec2();
+		dragForce = math::Vec2();
 		transformUpdateRequired = true;
 		aabbUpdateRequired = true;
 	}
@@ -73,6 +100,7 @@ void Rigidbody::Translate(const math::Vec2& amount) {
 }
 
 void Rigidbody::TranslateTo(const math::Vec2& position) {
+	std::cout<<position.x<<std::endl;
 	pos = position;
 	transformUpdateRequired = true;
 	aabbUpdateRequired = true;
@@ -90,11 +118,6 @@ void Rigidbody::Rotate(float amountRadians) {
 	aabbUpdateRequired = true;
 }
 
-void Rigidbody::ApplyForce(const math::Vec2& forceAmount, const ForceType type) {
-	forces.push_back(ForceInfo{forceAmount, type});
-	netForce += forceAmount;
-}
-
 void Rigidbody::AddDisplayForce(const math::Vec2& forceAmount, const ForceType type) {
 	forces.push_back(ForceInfo{forceAmount, type});
 }
@@ -107,6 +130,7 @@ void Rigidbody::BeginFrameForces() {
 	ClearForces();
 	normalImpulseAccum = math::Vec2();
 	normalForce = math::Vec2();
+	netForce = math::Vec2();
 }
 
 void Rigidbody::AccumulateNormalImpulse(const math::Vec2& normalImpulse) {
@@ -137,13 +161,12 @@ void Rigidbody::ClearForces() {
 }
 
 void Rigidbody::UpdateGravity() {
-	const float strength = PhysicsConstants::GRAVITY * SimulationConstants::PIXELS_PER_METER;
-	const math::Vec2 gravityForce(0.0f, -mass * strength);
-	ApplyForce(gravityForce, ForceType::Gravitational);
+	//const float strength = PhysicsConstants::GRAVITY * SimulationConstants::PIXELS_PER_METER;
+	//const math::Vec2 gravityForce(0.0f, -mass * strength);
+	//ApplyForce(gravityForce, ForceType::Gravitational);
 }
 
 void Rigidbody::UpdateForces(float deltaMs) {
-	UpdateGravity();
 	for (const auto &generator : forceGenerators) {
 		generator->Apply(*this, deltaMs);
 	}

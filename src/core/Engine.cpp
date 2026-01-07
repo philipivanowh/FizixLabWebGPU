@@ -11,6 +11,7 @@
 #include <memory>
 using math::PI;
 using math::Vec2;
+using physics::ForceType;
 using physics::RigidbodyType;
 
 bool Engine::Initialize()
@@ -20,9 +21,14 @@ bool Engine::Initialize()
 		return false;
 	}
 	uiManager.InitializeImGui(renderer);
-	// AddDefaultObjects();
+	AddDefaultObjects();
 	//  ComparisonScene();
-	InclineProblemScene();
+	// InclineProblemScene();
+	
+	//member initialization
+	dragMode = DragMode::physicsDrag;
+	
+
 	return true;
 }
 
@@ -87,8 +93,47 @@ void Engine::CheckSpawning()
 
 void Engine::Update(float deltaMs, int iterations)
 {
-	world.Update(deltaMs, iterations);
+	GLFWwindow *window = renderer.GetWindow();
 
+	double mx, my;
+	glfwGetCursorPos(window, &mx, &my);
+
+	int w, h;
+	glfwGetFramebufferSize(window, &w, &h);
+	mouseWorld = Vec2(static_cast<float>(mx),
+					  static_cast<float>(h - my));
+
+	bool pressed = glfwGetMouseButton(window, GLFW_MOUSE_BUTTON_LEFT) == GLFW_PRESS;
+
+	// Mouse down
+	if (pressed && !mouseDown)
+	{
+		mouseDown = true;
+		draggedBody = world.PickBody(mouseWorld);
+	}
+
+	// Mouse up
+	if (!pressed)
+	{
+		mouseDown = false;
+		draggedBody = nullptr;
+	}
+
+	// Apply drag force
+	if (draggedBody && draggedBody->bodyType == RigidbodyType::Dynamic)
+	{
+		//     const float stiffness = 1000.0f; //200-800 is good
+		//    // const float damping = 2.0f * std::sqrt(stiffness * draggedBody->mass);
+		// 	  const float damping = 5.0f * std::sqrt(stiffness * draggedBody->mass);
+
+		//     Vec2 delta = mouseWorld - draggedBody->pos;
+		// 	draggedBody->dragForce = (delta * stiffness - draggedBody->linearVel * damping)*draggedBody->mass;
+		// 	std::cout<<draggedBody->dragForce.x<<std::endl;
+
+		draggedBody->TranslateTo(mouseWorld);
+	}
+
+	world.Update(deltaMs, iterations);
 	CheckSpawning();
 }
 
@@ -97,7 +142,6 @@ void Engine::Render()
 	renderer.BeginFrame();
 	world.Draw(renderer);
 	// renderer.UpdateGUI();
-
 	// renderer.DrawTestTriangle();
 	// renderer.DrawTest2Triangle();
 	// renderer.UpdateGUI();
@@ -131,10 +175,10 @@ void Engine::AddDefaultObjects()
 	using shape::Ball;
 	using shape::Box;
 
-	const std::array<float, 4> warmRed{18.0f, 46.0f, 56.0f, 1.0f};
-	const std::array<float, 4> white{255.0f, 255.0f, 255.0f, 1.0f};
-	const std::array<float, 4> skyBlue{80.0f, 160.0f, 255.0f, 1.0f};
-	const std::array<float, 4> yellow{255.0f, 200.0f, 20.0f, 1.0f};
+	const std::array<float, 4> warmRed{0.070588f, 0.180392f, 0.219608f, 1.0f};
+	const std::array<float, 4> white{1.0f, 1.0f, 1.0f, 1.0f};
+	const std::array<float, 4> skyBlue{0.313726f, 0.627451f, 1.0f, 1.0f};
+	const std::array<float, 4> yellow{1.0f, 0.784314f, 0.078431f, 1.0f};
 
 	world.Add(std::make_unique<shape::Box>(
 		Vec2(700.0f, 200.0f),
@@ -228,10 +272,10 @@ void Engine::AddDefaultObjects()
 
 void Engine::ComparisonScene()
 {
-	const std::array<float, 4> warmRed{18.0f, 46.0f, 56.0f, 1.0f};
-	const std::array<float, 4> white{255.0f, 255.0f, 255.0f, 1.0f};
-	const std::array<float, 4> skyBlue{80.0f, 160.0f, 255.0f, 1.0f};
-	const std::array<float, 4> yellow{255.0f, 200.0f, 20.0f, 1.0f};
+	const std::array<float, 4> warmRed{0.070588f, 0.180392f, 0.219608f, 1.0f};
+	const std::array<float, 4> white{1.0f, 1.0f, 1.0f, 1.0f};
+	const std::array<float, 4> skyBlue{0.313726f, 0.627451f, 1.0f, 1.0f};
+	const std::array<float, 4> yellow{1.0f, 0.784314f, 0.078431f, 1.0f};
 
 	world.Add(std::make_unique<shape::Box>(
 		Vec2(700.0f, 400.0f),
@@ -291,9 +335,9 @@ void Engine::ComparisonScene()
 
 void Engine::InclineProblemScene()
 {
-	const std::array<float, 4> warmRed{180.0f, 42.0f, 102.0f, 1.0f};
-	const std::array<float, 4> white{255.0f, 255.0f, 255.0f, 1.0f};
-	const std::array<float, 4> cannonBlue{90.0f, 140.0f, 220.0f, 1.0f};
+	const std::array<float, 4> warmRed{0.705882f, 0.164706f, 0.400000f, 1.0f};
+	const std::array<float, 4> white{1.0f, 1.0f, 1.0f, 1.0f};
+	const std::array<float, 4> cannonBlue{0.352941f, 0.549020f, 0.862745f, 1.0f};
 
 	world.Add(std::make_unique<shape::Box>(
 		Vec2(700.0f, 200.0f),
@@ -333,11 +377,3 @@ void Engine::InclineProblemScene()
 		1.0f,
 		RigidbodyType::Dynamic));
 }
-
-// void Engine::SpawnRandomBox()
-// {
-// }
-
-// void Engine::SpawnRandomBall()
-// {
-// }

@@ -9,6 +9,7 @@ Building Instruction
 
 ```
 # Build using Dawn backend
+cmake -G "MinGW Makefiles" -S . -B build
 cmake -B build-dawn -DWEBGPU_BACKEND=DAWN
 cmake --build build-dawn
 

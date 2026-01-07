@@ -5,29 +5,43 @@
 #include "math/Vec2.hpp"
 #include "core/UIManager.hpp"
 
+
+enum DragMode{
+	percisionDrag,
+	physicsDrag
+};
+
+
 class Engine
 {
 public:
-	bool Initialize();
-	void Shutdown();
+	static bool Initialize();
+	static void Shutdown();
 
-	void Update(float deltaMs, int iterations);
-	void Render();
-	void RunFrame(float deltaMs, int iterations);
+	static void Update(float deltaMs, int iterations);
+	static void Render();
+	static void RunFrame(float deltaMs, int iterations);
 
-	bool IsRunning();
-	Renderer& GetRenderer();
+	static bool IsRunning();
+	static Renderer& GetRenderer();
 
-	void ComparisonScene();
+	static void ComparisonScene();
 
-	void AddDefaultObjects();
-	void InclineProblemScene();
+	static void AddDefaultObjects();
+	static void InclineProblemScene();
 	//void SpawnBox(const math::Vec2& pos, const math::Vec2& vel, float width, float height, float mass, float restitution);
 	//void SpawnBall(const math::Vec2& pos, const math::Vec2& vel, float radius, float mass, float restitution);
-	void CheckSpawning();
+	static void CheckSpawning();
+
+	//settings
+	static DragMode dragMode;
 
 private:
-	Renderer renderer;
-	World world;
-	UIManager uiManager;
+	static Renderer renderer;
+	static World world;
+	static UIManager uiManager;
+	static physics::Rigidbody* draggedBody;
+	static math::Vec2 mouseWorld;
+	static bool mouseDown;
+	
 };

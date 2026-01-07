@@ -4,6 +4,7 @@
 #include "math/Vec2.hpp"
 #include "shape/Shape.hpp"
 #include "physics/Rigidbody.hpp"
+#include "Engine.hpp"
 
 #include <array>
 #include <cstddef>

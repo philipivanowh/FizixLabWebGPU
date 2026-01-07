@@ -19,13 +19,13 @@ add_subdirectory(imgui)
 
 add_executable(App
 	src/app/main.cpp
+	src/core/UIManager.cpp
 	src/core/Engine.cpp
 	src/collision/CollisionPipeline.cpp
 	src/collision/CollisionSolver.cpp
 	src/core/Renderer.cpp
 	src/core/World.cpp
 	src/core/Utility.cpp
-	src/core/UIManager.cpp
 	src/shape/Ball.cpp
 	src/physics/Rigidbody.cpp
 	src/shape/Box.cpp

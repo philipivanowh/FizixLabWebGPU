@@ -403,6 +403,7 @@ void Renderer::BeginFrame()
 	renderPassColorAttachment.resolveTarget = nullptr;
 	renderPassColorAttachment.loadOp = LoadOp::Clear;
 	renderPassColorAttachment.storeOp = StoreOp::Store;
+	//0-1 color
 	renderPassColorAttachment.clearValue = backgroundColor;
 #ifndef WEBGPU_BACKEND_WGPU
 	renderPassColorAttachment.depthSlice = WGPU_DEPTH_SLICE_UNDEFINED;
@@ -424,9 +425,9 @@ void Renderer::DrawGrid()
 {
 	constexpr float kGridSpacing = 50.0f;
 	constexpr float kMajorSpacing = 200.0f;
-	const std::array<float, 4> minorColor{0.1f, 0.5f, 0.6f, 0.25f};
-	const std::array<float, 4> majorColor{0.2f, 0.7f, 0.8f, 0.45f};
-
+	const std::array<float, 4> minorColor{0.1f, 0.5f, 0.6f, 0.05f};
+	const std::array<float, 4> majorColor{0.2f, 0.7f, 0.8f, 0.1f};
+	
 	std::vector<float> minorVertices;
 	std::vector<float> majorVertices;
 
@@ -511,8 +512,8 @@ RequiredLimits Renderer::GetRequiredLimits(Adapter adapter) const
 	// Error in Chrome: Aborted(TODO: wgpuAdapterGetLimits unimplemented)
 	// (as of September 4, 2023), so we hardcode values:
 	// These work for 99.95% of clients (source: https://web3dsurvey.com/webgpu)
-	supportedLimits.limits.minStorageBufferOffsetAlignment = 256;
-	supportedLimits.limits.minUniformBufferOffsetAlignment = 256;
+	supportedLimits.limits.minStorageBufferOffsetAlignment = 32;
+	supportedLimits.limits.minUniformBufferOffsetAlignment = 32;
 #else
 	adapter.getLimits(&supportedLimits);
 #endif
@@ -521,13 +522,13 @@ RequiredLimits Renderer::GetRequiredLimits(Adapter adapter) const
 	RequiredLimits requiredLimits = Default;
 
 	// We use at most 1 vertex attribute for now
-	requiredLimits.limits.maxVertexAttributes = 1;
+	requiredLimits.limits.maxVertexAttributes = supportedLimits.limits.maxVertexAttributes;;
 	// We should also tell that we use 1 vertex buffers
-	requiredLimits.limits.maxVertexBuffers = 1;
+	requiredLimits.limits.maxVertexBuffers = supportedLimits.limits.maxVertexBuffers;
 	// Allow larger buffers for uniforms and dynamic data.
 	requiredLimits.limits.maxBufferSize = supportedLimits.limits.maxBufferSize;
 	// Maximum stride between 2 consecutive vertices in the vertex buffer
-	requiredLimits.limits.maxVertexBufferArrayStride = 2 * sizeof(float);
+	requiredLimits.limits.maxVertexBufferArrayStride = supportedLimits.limits.maxVertexBufferArrayStride;;
 
 	// These two limits are different because they are "minimum" limits,
 	// they are the only ones we are may forward from the adapter's supported

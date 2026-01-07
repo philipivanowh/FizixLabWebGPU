@@ -19,6 +19,14 @@ namespace math
         return value;
     };
 
+    inline Vec2 Clamp(Vec2& value, Vec2 min, Vec2 max){
+        if (value.Length() < min.Length())
+            value = min;
+        if (value.Length() > max.Length())
+            value = max;
+        return value;
+    }
+
     inline float MapForceToLength(const Vec2 &force,
                                   float inMin,
                                   float inMax,

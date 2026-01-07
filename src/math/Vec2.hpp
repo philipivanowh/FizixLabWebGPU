@@ -126,6 +126,13 @@ namespace math
 			return Vec2(x / len, y / len);
 		}
 
+		Vec2 ClampLength(float max){
+			if(Length() > max)
+				return Normalize() * max;
+			else
+				return Vec2(x,y);
+		}
+
 		constexpr bool Equals(const Vec2 &other) const
 		{
 			return x == other.x && y == other.y;

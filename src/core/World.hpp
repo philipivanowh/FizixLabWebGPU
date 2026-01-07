@@ -18,6 +18,8 @@ public:
 	void Draw(Renderer& renderer) const;
 
 	size_t RigidbodyCount() const;
+	
+	physics::Rigidbody* PickBody(const math::Vec2& p);
 
 private:
 	int ClampIterations(int value);
@@ -28,4 +30,5 @@ private:
 	CollisionSolver collisionSolver;
 
 	float viewBottom = -200.0f;
+
 };

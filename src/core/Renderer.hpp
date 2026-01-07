@@ -104,5 +104,5 @@ private:
 	uint32_t windowHeight = 956;
 	uint32_t framebufferWidth = 1470;
 	uint32_t framebufferHeight = 956;
-	const WGPUColor backgroundColor = WGPUColor{0.025, 0.088, 0.11, 1.0};
+	const WGPUColor backgroundColor = WGPUColor{0.0055,0.0075,0.009, 1.0};
 };

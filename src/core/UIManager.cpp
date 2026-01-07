@@ -73,6 +73,11 @@ void UIManager::RenderSimulationControlsWindow(std::size_t bodyCount)
     ImGui::Text("Bodies: %zu", bodyCount);
     ImGuiIO &io = ImGui::GetIO();
     ImGui::Text("Application average %.3f ms/frame (%.1f FPS)", 1000.0f / io.Framerate, io.Framerate);
+     const char *dragType[] = {"PhysicsDrag","PerciseDrag"};
+     int dragIndex = static_cast<int>(DragMode);
+    ImGui::Combo("Drag Mode:", &dragIndex, dragType, std::size(dragType));
+    Engine.dragMode = static_cast<DragMode>(dragIndex);
+
     ImGui::End();
 }
 

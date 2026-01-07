@@ -20,6 +20,20 @@ void World::Add(std::unique_ptr<physics::Rigidbody> body)
 {
 	objects.push_back(std::move(body));
 }
+physics::Rigidbody* World::PickBody(const math::Vec2& p)
+{
+    for (auto& obj : objects)
+    {
+        auto aabb = obj->GetAABB();
+        if (p.x >= aabb.min.x && p.x <= aabb.max.x &&
+            p.y >= aabb.min.y && p.y <= aabb.max.y)
+        {
+            return obj.get();
+        }
+    }
+    return nullptr;
+}
+
 
 void World::Update(float deltaMs, int iterations)
 {
