@@ -18,6 +18,7 @@ public:
 	void Draw(Renderer& renderer) const;
 
 	size_t RigidbodyCount() const;
+	void ClearObjects();
 	
 	physics::Rigidbody* PickBody(const math::Vec2& p);
 

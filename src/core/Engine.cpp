@@ -14,6 +14,14 @@ using math::Vec2;
 using physics::ForceType;
 using physics::RigidbodyType;
 
+Renderer Engine::renderer;
+World Engine::world;
+Settings Engine::settings;
+UIManager Engine::uiManager;
+physics::Rigidbody* Engine::draggedBody = nullptr;
+math::Vec2 Engine::mouseWorld{};
+bool Engine::mouseDown = false;
+
 bool Engine::Initialize()
 {
 	if (!renderer.Initialize())
@@ -24,11 +32,6 @@ bool Engine::Initialize()
 	AddDefaultObjects();
 	//  ComparisonScene();
 	// InclineProblemScene();
-	
-	//member initialization
-	dragMode = DragMode::physicsDrag;
-	
-
 	return true;
 }
 
@@ -122,15 +125,21 @@ void Engine::Update(float deltaMs, int iterations)
 	// Apply drag force
 	if (draggedBody && draggedBody->bodyType == RigidbodyType::Dynamic)
 	{
-		//     const float stiffness = 1000.0f; //200-800 is good
-		//    // const float damping = 2.0f * std::sqrt(stiffness * draggedBody->mass);
-		// 	  const float damping = 5.0f * std::sqrt(stiffness * draggedBody->mass);
+		switch (settings.dragMode)
+		{
+		case DragMode::percisionDrag:
+			draggedBody->TranslateTo(mouseWorld);
+			break;
+		case DragMode::physicsDrag:
+			const float stiffness = 2000.0f; 
+			// const float damping = 2.0f * std::sqrt(stiffness * draggedBody->mass);
+			const float damping = 5.0f * std::sqrt(stiffness * math::Clamp(draggedBody->mass,20,100)/20);
 
-		//     Vec2 delta = mouseWorld - draggedBody->pos;
-		// 	draggedBody->dragForce = (delta * stiffness - draggedBody->linearVel * damping)*draggedBody->mass;
-		// 	std::cout<<draggedBody->dragForce.x<<std::endl;
-
-		draggedBody->TranslateTo(mouseWorld);
+			Vec2 delta = mouseWorld - draggedBody->pos;
+			draggedBody->dragForce = (delta * stiffness - draggedBody->linearVel * damping) * draggedBody->mass;
+			std::cout << draggedBody->dragForce.x << std::endl;
+			break;
+		}
 	}
 
 	world.Update(deltaMs, iterations);
@@ -142,11 +151,12 @@ void Engine::Render()
 	renderer.BeginFrame();
 	world.Draw(renderer);
 	// renderer.UpdateGUI();
+
 	// renderer.DrawTestTriangle();
 	// renderer.DrawTest2Triangle();
 	// renderer.UpdateGUI();
 	uiManager.BeginImGuiFrame();
-	uiManager.RenderMainControls(world.RigidbodyCount());
+	uiManager.RenderMainControls(world.RigidbodyCount(), settings);
 	uiManager.RenderSpawner();
 	uiManager.EndImGuiFrame(renderer);
 
@@ -377,3 +387,15 @@ void Engine::InclineProblemScene()
 		1.0f,
 		RigidbodyType::Dynamic));
 }
+
+void Engine::ClearBodies(){
+	world.ClearObjects();
+}
+
+// void Engine::SpawnRandomBox()
+// {
+// }
+
+// void Engine::SpawnRandomBall()
+// {
+// }

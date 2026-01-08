@@ -4,7 +4,8 @@
 #include "math/Vec2.hpp"
 #include "shape/Shape.hpp"
 #include "physics/Rigidbody.hpp"
-#include "Engine.hpp"
+#include "common/settings.hpp"
+#include "core/Engine.hpp"
 
 #include <array>
 #include <cstddef>
@@ -30,7 +31,7 @@ struct SpawnSettings {
 class UIManager
 {
 public:
-    void RenderMainControls(std::size_t bodyCount);
+    void RenderMainControls(std::size_t bodyCount,Settings& settings);
     void RenderSpawner();
     void InitializeImGui(Renderer& renderer);
 	void TerminateImGui();
@@ -38,7 +39,7 @@ public:
     void EndImGuiFrame(Renderer& renderer);
     bool ConsumeSpawnRequest(SpawnSettings& out);
 private:
-    void RenderSimulationControlsWindow(std::size_t bodyCount);
+    void RenderSimulationControlsWindow(std::size_t bodyCount, Settings& settings);
     void RenderSpawnerWindow();
     void RenderSpawnBasics();
     void RenderSpawnPhysicsControls();

@@ -30,3 +30,15 @@ namespace VisualizationConstants{
  constexpr float FBD_ARROW_HEAD_THICKNESS = 16.0f;
  constexpr float FBD_ARROW_HEAD_SCALE = 1.1f;
 }
+
+enum class DragMode{
+	percisionDrag,
+	physicsDrag
+};
+
+
+class Settings{
+    public:
+        DragMode dragMode = DragMode::physicsDrag;
+
+};

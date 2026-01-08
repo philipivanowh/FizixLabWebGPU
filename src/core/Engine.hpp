@@ -4,17 +4,18 @@
 #include "core/World.hpp"
 #include "math/Vec2.hpp"
 #include "core/UIManager.hpp"
+#include "common/settings.hpp"
 
-
-enum DragMode{
-	percisionDrag,
-	physicsDrag
-};
-
-
+class UIManager;
 class Engine
 {
 public:
+	// Delete constructors and destructor to prevent instantiation
+	Engine() = delete;
+	Engine(const Engine&) = delete;
+	Engine& operator=(const Engine&) = delete;
+	~Engine() = delete;
+
 	static bool Initialize();
 	static void Shutdown();
 
@@ -32,12 +33,11 @@ public:
 	//void SpawnBox(const math::Vec2& pos, const math::Vec2& vel, float width, float height, float mass, float restitution);
 	//void SpawnBall(const math::Vec2& pos, const math::Vec2& vel, float radius, float mass, float restitution);
 	static void CheckSpawning();
-
-	//settings
-	static DragMode dragMode;
+	static void ClearBodies();
 
 private:
 	static Renderer renderer;
+	static Settings settings;
 	static World world;
 	static UIManager uiManager;
 	static physics::Rigidbody* draggedBody;

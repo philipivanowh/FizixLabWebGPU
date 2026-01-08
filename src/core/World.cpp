@@ -95,3 +95,7 @@ void World::RemoveObjects()
 		}
 	}
 }
+
+void World::ClearObjects(){
+	objects.clear();
+}

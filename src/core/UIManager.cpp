@@ -4,6 +4,7 @@
 #include <backends/imgui_impl_glfw.h>
 #include <iterator>
 
+
 namespace
 {
     ImVec4 ToImGuiColor(const std::array<float, 4> &color)
@@ -56,9 +57,9 @@ void UIManager::EndImGuiFrame(Renderer &renderer)
     ImGui_ImplWGPU_RenderDrawData(ImGui::GetDrawData(), renderer.GetRenderPass());
 }
 
-void UIManager::RenderMainControls(std::size_t bodyCount)
+void UIManager::RenderMainControls(std::size_t bodyCount, Settings &settings)
 {
-    RenderSimulationControlsWindow(bodyCount);
+    RenderSimulationControlsWindow(bodyCount, settings);
 }
 
 void UIManager::RenderSpawner()
@@ -66,17 +67,27 @@ void UIManager::RenderSpawner()
     RenderSpawnerWindow();
 }
 
-void UIManager::RenderSimulationControlsWindow(std::size_t bodyCount)
+void UIManager::RenderSimulationControlsWindow(std::size_t bodyCount, Settings &settings)
 {
     ImGui::Begin("Simulation Controls");
 
     ImGui::Text("Bodies: %zu", bodyCount);
     ImGuiIO &io = ImGui::GetIO();
     ImGui::Text("Application average %.3f ms/frame (%.1f FPS)", 1000.0f / io.Framerate, io.Framerate);
-     const char *dragType[] = {"PhysicsDrag","PerciseDrag"};
-     int dragIndex = static_cast<int>(DragMode);
+    const char *dragType[] = {"PerciseDrag", "PhysicsDrag"};
+    int dragIndex = static_cast<int>(settings.dragMode);
     ImGui::Combo("Drag Mode:", &dragIndex, dragType, std::size(dragType));
-    Engine.dragMode = static_cast<DragMode>(dragIndex);
+    settings.dragMode = static_cast<DragMode>(dragIndex);
+
+    // Button styling
+    // ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.8f, 0.2f, 0.2f, 1.0f));
+    // ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(1.0f, 0.3f, 0.3f, 1.0f));
+    // ImGui::PushStyleColor(ImGuiCol_ButtonActive, ImVec4(0.6f, 0.1f, 0.1f, 1.0f));
+
+    if (ImGui::Button("Clear Bodies"))
+    {
+        Engine::ClearBodies();
+    }
 
     ImGui::End();
 }
