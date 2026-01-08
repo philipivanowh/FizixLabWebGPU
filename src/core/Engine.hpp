@@ -42,6 +42,9 @@ private:
 	static UIManager uiManager;
 	static physics::Rigidbody* draggedBody;
 	static math::Vec2 mouseWorld;
-	static bool mouseDown;
+	static bool mouseDownLeft;
+	static bool mouseDownRight;
+	static math::Vec2 mouseInitialPos;
+	static math::Vec2 mouseDeltaScale;
 	
 };

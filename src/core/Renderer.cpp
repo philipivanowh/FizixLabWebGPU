@@ -403,7 +403,7 @@ void Renderer::BeginFrame()
 	renderPassColorAttachment.resolveTarget = nullptr;
 	renderPassColorAttachment.loadOp = LoadOp::Clear;
 	renderPassColorAttachment.storeOp = StoreOp::Store;
-	//0-1 color
+	// 0-1 color
 	renderPassColorAttachment.clearValue = backgroundColor;
 #ifndef WEBGPU_BACKEND_WGPU
 	renderPassColorAttachment.depthSlice = WGPU_DEPTH_SLICE_UNDEFINED;
@@ -427,7 +427,7 @@ void Renderer::DrawGrid()
 	constexpr float kMajorSpacing = 200.0f;
 	const std::array<float, 4> minorColor{0.1f, 0.5f, 0.6f, 0.05f};
 	const std::array<float, 4> majorColor{0.2f, 0.7f, 0.8f, 0.1f};
-	
+
 	std::vector<float> minorVertices;
 	std::vector<float> majorVertices;
 
@@ -522,13 +522,15 @@ RequiredLimits Renderer::GetRequiredLimits(Adapter adapter) const
 	RequiredLimits requiredLimits = Default;
 
 	// We use at most 1 vertex attribute for now
-	requiredLimits.limits.maxVertexAttributes = supportedLimits.limits.maxVertexAttributes;;
+	requiredLimits.limits.maxVertexAttributes = supportedLimits.limits.maxVertexAttributes;
+	;
 	// We should also tell that we use 1 vertex buffers
 	requiredLimits.limits.maxVertexBuffers = supportedLimits.limits.maxVertexBuffers;
 	// Allow larger buffers for uniforms and dynamic data.
 	requiredLimits.limits.maxBufferSize = supportedLimits.limits.maxBufferSize;
 	// Maximum stride between 2 consecutive vertices in the vertex buffer
-	requiredLimits.limits.maxVertexBufferArrayStride = supportedLimits.limits.maxVertexBufferArrayStride;;
+	requiredLimits.limits.maxVertexBufferArrayStride = supportedLimits.limits.maxVertexBufferArrayStride;
+	;
 
 	// These two limits are different because they are "minimum" limits,
 	// they are the only ones we are may forward from the adapter's supported
@@ -675,6 +677,34 @@ void Renderer::DrawFBD(physics::Rigidbody &body)
 		renderPass.setVertexBuffer(0, vertexBuffer, 0, forceVertices.size() * sizeof(float));
 		renderPass.draw(vertexCount, 1, 0, 0);
 	}
+}
+
+void Renderer::DrawMeasuringRectangle(math::Vec2 &start, math::Vec2 &size)
+{
+
+	const std::array<float, 4> rectangleColor = {0.7f, 0.7f, 0.0f, 0.1f};
+	const std::vector<float> rectangleVertices = {
+
+		// The rectangle part of the arrow
+		0, 0,
+		size.x, 0,
+		size.x, size.y,
+
+		size.x, size.y,
+		0, size.y,
+		0, 0};
+
+	vertexCount = static_cast<uint32_t>(rectangleVertices.size() / 2);
+
+	EnsureVertexBufferSize(rectangleVertices.size());
+	queue.writeBuffer(vertexBuffer, 0, rectangleVertices.data(), rectangleVertices.size() * sizeof(float));
+
+	math::Vec2 pos = math::Vec2(start.x, start.y);
+	const uint32_t forceUniformOffset = UpdateUniforms(pos, rectangleColor);
+	renderPass.setPipeline(pipeline);
+	renderPass.setBindGroup(0, uniformBindGroup, 1, &forceUniformOffset);
+	renderPass.setVertexBuffer(0, vertexBuffer, 0, rectangleVertices.size() * sizeof(float));
+	renderPass.draw(vertexCount, 1, 0, 0);
 }
 
 void Renderer::EnsureVertexBufferSize(int size)

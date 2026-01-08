@@ -56,6 +56,7 @@ public:
 	void DrawIncline(const shape::Incline &incline);
 	void DrawBallLine(const shape::Ball &ball);
 	void DrawFBD(physics::Rigidbody &body);
+	void DrawMeasuringRectangle(math::Vec2& start, math::Vec2& size);
 	void DrawTestTriangle();
 	void DrawTest2Triangle();
 

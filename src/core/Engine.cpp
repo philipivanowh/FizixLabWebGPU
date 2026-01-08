@@ -18,9 +18,12 @@ Renderer Engine::renderer;
 World Engine::world;
 Settings Engine::settings;
 UIManager Engine::uiManager;
-physics::Rigidbody* Engine::draggedBody = nullptr;
+physics::Rigidbody *Engine::draggedBody = nullptr;
 math::Vec2 Engine::mouseWorld{};
-bool Engine::mouseDown = false;
+bool Engine::mouseDownLeft = false;
+bool Engine::mouseDownRight = false;
+math::Vec2 Engine::mouseInitialPos;
+math::Vec2 Engine::mouseDeltaScale;
 
 bool Engine::Initialize()
 {
@@ -106,20 +109,40 @@ void Engine::Update(float deltaMs, int iterations)
 	mouseWorld = Vec2(static_cast<float>(mx),
 					  static_cast<float>(h - my));
 
-	bool pressed = glfwGetMouseButton(window, GLFW_MOUSE_BUTTON_LEFT) == GLFW_PRESS;
+	bool pressedLeft = glfwGetMouseButton(window, GLFW_MOUSE_BUTTON_LEFT) == GLFW_PRESS;
+	bool pressedRight = glfwGetMouseButton(window, GLFW_MOUSE_BUTTON_RIGHT) == GLFW_PRESS;
 
 	// Mouse down
-	if (pressed && !mouseDown)
+	if (pressedLeft && !mouseDownLeft)
 	{
-		mouseDown = true;
+		mouseDownLeft = true;
 		draggedBody = world.PickBody(mouseWorld);
 	}
 
-	// Mouse up
-	if (!pressed)
+	if (pressedRight && !mouseDownRight)
 	{
-		mouseDown = false;
+		mouseDownRight = true;
+		mouseInitialPos = mouseWorld.Clone();
+	}
+
+	// Mouse up
+	if (!pressedLeft)
+	{
+		mouseDownLeft = false;
 		draggedBody = nullptr;
+	}
+
+	if (!pressedRight)
+	{
+
+		mouseDownRight = false;
+		mouseInitialPos = math::Vec2();
+		mouseDeltaScale = math::Vec2();
+	}
+
+	if (mouseDownRight)
+	{
+		mouseDeltaScale = mouseWorld - mouseInitialPos;
 	}
 
 	// Apply drag force
@@ -131,9 +154,9 @@ void Engine::Update(float deltaMs, int iterations)
 			draggedBody->TranslateTo(mouseWorld);
 			break;
 		case DragMode::physicsDrag:
-			const float stiffness = 2000.0f; 
+			const float stiffness = 2000.0f;
 			// const float damping = 2.0f * std::sqrt(stiffness * draggedBody->mass);
-			const float damping = 5.0f * std::sqrt(stiffness * math::Clamp(draggedBody->mass,20,100)/20);
+			const float damping = 5.0f * std::sqrt(stiffness * math::Clamp(draggedBody->mass, 20, 100) / 20);
 
 			Vec2 delta = mouseWorld - draggedBody->pos;
 			draggedBody->dragForce = (delta * stiffness - draggedBody->linearVel * damping) * draggedBody->mass;
@@ -150,6 +173,9 @@ void Engine::Render()
 {
 	renderer.BeginFrame();
 	world.Draw(renderer);
+
+	if (mouseDeltaScale.Length() != 0.0f && mouseDownRight)
+		renderer.DrawMeasuringRectangle(mouseInitialPos, mouseDeltaScale);
 	// renderer.UpdateGUI();
 
 	// renderer.DrawTestTriangle();
@@ -388,7 +414,8 @@ void Engine::InclineProblemScene()
 		RigidbodyType::Dynamic));
 }
 
-void Engine::ClearBodies(){
+void Engine::ClearBodies()
+{
 	world.ClearObjects();
 }
 
