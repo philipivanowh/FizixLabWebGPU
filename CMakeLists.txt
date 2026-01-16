@@ -1,7 +1,5 @@
 cmake_minimum_required(VERSION 3.0...3.25)
 
-set(CMAKE_TOOLCHAIN_FILE "C:/Users/hahoa/tools/vcpkg/scripts/buildsystems/vcpkg.cmake" CACHE STRING "Vcpkg toolchain file")
-
 project(
 	LearnWebGPU
 	VERSION 0.1.0
@@ -20,8 +18,7 @@ add_subdirectory(glfw3webgpu)
 add_subdirectory(imgui)
 
 
-set(VCPKG_APPLOCAL_DEPS ON)
-find_package(Freetype CONFIG REQUIRED)
+find_package(Freetype REQUIRED)
 
 
 add_executable(App
@@ -46,6 +43,19 @@ add_executable(App
 target_include_directories(App PRIVATE src)
 
 target_link_libraries(App PRIVATE glfw webgpu glfw3webgpu imgui Freetype::Freetype)
+
+add_custom_command(TARGET App POST_BUILD
+    COMMAND ${CMAKE_COMMAND} -E copy_directory
+    ${CMAKE_SOURCE_DIR}/fonts
+    $<TARGET_FILE_DIR:App>/fonts
+)
+
+# For Emscripten, embed the fonts
+if (EMSCRIPTEN)
+    target_link_options(App PRIVATE
+        "SHELL:--preload-file ${CMAKE_CURRENT_SOURCE_DIR}/fonts@/fonts"
+    )
+endif()
 
 target_copy_webgpu_binaries(App)
 

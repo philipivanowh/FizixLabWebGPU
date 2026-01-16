@@ -19,6 +19,9 @@ Replace the VCPKG_PATH with your VCPKG_PATH
 ```
 # Build using Dawn backend
 cmake -G "MinGW Makefiles" -S . -B build  -DCMAKE_TOOLCHAIN_FILE=C:\Users\hahoa\tools\vcpkg\scripts\buildsystems\vcpkg.cmake
+
+//Mac
+cmake -B build DWEBGPU_BACKEND=DAWN
 cmake --build build
 
 # Build using emscripten

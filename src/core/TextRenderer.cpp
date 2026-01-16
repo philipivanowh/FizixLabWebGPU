@@ -1,22 +1,57 @@
 #include "core/TextRenderer.hpp"
-#include <GLFW/glfw3.h>
-#include <glfw3webgpu.h>
+#include <iostream>
+#include <map>
+#include <ft2build.h>
+#include FT_FREETYPE_H
+#include <webgpu/webgpu.hpp>
 
+#include "math/Vec2i.hpp"
+
+#ifdef __APPLE__
+#include <unistd.h>  // For getcwd on macOS
+#else
+#include <filesystem>
+#endif
 bool TextRenderer::Initialize_fonts(WGPUDevice device)
 {
     FT_Library fontLibrary;
     if (FT_Init_FreeType(&fontLibrary))
     {
-        std::cout << "ERROR::FREETYPE: Could not init FreeType Library" << std::endl;
+        std::cerr << "ERROR::FREETYPE: Could not init FreeType Library" << std::endl;
         return false;
     }
 
     FT_Face face;
-    if (FT_New_Face(fontLibrary, "fonts/arial.ttf", 0, &face))
+    
+    // Try multiple font paths for cross-platform compatibility
+    const char* fontPaths[] = {
+        "fonts/helvatica-255/Helvetica.ttf",      // Relative to executable
+        "../fonts/helvatica-255/Helvetica.ttf",   // One level up
+        "../../fonts/helvatica-255/Helvetica.ttf" // Two levels up (common in build dirs)
+    };
+    
+    bool fontLoaded = false;
+    for (const char* path : fontPaths)
     {
-        std::cout << "ERROR::FREETYPE: Failed to load font" << std::endl;
-        return false;
+        if (FT_New_Face(fontLibrary, path, 0, &face) == 0)
+        {
+            std::cout << "Successfully loaded font from: " << path << std::endl;
+            fontLoaded = true;
+            break;
+        }
     }
+    
+if (!fontLoaded)
+{
+    std::cerr << "ERROR::FREETYPE: Failed to load font from any path" << std::endl;
+    std::cerr << "Tried the following paths:" << std::endl;
+    for (const char* path : fontPaths)
+    {
+        std::cerr << "  - " << path << std::endl;
+    }
+    FT_Done_FreeType(fontLibrary);
+    return false;
+}
 
     FT_Set_Pixel_Sizes(face, 0, 48);
 
@@ -24,12 +59,27 @@ bool TextRenderer::Initialize_fonts(WGPUDevice device)
     {
         if (FT_Load_Char(face, c, FT_LOAD_RENDER))
         {
-            std::cout << "ERROR::FREETYTPE: Failed to load Glyph" << std::endl;
+            std::cerr << "ERROR::FREETYPE: Failed to load Glyph '" << c << "'" << std::endl;
+            continue;
+        }
+
+        // Skip characters with no bitmap (like space)
+        if (face->glyph->bitmap.width == 0 || face->glyph->bitmap.rows == 0)
+        {
+            Character character = {
+                nullptr,
+                nullptr,
+                math::Vec2i(0, 0),
+                math::Vec2i(face->glyph->bitmap_left, face->glyph->bitmap_top),
+                static_cast<unsigned int>(face->glyph->advance.x)
+            };
+            Characters.insert(std::pair<char, Character>(c, character));
             continue;
         }
 
         // Create WebGPU texture
         WGPUTextureDescriptor textureDesc = {};
+        textureDesc.label = nullptr;
         textureDesc.size = {face->glyph->bitmap.width, face->glyph->bitmap.rows, 1};
         textureDesc.format = WGPUTextureFormat_R8Unorm;
         textureDesc.usage = WGPUTextureUsage_TextureBinding | WGPUTextureUsage_CopyDst;
@@ -38,6 +88,12 @@ bool TextRenderer::Initialize_fonts(WGPUDevice device)
         textureDesc.sampleCount = 1;
 
         WGPUTexture texture = wgpuDeviceCreateTexture(device, &textureDesc);
+        
+        if (!texture)
+        {
+            std::cerr << "ERROR: Failed to create texture for character '" << c << "'" << std::endl;
+            continue;
+        }
 
         // Upload glyph bitmap data to texture
         WGPUImageCopyTexture destination = {};
@@ -64,6 +120,7 @@ bool TextRenderer::Initialize_fonts(WGPUDevice device)
 
         // Create texture view
         WGPUTextureViewDescriptor viewDesc = {};
+        viewDesc.label = nullptr;
         viewDesc.format = WGPUTextureFormat_R8Unorm;
         viewDesc.dimension = WGPUTextureViewDimension_2D;
         viewDesc.baseMipLevel = 0;
@@ -86,10 +143,12 @@ bool TextRenderer::Initialize_fonts(WGPUDevice device)
     }
 
     Terminate_fonts(fontLibrary, face);
-
+    
+    std::cout << "Successfully initialized " << Characters.size() << " characters" << std::endl;
     return true;
 }
 
+    // Rest of your initialization code...
 void TextRenderer::Terminate_fonts(FT_Library fontLibrary, FT_Face face)
 {
     FT_Done_Face(face);
