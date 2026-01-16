@@ -83,8 +83,8 @@ namespace physics
 		float density = 1.0f;
 		float mass = 1.0f;
 		float invMass = 0.0f;
-		float staticFriction = 1.6f;
-		float kineticFriction = 1.5f;
+		float staticFriction = 0.0f;
+		float kineticFriction = 0.1f;
 		math::Vec2 normalImpulseAccum = math::Vec2();
 		math::Vec2 normalForce = math::Vec2();
 		math::Vec2 dragForce = math::Vec2();

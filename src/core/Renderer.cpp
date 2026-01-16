@@ -3,6 +3,7 @@
 #include "core/Renderer.hpp"
 #include "core/Utility.hpp"
 #include "math/Math.hpp"
+#include "math/Mat4.hpp"
 #include "common/settings.hpp"
 
 #include <array>
@@ -131,14 +132,24 @@ bool Renderer::Initialize()
 
 void Renderer::Terminate()
 {
+	// 2D Shape Pipeline
 	vertexBuffer.release();
 	uniformBuffer.release();
 	uniformBindGroup.release();
 	uniformBindGroupLayout.release();
 	pipelineLayout.release();
 	linePipeline.release();
+	// Text Pipeline
 	pipeline.release();
+	textSampler.release();
+	textVertexBuffer.release();
+	textPipelineLayout.release();
+	textBindGroupLayout.release();
+	textPipeline.release();
+	textShaderModule.release();
 	surface.unconfigure();
+
+	// WebGPU
 	queue.release();
 	surface.release();
 	device.release();
@@ -352,6 +363,134 @@ void Renderer::InitializePipeline()
 		std::cout << "Failed to create render pipeline." << std::endl;
 	}
 	shaderModule.release();
+}
+
+void Renderer::InitializeTextPipeline()
+{
+	// Load text shader
+	ShaderModuleDescriptor textShaderDesc;
+#ifdef WEBGPU_BACKEND_WGPU
+	textShaderDesc.hintCount = 0;
+	textShaderDesc.hints = nullptr;
+#endif
+	std::string textShaderSource = Utility::LoadFileToString("src/shaders/text.wgsl");
+
+	ShaderModuleWGSLDescriptor textShaderCodeDesc;
+	textShaderCodeDesc.chain.next = nullptr;
+	textShaderCodeDesc.chain.sType = SType::ShaderModuleWGSLDescriptor;
+	textShaderDesc.nextInChain = &textShaderCodeDesc.chain;
+	textShaderCodeDesc.code = textShaderSource.c_str();
+	textShaderModule = device.createShaderModule(textShaderDesc);
+
+	// Create bind group layout for text rendering
+	std::array<BindGroupLayoutEntry, 3> textLayoutEntries = {};
+
+	// Binding 0: Uniforms (projection + textColor)
+	textLayoutEntries[0].binding = 0;
+	textLayoutEntries[0].visibility = ShaderStage::Vertex | ShaderStage::Fragment;
+	textLayoutEntries[0].buffer.type = BufferBindingType::Uniform;
+	textLayoutEntries[0].buffer.minBindingSize = sizeof(float) * 16 + sizeof(float) * 4; // mat4 + vec3 (padded to vec4)
+
+	// Binding 1: Sampler
+	textLayoutEntries[1].binding = 1;
+	textLayoutEntries[1].visibility = ShaderStage::Fragment;
+	textLayoutEntries[1].sampler.type = SamplerBindingType::Filtering;
+
+	// Binding 2: Texture
+	textLayoutEntries[2].binding = 2;
+	textLayoutEntries[2].visibility = ShaderStage::Fragment;
+	textLayoutEntries[2].texture.sampleType = TextureSampleType::Float;
+	textLayoutEntries[2].texture.viewDimension = TextureViewDimension::_2D;
+
+	BindGroupLayoutDescriptor textLayoutDesc = {};
+	textLayoutDesc.entryCount = textLayoutEntries.size();
+	textLayoutDesc.entries = textLayoutEntries.data();
+	textBindGroupLayout = device.createBindGroupLayout(textLayoutDesc);
+
+	// Create pipeline layout
+	PipelineLayoutDescriptor textPipelineLayoutDesc = {};
+	textPipelineLayoutDesc.bindGroupLayoutCount = 1;
+	WGPUBindGroupLayout textBindGroupLayouts[] = {textBindGroupLayout};
+	textPipelineLayoutDesc.bindGroupLayouts = textBindGroupLayouts; // Remove the & here
+	textPipelineLayout = device.createPipelineLayout(textPipelineLayoutDesc);
+
+	// Create render pipeline
+	RenderPipelineDescriptor textPipelineDesc = {};
+
+	// Vertex input: vec4 (xy = position, zw = texcoord)
+	VertexAttribute textVertexAttrib = {};
+	textVertexAttrib.shaderLocation = 0;
+	textVertexAttrib.format = VertexFormat::Float32x4;
+	textVertexAttrib.offset = 0;
+
+	VertexBufferLayout textVertexBufferLayout = {};
+	textVertexBufferLayout.attributeCount = 1;
+	textVertexBufferLayout.attributes = &textVertexAttrib;
+	textVertexBufferLayout.arrayStride = 4 * sizeof(float);
+	textVertexBufferLayout.stepMode = VertexStepMode::Vertex;
+
+	textPipelineDesc.vertex.bufferCount = 1;
+	textPipelineDesc.vertex.buffers = &textVertexBufferLayout;
+	textPipelineDesc.vertex.module = textShaderModule;
+	textPipelineDesc.vertex.entryPoint = "vs_main";
+	textPipelineDesc.vertex.constantCount = 0;
+	textPipelineDesc.vertex.constants = nullptr;
+
+	// Primitive state
+	textPipelineDesc.primitive.topology = PrimitiveTopology::TriangleList;
+	textPipelineDesc.primitive.stripIndexFormat = IndexFormat::Undefined;
+	textPipelineDesc.primitive.frontFace = FrontFace::CCW;
+	textPipelineDesc.primitive.cullMode = CullMode::None;
+
+	// Fragment state
+	FragmentState textFragmentState = {};
+	textFragmentState.module = textShaderModule;
+	textFragmentState.entryPoint = "fs_main";
+	textFragmentState.constantCount = 0;
+	textFragmentState.constants = nullptr;
+
+	// Blend state for text (alpha blending)
+	BlendState textBlendState = {};
+	textBlendState.color.srcFactor = BlendFactor::SrcAlpha;
+	textBlendState.color.dstFactor = BlendFactor::OneMinusSrcAlpha;
+	textBlendState.color.operation = BlendOperation::Add;
+	textBlendState.alpha.srcFactor = BlendFactor::One;
+	textBlendState.alpha.dstFactor = BlendFactor::OneMinusSrcAlpha;
+	textBlendState.alpha.operation = BlendOperation::Add;
+
+	ColorTargetState textColorTarget = {};
+	textColorTarget.format = surfaceFormat;
+	textColorTarget.blend = &textBlendState;
+	textColorTarget.writeMask = ColorWriteMask::All;
+
+	textFragmentState.targetCount = 1;
+	textFragmentState.targets = &textColorTarget;
+	textPipelineDesc.fragment = &textFragmentState;
+
+	textPipelineDesc.depthStencil = nullptr;
+
+	textPipelineDesc.multisample.count = 1;
+	textPipelineDesc.multisample.mask = ~0u;
+	textPipelineDesc.multisample.alphaToCoverageEnabled = false;
+
+	textPipelineDesc.layout = textPipelineLayout;
+
+	textPipeline = device.createRenderPipeline(textPipelineDesc);
+
+	// Create sampler for text textures
+	SamplerDescriptor samplerDesc = {};
+	samplerDesc.addressModeU = AddressMode::ClampToEdge;
+	samplerDesc.addressModeV = AddressMode::ClampToEdge;
+	samplerDesc.addressModeW = AddressMode::ClampToEdge;
+	samplerDesc.magFilter = FilterMode::Linear;
+	samplerDesc.minFilter = FilterMode::Linear;
+	samplerDesc.mipmapFilter = MipmapFilterMode::Nearest;
+	samplerDesc.lodMinClamp = 0.0f;
+	samplerDesc.lodMaxClamp = 1.0f;
+	samplerDesc.compare = CompareFunction::Undefined;
+	samplerDesc.maxAnisotropy = 1;
+
+	textSampler = device.createSampler(samplerDesc);
 }
 
 void Renderer::BeginFrame()
@@ -897,4 +1036,118 @@ uint32_t Renderer::UpdateUniforms(const math::Vec2 &position, const std::array<f
 	queue.writeBuffer(uniformBuffer, uniformBufferOffset, &uniforms, sizeof(Uniforms));
 	uniformBufferOffset += uniformBufferStride;
 	return offset;
+}
+
+// Text Rendering
+void Renderer::RenderText(TextRenderer textRenderer, std::string &text, float x, float y, float scale, const std::array<float, 3> &color)
+{
+	if (text.empty())
+		return;
+
+	renderPass.setPipeline(textPipeline);
+
+	// Create orthographic projection matrix (similar to glOrtho)
+	// For 2D text rendering: left=0, right=width, bottom=height, top=0
+	math::Mat4 projection = math::Mat4::Ortho(0.0f, windowWidth, windowHeight, 0.0f);
+
+	// Struct to match WGSL uniform layout
+	struct TextUniforms
+	{
+		float projection[16];
+		float textColor[4]; // vec3 in WGSL but padded to vec4 for alignment
+	};
+
+	TextUniforms textUniforms = {};
+	projection.CopyTo(textUniforms.projection);
+	textUniforms.textColor[0] = color[0];
+	textUniforms.textColor[1] = color[1];
+	textUniforms.textColor[2] = color[2];
+	textUniforms.textColor[3] = 1.0f; // padding
+
+	// Create uniform buffer for this text rendering
+	BufferDescriptor textUniformBufferDesc = {};
+	textUniformBufferDesc.size = sizeof(TextUniforms);
+	textUniformBufferDesc.usage = BufferUsage::Uniform | BufferUsage::CopyDst;
+	textUniformBufferDesc.mappedAtCreation = false;
+	Buffer textUniformBuffer = device.createBuffer(textUniformBufferDesc);
+
+	queue.writeBuffer(textUniformBuffer, 0, &textUniforms, sizeof(TextUniforms));
+
+	float currentX = x;
+
+	// Iterate through all characters
+	for (char c : text)
+	{
+		if (textRenderer.Characters.find(c) == textRenderer.Characters.end())
+			continue;
+
+		Character ch = textRenderer.Characters[c];
+
+		float xpos = currentX + ch.bearing.x * scale;
+		float ypos = y - (ch.size.y - ch.bearing.y) * scale;
+
+		float w = ch.size.x * scale;
+		float h = ch.size.y * scale;
+
+		// Update VBO for each character (6 vertices for 2 triangles)
+		// Format: vec4 (x, y, texU, texV)
+		float vertices[6][4] = {
+			{xpos, ypos + h, 0.0f, 0.0f},
+			{xpos, ypos, 0.0f, 1.0f},
+			{xpos + w, ypos, 1.0f, 1.0f},
+
+			{xpos, ypos + h, 0.0f, 0.0f},
+			{xpos + w, ypos, 1.0f, 1.0f},
+			{xpos + w, ypos + h, 1.0f, 0.0f}};
+
+		// Update vertex buffer
+		BufferDescriptor charVertexBufferDesc = {};
+		charVertexBufferDesc.size = sizeof(vertices);
+		charVertexBufferDesc.usage = BufferUsage::Vertex | BufferUsage::CopyDst;
+		charVertexBufferDesc.mappedAtCreation = false;
+		Buffer charVertexBuffer = device.createBuffer(charVertexBufferDesc);
+
+		queue.writeBuffer(charVertexBuffer, 0, vertices, sizeof(vertices));
+
+		// Create bind group for this character
+		std::array<BindGroupEntry, 3> textBindGroupEntries = {};
+
+		// Binding 0: Uniforms
+		textBindGroupEntries[0].binding = 0;
+		textBindGroupEntries[0].buffer = textUniformBuffer;
+		textBindGroupEntries[0].offset = 0;
+		textBindGroupEntries[0].size = sizeof(TextUniforms);
+
+		// Binding 1: Sampler
+		textBindGroupEntries[1].binding = 1;
+		textBindGroupEntries[1].sampler = textSampler;
+
+		// Binding 2: Texture view
+		textBindGroupEntries[2].binding = 2;
+		textBindGroupEntries[2].textureView = ch.textureView;
+
+		BindGroupDescriptor charBindGroupDesc = {};
+		charBindGroupDesc.layout = textBindGroupLayout;
+		charBindGroupDesc.entryCount = textBindGroupEntries.size();
+		charBindGroupDesc.entries = textBindGroupEntries.data();
+		BindGroup charBindGroup = device.createBindGroup(charBindGroupDesc);
+
+		// Render the character
+		renderPass.setBindGroup(0, charBindGroup, 0, nullptr);
+		renderPass.setVertexBuffer(0, charVertexBuffer, 0, sizeof(vertices));
+		renderPass.draw(6, 1, 0, 0);
+
+		// Clean up per-character resources
+		charBindGroup.release();
+		charVertexBuffer.release();
+
+		// Advance cursor for next glyph (advance is in 1/64 pixels)
+		currentX += (ch.advance >> 6) * scale;
+	}
+
+	// Clean up
+	textUniformBuffer.release();
+
+	// Switch back to main pipeline if needed
+	renderPass.setPipeline(pipeline);
 }

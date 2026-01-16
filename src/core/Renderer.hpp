@@ -2,21 +2,21 @@
 
 // Suppress warnings and errors from the third-party Emscripten WebGPU header
 #ifdef __EMSCRIPTEN__
-	#pragma GCC diagnostic push
-	#pragma GCC diagnostic ignored "-w"
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-w"
 #endif
 
 #include <webgpu/webgpu.hpp>
 
 #ifdef __EMSCRIPTEN__
-	#pragma GCC diagnostic pop
+#pragma GCC diagnostic pop
 #endif
 
 #include <GLFW/glfw3.h>
 #include <glfw3webgpu.h>
 
 #ifdef __EMSCRIPTEN__
-#	include <emscripten.h>
+#include <emscripten.h>
 #endif
 
 #include "shape/Ball.hpp"
@@ -25,6 +25,8 @@
 #include "shape/Incline.hpp"
 #include "physics/Rigidbody.hpp"
 #include "math/Vec2.hpp"
+
+#include "core/TextRenderer.hpp"
 
 #include <array>
 #include <cstdint>
@@ -56,22 +58,23 @@ public:
 	void DrawIncline(const shape::Incline &incline);
 	void DrawBallLine(const shape::Ball &ball);
 	void DrawFBD(physics::Rigidbody &body);
-	void DrawMeasuringRectangle(math::Vec2& start, math::Vec2& size);
+	void DrawMeasuringRectangle(math::Vec2 &start, math::Vec2 &size);
 	void DrawTestTriangle();
 	void DrawTest2Triangle();
 
-	GLFWwindow* GetWindow() const { return window; }
+	void RenderText(TextRenderer textRenderer, std::string& text, float x, float y, float scale, const std::array<float, 3>& color);
+
+	GLFWwindow *GetWindow() const { return window; }
 	Device GetDevice() const { return device; }
 	Queue GetQueue() const { return queue; }
-	RenderPassEncoder GetRenderPass() const {return renderPass;};
-	TextureFormat GetSurfaceFormat() const {return surfaceFormat;};
-
-
+	RenderPassEncoder GetRenderPass() const { return renderPass; };
+	TextureFormat GetSurfaceFormat() const { return surfaceFormat; };
 
 private:
 	wgpu::TextureView GetNextSurfaceTextureView();
 	// Substep of Initialize() that creates the render pipeline
 	void InitializePipeline();
+	void InitializeTextPipeline();
 	wgpu::RequiredLimits GetRequiredLimits(Adapter adapter) const;
 	void InitializeBuffers();
 	void EnsureVertexBufferSize(int size);
@@ -105,5 +108,13 @@ private:
 	uint32_t windowHeight = 956;
 	uint32_t framebufferWidth = 1470;
 	uint32_t framebufferHeight = 956;
-	const WGPUColor backgroundColor = WGPUColor{0.0055,0.0075,0.009, 1.0};
+	const WGPUColor backgroundColor = WGPUColor{0.0055, 0.0075, 0.009, 1.0};
+		
+		//Text
+	ShaderModule textShaderModule;
+	RenderPipeline textPipeline;
+	BindGroupLayout textBindGroupLayout;
+	PipelineLayout textPipelineLayout;
+	Buffer textVertexBuffer;
+	Sampler textSampler;
 };

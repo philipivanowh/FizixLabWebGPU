@@ -15,6 +15,7 @@ using physics::ForceType;
 using physics::RigidbodyType;
 
 Renderer Engine::renderer;
+TextRenderer Engine::textRenderer;
 World Engine::world;
 Settings Engine::settings;
 UIManager Engine::uiManager;
@@ -31,9 +32,15 @@ bool Engine::Initialize()
 	{
 		return false;
 	}
+
+	if(!textRenderer.Initialize_fonts(renderer.GetDevice()))
+	{
+		return false;
+	}
+
 	uiManager.InitializeImGui(renderer);
 	AddDefaultObjects();
-	//  ComparisonScene();
+	// ComparisonScene();
 	// InclineProblemScene();
 	return true;
 }
@@ -177,7 +184,8 @@ void Engine::Render()
 	if (mouseDeltaScale.Length() != 0.0f && mouseDownRight)
 		renderer.DrawMeasuringRectangle(mouseInitialPos, mouseDeltaScale);
 	// renderer.UpdateGUI();
-
+	std::string a = "FPS: 60";
+	renderer.RenderText(textRenderer,a, 10.0f, 30.0f, 1.0f, {1.0f, 1.0f, 1.0f});
 	// renderer.DrawTestTriangle();
 	// renderer.DrawTest2Triangle();
 	// renderer.UpdateGUI();
@@ -394,8 +402,8 @@ void Engine::InclineProblemScene()
 		20.0f, // degree input but it will be converted to radian in the simulation
 		true,
 		warmRed,
-		0.5,
-		0.3));
+		0.1,
+		0.1));
 
 	world.Add(std::make_unique<shape::Canon>(
 		Vec2(520.0f, 280.0f),
