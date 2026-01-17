@@ -18,8 +18,7 @@ Replace the VCPKG_PATH with your VCPKG_PATH
 
 ```
 # Build using Dawn backend
-cmake -G "MinGW Makefiles" -S . -B build "-DCMAKE_TOOLCHAIN_FILE=C:\Users\hahoa\tools\vcpkg\scripts\buildsystems\vcpkg.cmake" 
-
+cmake -G "MinGW Makefiles" -S . -B build  -DCMAKE_TOOLCHAIN_FILE=C:\Users\hahoa\tools\vcpkg\scripts\buildsystems\vcpkg.cmake
 cmake --build build
 
 # Build using emscripten
