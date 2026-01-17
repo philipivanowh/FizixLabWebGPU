@@ -1039,7 +1039,9 @@ uint32_t Renderer::UpdateUniforms(const math::Vec2 &position, const std::array<f
 }
 
 // Text Rendering
+/*
 void Renderer::RenderText(TextRenderer textRenderer, std::string &text, float x, float y, float scale, const std::array<float, 3> &color)
+
 {
 	if (text.empty())
 		return;
@@ -1151,3 +1153,4 @@ void Renderer::RenderText(TextRenderer textRenderer, std::string &text, float x,
 	// Switch back to main pipeline if needed
 	renderPass.setPipeline(pipeline);
 }
+	*/

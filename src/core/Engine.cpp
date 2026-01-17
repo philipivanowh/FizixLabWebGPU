@@ -15,7 +15,7 @@ using physics::ForceType;
 using physics::RigidbodyType;
 
 Renderer Engine::renderer;
-TextRenderer Engine::textRenderer;
+//TextRenderer Engine::textRenderer;
 World Engine::world;
 Settings Engine::settings;
 UIManager Engine::uiManager;
@@ -33,10 +33,10 @@ bool Engine::Initialize()
 		return false;
 	}
 
-	if(!textRenderer.Initialize_fonts(renderer.GetDevice()))
-	{
-		return false;
-	}
+	// if(!textRenderer.Initialize_fonts(renderer.GetDevice()))
+	// {
+	// 	return false;
+	// }
 
 	uiManager.InitializeImGui(renderer);
 	AddDefaultObjects();
@@ -185,7 +185,7 @@ void Engine::Render()
 		renderer.DrawMeasuringRectangle(mouseInitialPos, mouseDeltaScale);
 	// renderer.UpdateGUI();
 	std::string a = "FPS: 60";
-	renderer.RenderText(textRenderer,a, 10.0f, 30.0f, 1.0f, {1.0f, 1.0f, 1.0f});
+	//renderer.RenderText(textRenderer,a, 10.0f, 30.0f, 1.0f, {1.0f, 1.0f, 1.0f});
 	// renderer.DrawTestTriangle();
 	// renderer.DrawTest2Triangle();
 	// renderer.UpdateGUI();

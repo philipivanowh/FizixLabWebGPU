@@ -1,7 +1,9 @@
+
 #include "core/TextRenderer.hpp"
 #include <GLFW/glfw3.h>
 #include <glfw3webgpu.h>
 
+/*
 bool TextRenderer::Initialize_fonts(WGPUDevice device)
 {
     FT_Library fontLibrary;
@@ -12,7 +14,7 @@ bool TextRenderer::Initialize_fonts(WGPUDevice device)
     }
 
     FT_Face face;
-    if (FT_New_Face(fontLibrary, "fonts/arial.ttf", 0, &face))
+    if (FT_New_Face(fontLibrary, "fonts/NeoEuler-VGO00.otf", 0, &face))
     {
         std::cout << "ERROR::FREETYPE: Failed to load font" << std::endl;
         return false;
@@ -95,3 +97,4 @@ void TextRenderer::Terminate_fonts(FT_Library fontLibrary, FT_Face face)
     FT_Done_Face(face);
     FT_Done_FreeType(fontLibrary);
 }
+    */

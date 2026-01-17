@@ -62,7 +62,7 @@ public:
 	void DrawTestTriangle();
 	void DrawTest2Triangle();
 
-	void RenderText(TextRenderer textRenderer, std::string& text, float x, float y, float scale, const std::array<float, 3>& color);
+	//void RenderText(TextRenderer textRenderer, std::string& text, float x, float y, float scale, const std::array<float, 3>& color);
 
 	GLFWwindow *GetWindow() const { return window; }
 	Device GetDevice() const { return device; }

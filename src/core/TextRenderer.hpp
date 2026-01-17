@@ -1,3 +1,4 @@
+
 #pragma once
 
 #include <iostream>
@@ -7,6 +8,8 @@
 #include <webgpu/webgpu.hpp>
 
 #include "math/Vec2i.hpp"
+
+/*
 
 struct Character
 {
@@ -28,3 +31,5 @@ public:
 private:
     void Terminate_fonts(FT_Library fontLibrary, FT_Face face);
 };
+
+*/

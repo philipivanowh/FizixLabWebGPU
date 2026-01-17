@@ -37,7 +37,7 @@ public:
 
 private:
 	static Renderer renderer;
-	static TextRenderer textRenderer;
+	//static TextRenderer textRenderer;
 	static Settings settings;
 	static World world;
 	static UIManager uiManager;

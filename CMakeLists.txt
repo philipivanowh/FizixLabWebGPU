@@ -1,6 +1,6 @@
-cmake_minimum_required(VERSION 3.0...3.25)
+cmake_minimum_required(VERSION 3.25)
 
-set(CMAKE_TOOLCHAIN_FILE "C:/Users/hahoa/tools/vcpkg/scripts/buildsystems/vcpkg.cmake" CACHE STRING "Vcpkg toolchain file")
+#set(CMAKE_TOOLCHAIN_FILE "C:/Users/hahoa/tools/vcpkg/scripts/buildsystems/vcpkg.cmake")
 
 project(
 	LearnWebGPU
@@ -20,7 +20,8 @@ add_subdirectory(glfw3webgpu)
 add_subdirectory(imgui)
 
 
-set(VCPKG_APPLOCAL_DEPS ON)
+set(CMAKE_PREFIX_PATH "C:/Users/hahoa/tools/vcpkg/installed/x64-windows/share")
+
 find_package(Freetype CONFIG REQUIRED)
 
 
@@ -42,6 +43,15 @@ add_executable(App
 	src/shape/Shape.cpp
 	src/collision/Collisions.cpp
 )
+
+
+add_custom_target(copy_fonts ALL
+    COMMAND ${CMAKE_COMMAND} -E copy_directory
+            ${CMAKE_SOURCE_DIR}/src/fonts
+            $<TARGET_FILE_DIR:App>/fonts
+)
+
+add_dependencies(App copy_fonts)
 
 target_include_directories(App PRIVATE src)
 
