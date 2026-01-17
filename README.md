@@ -13,12 +13,16 @@ Building Instruction
 
 Make sure when building the backend
 Replace the VCPKG_PATH with your VCPKG_PATH
--DCMAKE_TOOLCHAIN_FILE=\VCPKG_PATH\scripts\buildsystems\vcpkg.cmake
+    -DCMAKE_TOOLCHAIN_FILE=\VCPKG_PATH\scripts\buildsystems\vcpkg.cmake
+
+Also in Cmakelist
+this line -> set(CMAKE_PREFIX_PATH "C:/Users/hahoa/tools/vcpkg/installed/x64-windows/share")
+find the right vcpkg path for it
 --------
 
 ```
 # Build using Dawn backend
-cmake -G "MinGW Makefiles" -S . -B build  -DCMAKE_TOOLCHAIN_FILE=C:\Users\hahoa\tools\vcpkg\scripts\buildsystems\vcpkg.cmake
+cmake -G "MinGW Makefiles" -S . -B build "-DCMAKE_TOOLCHAIN_FILE=C:\Users\hahoa\tools\vcpkg\scripts\buildsystems\vcpkg.cmake" 
 cmake --build build
 
 # Build using emscripten
