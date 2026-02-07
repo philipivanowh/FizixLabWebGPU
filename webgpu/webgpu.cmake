@@ -50,7 +50,7 @@ endmacro()
 if (NOT TARGET webgpu)
 	string(TOUPPER ${WEBGPU_BACKEND} WEBGPU_BACKEND_U)
 
-	if (EMSCRIPTEN OR WEBGPU_BACKEND_U STREQUAL "EMSCRIPTEN")
+	if (WEBGPU_BACKEND_U STREQUAL "EMSCRIPTEN")
 
 		FetchContent_DeclareShallowGit(
 			webgpu-backend-emscripten

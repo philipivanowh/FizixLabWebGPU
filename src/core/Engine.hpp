@@ -34,11 +34,10 @@ public:
 	//void SpawnBall(const math::Vec2& pos, const math::Vec2& vel, float radius, float mass, float restitution);
 	static void CheckSpawning();
 	static void ClearBodies();
-
-private:
-	static Renderer renderer;
-	//static TextRenderer textRenderer;
+	
 	static Settings settings;
+	
+	static Renderer renderer;
 	static World world;
 	static UIManager uiManager;
 	static physics::Rigidbody* draggedBody;
@@ -47,5 +46,7 @@ private:
 	static bool mouseDownRight;
 	static math::Vec2 mouseInitialPos;
 	static math::Vec2 mouseDeltaScale;
+
+private:
 	
 };

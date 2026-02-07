@@ -15,7 +15,6 @@ using physics::ForceType;
 using physics::RigidbodyType;
 
 Renderer Engine::renderer;
-//TextRenderer Engine::textRenderer;
 World Engine::world;
 Settings Engine::settings;
 UIManager Engine::uiManager;
@@ -33,12 +32,7 @@ bool Engine::Initialize()
 		return false;
 	}
 
-	// if(!textRenderer.Initialize_fonts(renderer.GetDevice()))
-	// {
-	// 	return false;
-	// }
 
-	uiManager.InitializeImGui(renderer);
 	AddDefaultObjects();
 	// ComparisonScene();
 	// InclineProblemScene();
@@ -48,7 +42,6 @@ bool Engine::Initialize()
 void Engine::Shutdown()
 {
 	renderer.Terminate();
-	uiManager.TerminateImGui();
 }
 
 void Engine::CheckSpawning()
@@ -183,16 +176,10 @@ void Engine::Render()
 
 	if (mouseDeltaScale.Length() != 0.0f && mouseDownRight)
 		renderer.DrawMeasuringRectangle(mouseInitialPos, mouseDeltaScale);
-	// renderer.UpdateGUI();
 	std::string a = "FPS: 60";
-	//renderer.RenderText(textRenderer,a, 10.0f, 30.0f, 1.0f, {1.0f, 1.0f, 1.0f});
 	// renderer.DrawTestTriangle();
 	// renderer.DrawTest2Triangle();
-	// renderer.UpdateGUI();
-	uiManager.BeginImGuiFrame();
 	uiManager.RenderMainControls(world.RigidbodyCount(), settings);
-	uiManager.RenderSpawner();
-	uiManager.EndImGuiFrame(renderer);
 
 	renderer.EndFrame();
 }

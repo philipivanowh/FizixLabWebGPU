@@ -27,6 +27,20 @@ cmake --build build
 
 # Build using emscripten
 NOT YET
+emconfigure cmake -B build -DCMAKE_BUILD_TYPE=Release
+emmake make -C build
+
+
+=-------=
+emcmake cmake -S . -B build-emscripten -DWEBGPU_BACKEND=EMSCRIPTEN
+cmake --build build-emscripten
+
+# Run the output
+# Serve the build-emscripten directory with a local web server and open App.html
+Run
+cd build
+python -m http.server 8000
+# Open http://localhost:8000
 ```
 
 Then run either `./build/App`
