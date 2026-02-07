@@ -8,10 +8,6 @@
 
 #include <webgpu/webgpu.hpp>
 
-#ifdef __EMSCRIPTEN__
-#pragma GCC diagnostic pop
-#endif
-
 #include <GLFW/glfw3.h>
 #include <glfw3webgpu.h>
 

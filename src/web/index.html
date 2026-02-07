@@ -1,0 +1,175 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>FizixLab WebGPU</title>
+    <link rel="stylesheet" href="ui.css" />
+  </head>
+  <body>
+    <div id="app">
+      <canvas id="canvas"></canvas>
+      <aside id="ui">
+        <section class="ui-section">
+          <h2>Simulation</h2>
+          <div class="ui-row">
+            <span class="stat">Bodies: <strong id="bodyCount">0</strong></span>
+          </div>
+          <div class="ui-row">
+            <label for="dragMode">Drag Mode</label>
+            <select id="dragMode">
+              <option value="0">Percise Drag</option>
+              <option value="1">Physics Drag</option>
+            </select>
+          </div>
+          <div class="ui-row">
+            <button id="clearBodies" class="secondary">Clear Bodies</button>
+          </div>
+        </section>
+
+        <section class="ui-section">
+          <h2>Object Spawner</h2>
+          <div class="ui-row">
+            <label for="shapeType">Shape</label>
+            <select id="shapeType">
+              <option value="0">Ball</option>
+              <option value="1">Incline</option>
+              <option value="2">Box</option>
+              <option value="3">Canon</option>
+            </select>
+          </div>
+
+          <div class="ui-inline">
+            <div class="ui-row">
+              <label for="positionX">Position X</label>
+              <input id="positionX" type="number" step="1" />
+            </div>
+            <div class="ui-row">
+              <label for="positionY">Position Y</label>
+              <input id="positionY" type="number" step="1" />
+            </div>
+          </div>
+
+          <div class="ui-inline">
+            <div class="ui-row">
+              <label for="velocityX">Velocity X</label>
+              <input id="velocityX" type="number" step="0.1" />
+            </div>
+            <div class="ui-row">
+              <label for="velocityY">Velocity Y</label>
+              <input id="velocityY" type="number" step="0.1" />
+            </div>
+          </div>
+
+          <div id="boxControls">
+            <div class="ui-inline">
+              <div class="ui-row">
+                <label for="boxWidth">Width</label>
+                <input id="boxWidth" type="number" min="1" step="1" />
+              </div>
+              <div class="ui-row">
+                <label for="boxHeight">Height</label>
+                <input id="boxHeight" type="number" min="1" step="1" />
+              </div>
+            </div>
+          </div>
+
+          <div id="ballControls">
+            <div class="ui-row">
+              <label for="radius">Radius</label>
+              <input id="radius" type="number" min="1" step="1" />
+            </div>
+          </div>
+
+          <div id="inclineControls">
+            <div class="ui-inline">
+              <div class="ui-row">
+                <label for="base">Base</label>
+                <input id="base" type="number" min="1" step="1" />
+              </div>
+              <div class="ui-row">
+                <label for="inclineAngle">Angle (deg)</label>
+                <input id="inclineAngle" type="number" step="1" />
+              </div>
+            </div>
+            <div class="ui-row">
+              <label>
+                <input id="flip" type="checkbox" />
+                Flip
+              </label>
+            </div>
+          </div>
+
+          <div id="canonControls">
+            <div class="ui-row">
+              <label for="canonAngle">Angle (deg)</label>
+              <input id="canonAngle" type="number" step="1" />
+            </div>
+          </div>
+
+          <div id="rigidbodyControls">
+            <div class="ui-inline">
+              <div class="ui-row">
+                <label for="mass">Mass</label>
+                <input id="mass" type="number" min="0.1" step="0.1" />
+              </div>
+              <div class="ui-row">
+                <label for="restitution">Restitution</label>
+                <input id="restitution" type="number" min="0" max="1" step="0.01" />
+              </div>
+            </div>
+            <div class="ui-row">
+              <label for="bodyType">Rigidbody Type</label>
+              <select id="bodyType">
+                <option value="0">Static</option>
+                <option value="1">Dynamic</option>
+              </select>
+            </div>
+          </div>
+
+          <div class="ui-inline">
+            <div class="ui-row">
+              <label for="color">Body Color</label>
+              <input id="color" type="color" />
+            </div>
+            <div class="ui-row">
+              <label for="alpha">Alpha</label>
+              <input id="alpha" type="number" min="0" max="1" step="0.05" />
+            </div>
+          </div>
+
+          <div id="frictionControls" class="ui-inline">
+            <div class="ui-row">
+              <label for="staticFriction">Static Friction</label>
+              <input id="staticFriction" type="number" min="0" step="0.05" />
+            </div>
+            <div class="ui-row">
+              <label for="kineticFriction">Kinetic Friction</label>
+              <input id="kineticFriction" type="number" min="0" step="0.05" />
+            </div>
+          </div>
+
+          <div class="ui-row">
+            <button id="spawnObject" class="primary">Spawn Object</button>
+          </div>
+        </section>
+      </aside>
+    </div>
+
+    <script>
+      var Module = {
+        canvas: (() => document.getElementById("canvas"))(),
+        onRuntimeInitialized: () => {
+          if (window.FizixUI && window.FizixUI.initialize) {
+            window.FizixUI.initialize(Module);
+          }
+          if (Module.ccall) {
+            Module.ccall("StartSimulation", null, [], []);
+          }
+        },
+      };
+    </script>
+    <script src="ui.js"></script>
+    {{{ SCRIPT }}}
+  </body>
+</html>
