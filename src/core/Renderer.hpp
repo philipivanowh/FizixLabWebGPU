@@ -1,5 +1,11 @@
 #pragma once
 
+// Suppress warnings and errors from the third-party Emscripten WebGPU header
+#ifdef __EMSCRIPTEN__
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wundef"
+#endif
+
 #include <webgpu/webgpu.hpp>
 
 #include <GLFW/glfw3.h>
@@ -15,7 +21,6 @@
 #include "shape/Incline.hpp"
 #include "physics/Rigidbody.hpp"
 #include "math/Vec2.hpp"
-
 
 #include <array>
 #include <cstdint>
@@ -50,8 +55,6 @@ public:
 	void DrawMeasuringRectangle(math::Vec2 &start, math::Vec2 &size);
 	void DrawTestTriangle();
 	void DrawTest2Triangle();
-
-	//void RenderText(TextRenderer textRenderer, std::string& text, float x, float y, float scale, const std::array<float, 3>& color);
 
 	GLFWwindow *GetWindow() const { return window; }
 	Device GetDevice() const { return device; }

@@ -6,29 +6,12 @@
 
 #ifdef __EMSCRIPTEN__
 EM_JS(void, UIManager_PublishStats, (int bodyCount), {
-    if (window.FizixUI && window.FizixUI.setStats) {
+    if (window.FizixUI && window.FizixUI.setStats)
+    {
         window.FizixUI.setStats(bodyCount);
     }
 });
 #endif
-
-void UIManager::InitializeImGui(Renderer &renderer)
-{
-    (void)renderer;
-}
-
-void UIManager::TerminateImGui()
-{
-}
-
-void UIManager::BeginImGuiFrame()
-{
-}
-
-void UIManager::EndImGuiFrame(Renderer &renderer)
-{
-    (void)renderer;
-}
 
 void UIManager::RenderMainControls(std::size_t bodyCount, Settings &settings)
 {
@@ -40,12 +23,9 @@ void UIManager::RenderMainControls(std::size_t bodyCount, Settings &settings)
 #endif
 }
 
-void UIManager::RenderSpawner()
-{
-}
-
 void UIManager::QueueSpawn(const SpawnSettings &settings)
 {
+
     spawnSettings = settings;
     spawnRequestPending = true;
 }
@@ -55,8 +35,10 @@ bool UIManager::ConsumeSpawnRequest(SpawnSettings &out)
     if (!spawnRequestPending)
     {
         return false;
+        out = spawnSettings;
+        spawnRequestPending = false;
+        return true;
     }
-
     out = spawnSettings;
     spawnRequestPending = false;
     return true;
