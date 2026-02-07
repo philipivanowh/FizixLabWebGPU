@@ -37,15 +37,9 @@ public:
 	void TerminateImGui();
     void BeginImGuiFrame();
     void EndImGuiFrame(Renderer& renderer);
+    void QueueSpawn(const SpawnSettings& settings);
     bool ConsumeSpawnRequest(SpawnSettings& out);
 private:
-    void RenderSimulationControlsWindow(std::size_t bodyCount, Settings& settings);
-    void RenderSpawnerWindow();
-    void RenderSpawnBasics();
-    void RenderSpawnPhysicsControls();
-    void RenderSpawnSizeControls();
-    void RenderSpawnActions();
-
     SpawnSettings spawnSettings;
     bool spawnRequestPending = false;
 };

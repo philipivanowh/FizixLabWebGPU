@@ -1,16 +1,6 @@
 #pragma once
 
-// Suppress warnings and errors from the third-party Emscripten WebGPU header
-#ifdef __EMSCRIPTEN__
-#pragma GCC diagnostic push
-#pragma GCC diagnostic ignored "-w"
-#endif
-
 #include <webgpu/webgpu.hpp>
-
-#ifdef __EMSCRIPTEN__
-#pragma GCC diagnostic pop
-#endif
 
 #include <GLFW/glfw3.h>
 #include <glfw3webgpu.h>
@@ -26,7 +16,6 @@
 #include "physics/Rigidbody.hpp"
 #include "math/Vec2.hpp"
 
-#include "core/TextRenderer.hpp"
 
 #include <array>
 #include <cstdint>

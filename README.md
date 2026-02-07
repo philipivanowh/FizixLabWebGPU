@@ -26,7 +26,11 @@ cmake -G "MinGW Makefiles" -S . -B build "-DCMAKE_TOOLCHAIN_FILE=C:\Users\hahoa\
 cmake --build build
 
 # Build using emscripten
-NOT YET
+emcmake cmake -S . -B build-emscripten -DWEBGPU_BACKEND=DAWN
+cmake --build build-emscripten
+
+# Run the output
+# Serve the build-emscripten directory with a local web server and open App.html
 ```
 
 Then run either `./build/App`
