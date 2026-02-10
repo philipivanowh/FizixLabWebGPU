@@ -1,0 +1,8 @@
+#pragma once
+
+#include <string>
+
+class Utility {
+public:
+	static std::string LoadFileToString(const char* path);
+};
