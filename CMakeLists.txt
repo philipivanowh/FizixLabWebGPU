@@ -19,8 +19,6 @@ add_subdirectory(webgpu)
 add_subdirectory(glfw3webgpu)
 add_subdirectory(imgui)
 
-find_package(Freetype REQUIRED)
-
 
 
 
@@ -31,7 +29,6 @@ add_executable(App
 	src/collision/CollisionPipeline.cpp
 	src/collision/CollisionSolver.cpp
 	src/core/Renderer.cpp
-	src/core/TextRenderer.cpp
 	src/core/World.cpp
 	src/core/Utility.cpp
 	src/shape/Ball.cpp
@@ -44,24 +41,10 @@ add_executable(App
 )
 
 
-add_custom_target(copy_fonts ALL
-    COMMAND ${CMAKE_COMMAND} -E copy_directory
-            ${CMAKE_SOURCE_DIR}/src/fonts
-            $<TARGET_FILE_DIR:App>/fonts
-)
-
-add_dependencies(App copy_fonts)
-
 target_include_directories(App PRIVATE src)
 
-target_link_libraries(App PRIVATE glfw webgpu glfw3webgpu imgui Freetype::Freetype)
+target_link_libraries(App PRIVATE glfw webgpu glfw3webgpu imgui)
 
-# For Emscripten, embed the fonts
-if (EMSCRIPTEN)
-    target_link_options(App PRIVATE
-        "SHELL:--preload-file ${CMAKE_CURRENT_SOURCE_DIR}/fonts@/fonts"
-    )
-endif()
 
 target_copy_webgpu_binaries(App)
 

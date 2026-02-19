@@ -26,8 +26,6 @@
 #include "physics/Rigidbody.hpp"
 #include "math/Vec2.hpp"
 
-#include "core/TextRenderer.hpp"
-
 #include <array>
 #include <cstdint>
 #include <memory>

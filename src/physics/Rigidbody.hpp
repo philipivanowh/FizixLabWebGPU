@@ -57,8 +57,10 @@ namespace physics
 		void UpdateForces(float deltaMs);
 		void BeginFrameForces();
 		void AccumulateNormalImpulse(const math::Vec2 &normalImpulse);
+		void AccumulateFrictionImpulse(const math::Vec2 &frictionImpulse);
 		void FinalizeForces(float deltaMs);
 		math::Vec2 GetNormalForce() const;
+		math::Vec2 GetFrictionForce() const;
 		const std::vector<ForceInfo> &GetForcesForDisplay() const;
 		void ClearForces();
 
@@ -85,8 +87,14 @@ namespace physics
 		float invMass = 0.0f;
 		float staticFriction = 0.0f;
 		float kineticFriction = 0.1f;
+		
+		//Normal
 		math::Vec2 normalImpulseAccum = math::Vec2();
 		math::Vec2 normalForce = math::Vec2();
+		//Friction
+		math::Vec2 frictionImpulseAccum = math::Vec2();
+		math::Vec2 frictionForce = math::Vec2();
+
 		math::Vec2 dragForce = math::Vec2();
 		std::vector<std::unique_ptr<ForceGenerator>> forceGenerators;
 		mutable bool transformUpdateRequired = true;

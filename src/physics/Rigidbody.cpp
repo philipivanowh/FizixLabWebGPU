@@ -128,8 +128,12 @@ void Rigidbody::AddForceGenerator(std::unique_ptr<ForceGenerator> generator) {
 
 void Rigidbody::BeginFrameForces() {
 	ClearForces();
+	//Normal
 	normalImpulseAccum = math::Vec2();
 	normalForce = math::Vec2();
+	//Friction
+	frictionImpulseAccum = math::Vec2();
+	frictionForce = math::Vec2();
 	netForce = math::Vec2();
 }
 
@@ -137,18 +141,33 @@ void Rigidbody::AccumulateNormalImpulse(const math::Vec2& normalImpulse) {
 	normalImpulseAccum = normalImpulse;
 }
 
+void Rigidbody::AccumulateFrictionImpulse(const math::Vec2& frictionImpulse){
+	frictionImpulseAccum = frictionImpulse;
+}
+
 void Rigidbody::FinalizeForces(float deltaMs) {
 	if (deltaMs > 0.0f) {
 		normalForce = normalImpulseAccum / deltaMs;
+		frictionForce = frictionImpulseAccum / deltaMs;
 	} else {
 		normalForce = math::Vec2();
+		frictionForce = math::Vec2();
 	}
 	if (!math::NearlyEqualVec(normalForce, math::Vec2(0.0f, 0.0f))) {
 		AddDisplayForce(normalForce, ForceType::Normal);
 	}
+		//We dont need to show micro friction
+		if (!math::NearlyEqualVec(frictionForce, math::Vec2(10.0f, 10.0f))) {
+			if(linearVel.Length() > 2.0f)
+			AddDisplayForce(frictionForce, ForceType::Frictional);
+	}
 }
 
 math::Vec2 Rigidbody::GetNormalForce() const {
+	return normalForce;
+}
+
+math::Vec2 Rigidbody::GetFrictionForce() const {
 	return normalForce;
 }
 

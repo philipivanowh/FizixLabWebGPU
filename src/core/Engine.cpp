@@ -87,6 +87,53 @@ static void DrawDxDyTooltipAtMouseCorner(float dx, float dy, float dist)
     dl->AddText(p, fg, buf);
 }
 
+static void DrawCurrentPositionOfMouse(float x,float y){
+    
+    ImGuiIO& io = ImGui::GetIO();
+
+    // Mouse position in screen space
+    ImVec2 m = io.MousePos;
+
+    char buf[128];
+    // 3-line text inside one tooltip box (keeps measurement compact)
+    // If you want integers instead: change %.1f to %d with casts.
+    snprintf(buf, sizeof(buf), "x: %.1f\ny: %.1f\n", x, y);
+
+    // Measure multi-line size
+    ImVec2 ts = ImGui::CalcTextSize(buf, nullptr, false, -1.0f);
+
+    const float pad = 10.0f;
+    ImVec2 p(m.x + pad, m.y + pad);
+
+    const float sw = io.DisplaySize.x;
+    const float sh = io.DisplaySize.y;
+
+    // Flip horizontally if off right edge
+    if (p.x + ts.x > sw) p.x = m.x - ts.x - pad;
+
+    // Flip vertically if off bottom edge
+    if (p.y + ts.y > sh) p.y = m.y - ts.y - pad;
+
+    // Clamp to stay on-screen
+    if (p.x < 0) p.x = 0;
+    if (p.y < 0) p.y = 0;
+    if (p.x + ts.x > sw) p.x = sw - ts.x;
+    if (p.y + ts.y > sh) p.y = sh - ts.y;
+
+    ImDrawList* dl = ImGui::GetForegroundDrawList();
+    ImU32 bg = IM_COL32(0, 0, 0, 200);
+    ImU32 fg = IM_COL32(255, 255, 255, 255);
+
+    const float boxPadX = 6.0f;
+    const float boxPadY = 5.0f;
+
+    ImVec2 boxMin(p.x - boxPadX, p.y - boxPadY);
+    ImVec2 boxMax(p.x + ts.x + boxPadX, p.y + ts.y + boxPadY);
+
+    dl->AddRectFilled(boxMin, boxMax, bg, 5.0f);
+    dl->AddText(p, fg, buf);
+}
+
 bool Engine::Initialize()
 {
     if (!renderer.Initialize())
@@ -267,6 +314,8 @@ void Engine::Render()
 
         DrawDxDyTooltipAtMouseCorner(dx, dy, dist);
     }
+
+    DrawCurrentPositionOfMouse(mouseWorld.x, mouseWorld.y);
 
     uiManager.EndImGuiFrame(renderer);
 
