@@ -3,6 +3,37 @@
 #include "core/Renderer.hpp"
 #include "common/settings.hpp"
 
+WorldSnapshot World::CaptureSnapshot() const
+{
+    WorldSnapshot snap;
+    snap.bodies.reserve(objects.size());
+    for (const auto& obj : objects)
+    {
+        snap.bodies.push_back({
+            obj->pos,
+            obj->linearVel,
+            obj->linearAcc,
+            obj->rotation,
+            obj->angularVel
+        });
+    }
+    return snap;
+}
+
+void World::RestoreSnapshot(const WorldSnapshot& snap)
+{
+    // Body count must match — don't rewind across spawns/deletions
+    const size_t n = std::min(snap.bodies.size(), objects.size());
+    for (size_t i = 0; i < n; i++)
+    {
+        objects[i]->pos        = snap.bodies[i].pos;
+        objects[i]->linearVel  = snap.bodies[i].linearVel;
+        objects[i]->linearAcc  = snap.bodies[i].linearAcc;
+        objects[i]->rotation   = snap.bodies[i].rotation;
+        objects[i]->angularVel = snap.bodies[i].angularVel;
+    }
+}
+
 int World::ClampIterations(int value)
 {
 	if (value < SimulationConstants::MIN_PHYSICS_ITERATIONS)

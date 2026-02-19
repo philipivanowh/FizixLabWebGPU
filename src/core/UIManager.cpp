@@ -4,7 +4,6 @@
 #include <backends/imgui_impl_glfw.h>
 #include <iterator>
 
-
 namespace
 {
     ImVec4 ToImGuiColor(const std::array<float, 4> &color)
@@ -74,15 +73,97 @@ void UIManager::RenderSimulationControlsWindow(std::size_t bodyCount, Settings &
     ImGui::Text("Bodies: %zu", bodyCount);
     ImGuiIO &io = ImGui::GetIO();
     ImGui::Text("Application average %.3f ms/frame (%.1f FPS)", 1000.0f / io.Framerate, io.Framerate);
+
+    ImGui::Separator();
+
+    // ── Time Control ──────────────────────────────────────────
+    ImGui::Text("Time Control");
+
+    if (ImGui::Button(settings.recording ? "⏹ Stop Recording" : "⏺ Start Recording"))
+    {
+        settings.recording = !settings.recording;
+        if (!settings.recording)
+            Engine::GetRecorder().Clear(); // optional: clear on stop
+    }
+
+    ImGui::SameLine();
+
+    // Show what interval means in plain terms
+    const float fps = ImGui::GetIO().Framerate;
+    const float secondsOfRewind = (Engine::GetRecorder().HistorySize() * settings.recordInterval) / fps;
+
+    ImGui::SliderInt("Record Interval", &settings.recordInterval, 1, 10);
+
+    // Helper text so the user understands the tradeoff
+    if (settings.recordInterval == 1)
+        ImGui::TextColored(ImVec4(1.0f, 0.8f, 0.0f, 1.0f),
+                           "Full detail — high memory use");
+    else if (settings.recordInterval <= 3)
+        ImGui::TextColored(ImVec4(0.5f, 1.0f, 0.5f, 1.0f),
+                           "Balanced");
+    else
+        ImGui::TextColored(ImVec4(0.7f, 0.7f, 0.7f, 1.0f),
+                           "Low detail — longer rewind window");
+
+    // Live stats
+    ImGui::Text("Captured frames : %zu", Engine::GetRecorder().HistorySize());
+    ImGui::Text("Rewind window   : %.1fs", secondsOfRewind);
+    
+
+        // Show history size so user knows something is being captured
+        if (settings.recording)
+            ImGui::TextColored(ImVec4(1, 0.3f, 0.3f, 1), "Recording... (%zu frames)",
+                               Engine::GetRecorder().HistorySize());
+
+    // Only show rewind button if there's something to rewind
+    if (Engine::GetRecorder().HasHistory())
+    {
+        ImGui::Button("◀◀ Rewind (hold)");
+        settings.rewinding = ImGui::IsItemActive();
+    }
+    else
+    {
+        ImGui::TextDisabled("◀◀ Rewind (no history)");
+        settings.rewinding = false;
+    }
+
+    ImGui::SameLine();
+    // Pause / Resume button
+    if (ImGui::Button(settings.paused ? "Resume" : "Pause"))
+        settings.paused = !settings.paused;
+
+    ImGui::SameLine();
+
+    // Step one frame forward while paused
+    if (ImGui::Button("Step") && settings.paused)
+        settings.stepOneFrame = true; // consumed below
+
+    // Speed slider  0.01x ──────────────── 3x
+    ImGui::SliderFloat("Speed", &settings.timeScale, 0.01f, 3.0f, "%.2fx");
+
+    // Preset buttons for common speeds
+    if (ImGui::Button("0.1x"))
+        settings.timeScale = 0.1f;
+    ImGui::SameLine();
+    if (ImGui::Button("0.25x"))
+        settings.timeScale = 0.25f;
+    ImGui::SameLine();
+    if (ImGui::Button("0.5x"))
+        settings.timeScale = 0.5f;
+    ImGui::SameLine();
+    if (ImGui::Button("1x"))
+        settings.timeScale = 1.0f;
+    ImGui::SameLine();
+    if (ImGui::Button("2x"))
+        settings.timeScale = 2.0f;
+    // ─────────────────────────────────────────────────────────
+
+    ImGui::Separator();
+
     const char *dragType[] = {"PerciseDrag", "PhysicsDrag"};
     int dragIndex = static_cast<int>(settings.dragMode);
     ImGui::Combo("Drag Mode:", &dragIndex, dragType, std::size(dragType));
     settings.dragMode = static_cast<DragMode>(dragIndex);
-
-    // Button styling
-    // ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.8f, 0.2f, 0.2f, 1.0f));
-    // ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(1.0f, 0.3f, 0.3f, 1.0f));
-    // ImGui::PushStyleColor(ImGuiCol_ButtonActive, ImVec4(0.6f, 0.1f, 0.1f, 1.0f));
 
     if (ImGui::Button("Clear Bodies"))
     {

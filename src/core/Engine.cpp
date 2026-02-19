@@ -10,7 +10,7 @@
 
 #include <array>
 #include <memory>
-#include <cmath>    // sqrtf
+#include <cmath> // sqrtf
 #include <string>
 
 using math::PI;
@@ -18,8 +18,12 @@ using math::Vec2;
 using physics::ForceType;
 using physics::RigidbodyType;
 
+Recorder Engine::recorder;
+int Engine::recordFrameCounter = 0;
+int Engine::spawnNudgeFrames = 0;
+
 Renderer Engine::renderer;
-//TextRenderer Engine::textRenderer;
+// TextRenderer Engine::textRenderer;
 World Engine::world;
 Settings Engine::settings;
 UIManager Engine::uiManager;
@@ -30,7 +34,7 @@ bool Engine::mouseDownRight = false;
 math::Vec2 Engine::mouseInitialPos;
 math::Vec2 Engine::mouseDeltaScale;
 
-static float DistanceVec2(const Vec2& a, const Vec2& b)
+static float DistanceVec2(const Vec2 &a, const Vec2 &b)
 {
     const float dx = b.x - a.x;
     const float dy = b.y - a.y;
@@ -42,7 +46,7 @@ static float DistanceVec2(const Vec2& a, const Vec2& b)
 // ============================================================
 static void DrawDxDyTooltipAtMouseCorner(float dx, float dy, float dist)
 {
-    ImGuiIO& io = ImGui::GetIO();
+    ImGuiIO &io = ImGui::GetIO();
 
     // Mouse position in screen space
     ImVec2 m = io.MousePos;
@@ -62,18 +66,24 @@ static void DrawDxDyTooltipAtMouseCorner(float dx, float dy, float dist)
     const float sh = io.DisplaySize.y;
 
     // Flip horizontally if off right edge
-    if (p.x + ts.x > sw) p.x = m.x - ts.x - pad;
+    if (p.x + ts.x > sw)
+        p.x = m.x - ts.x - pad;
 
     // Flip vertically if off bottom edge
-    if (p.y + ts.y > sh) p.y = m.y - ts.y - pad;
+    if (p.y + ts.y > sh)
+        p.y = m.y - ts.y - pad;
 
     // Clamp to stay on-screen
-    if (p.x < 0) p.x = 0;
-    if (p.y < 0) p.y = 0;
-    if (p.x + ts.x > sw) p.x = sw - ts.x;
-    if (p.y + ts.y > sh) p.y = sh - ts.y;
+    if (p.x < 0)
+        p.x = 0;
+    if (p.y < 0)
+        p.y = 0;
+    if (p.x + ts.x > sw)
+        p.x = sw - ts.x;
+    if (p.y + ts.y > sh)
+        p.y = sh - ts.y;
 
-    ImDrawList* dl = ImGui::GetForegroundDrawList();
+    ImDrawList *dl = ImGui::GetForegroundDrawList();
     ImU32 bg = IM_COL32(0, 0, 0, 200);
     ImU32 fg = IM_COL32(255, 255, 255, 255);
 
@@ -87,9 +97,10 @@ static void DrawDxDyTooltipAtMouseCorner(float dx, float dy, float dist)
     dl->AddText(p, fg, buf);
 }
 
-static void DrawCurrentPositionOfMouse(float x,float y){
-    
-    ImGuiIO& io = ImGui::GetIO();
+static void DrawCurrentPositionOfMouse(float x, float y)
+{
+
+    ImGuiIO &io = ImGui::GetIO();
 
     // Mouse position in screen space
     ImVec2 m = io.MousePos;
@@ -109,18 +120,24 @@ static void DrawCurrentPositionOfMouse(float x,float y){
     const float sh = io.DisplaySize.y;
 
     // Flip horizontally if off right edge
-    if (p.x + ts.x > sw) p.x = m.x - ts.x - pad;
+    if (p.x + ts.x > sw)
+        p.x = m.x - ts.x - pad;
 
     // Flip vertically if off bottom edge
-    if (p.y + ts.y > sh) p.y = m.y - ts.y - pad;
+    if (p.y + ts.y > sh)
+        p.y = m.y - ts.y - pad;
 
     // Clamp to stay on-screen
-    if (p.x < 0) p.x = 0;
-    if (p.y < 0) p.y = 0;
-    if (p.x + ts.x > sw) p.x = sw - ts.x;
-    if (p.y + ts.y > sh) p.y = sh - ts.y;
+    if (p.x < 0)
+        p.x = 0;
+    if (p.y < 0)
+        p.y = 0;
+    if (p.x + ts.x > sw)
+        p.x = sw - ts.x;
+    if (p.y + ts.y > sh)
+        p.y = sh - ts.y;
 
-    ImDrawList* dl = ImGui::GetForegroundDrawList();
+    ImDrawList *dl = ImGui::GetForegroundDrawList();
     ImU32 bg = IM_COL32(0, 0, 0, 200);
     ImU32 fg = IM_COL32(255, 255, 255, 255);
 
@@ -209,6 +226,9 @@ void Engine::CheckSpawning()
                 req.angle,
                 req.color));
         }
+
+        spawnNudgeFrames = 20; // run 20 frames of physics after spawn
+        recorder.Clear();
     }
 }
 
@@ -281,8 +301,54 @@ void Engine::Update(float deltaMs, int iterations)
         }
     }
 
-    world.Update(deltaMs, iterations);
-    CheckSpawning();
+    if (settings.rewinding)
+    {
+        // ── REWIND MODE ──────────────────────────────────────────
+        // Speed of rewind is controlled by timeScale too
+        // We pop one snapshot per frame (or more for fast rewind)
+        const int rewindSteps = std::max(1, static_cast<int>(settings.timeScale));
+        WorldSnapshot snap;
+        for (int i = 0; i < rewindSteps; i++)
+        {
+            if (!recorder.Rewind(snap))
+            {
+                settings.rewinding = false; // hit the beginning
+                break;
+            }
+        }
+        world.RestoreSnapshot(snap);
+        // Do NOT call world.Update() — physics is frozen
+    }
+    else
+    {
+        if (settings.recording)
+        {
+            // ── NORMAL / PAUSED / STEP MODE ──────────────────────────
+            if (++recordFrameCounter % settings.recordInterval == 0)
+                recorder.Record(world.CaptureSnapshot());
+        }
+
+        float scaledDelta = 0.0f;
+
+        if (spawnNudgeFrames > 0)
+        {
+            // Force physics forward even if paused
+            scaledDelta = 16.67f;
+            spawnNudgeFrames--;
+        }
+        else if (settings.stepOneFrame)
+        {
+            scaledDelta = 16.67f * settings.timeScale;
+            settings.stepOneFrame = false;
+        }
+        else if (!settings.paused)
+        {
+            scaledDelta = deltaMs * settings.timeScale;
+        }
+
+        world.Update(scaledDelta, iterations);
+        CheckSpawning();
+    }
 }
 
 void Engine::Render()

@@ -3,6 +3,7 @@
 #include "collision/CollisionPipeline.hpp"
 #include "collision/CollisionSolver.hpp"
 #include "physics/Rigidbody.hpp"
+#include "core/Snapshot.hpp"
 
 #include <cstddef>
 #include <memory>
@@ -10,17 +11,20 @@
 
 class Renderer;
 
-
-class World {
+class World
+{
 public:
+	WorldSnapshot CaptureSnapshot() const;
+	void RestoreSnapshot(const WorldSnapshot &snap);
+	
 	void Add(std::unique_ptr<physics::Rigidbody> body);
 	void Update(float deltaMs, int iterations);
-	void Draw(Renderer& renderer) const;
+	void Draw(Renderer &renderer) const;
 
 	size_t RigidbodyCount() const;
 	void ClearObjects();
-	
-	physics::Rigidbody* PickBody(const math::Vec2& p);
+
+	physics::Rigidbody *PickBody(const math::Vec2 &p);
 
 private:
 	int ClampIterations(int value);
@@ -31,5 +35,4 @@ private:
 	CollisionSolver collisionSolver;
 
 	float viewBottom = -200.0f;
-
 };

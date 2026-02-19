@@ -6,6 +6,7 @@
 #include "physics/Rigidbody.hpp"
 #include "common/settings.hpp"
 #include "core/Engine.hpp"
+#include "core/Recorder.hpp"
 
 #include <array>
 #include <cstddef>
