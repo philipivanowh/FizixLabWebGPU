@@ -240,7 +240,7 @@ void Engine::Update(float deltaMs, int iterations)
             scaledDelta = deltaMs * settings.timeScale;
         }
 
-        world.Update(scaledDelta, iterations);
+        world.Update(scaledDelta, iterations,settings);
         CheckSpawning();
     }
 }
@@ -380,7 +380,7 @@ void Engine::InclineProblemScene()
 
     world.Add(std::make_unique<shape::Incline>(
         Vec2(800, 400), Vec2(0, 0), Vec2(0, 0),
-        600, 20, true, warmRed, 0.1f, 0.1f));
+        600, 20, true, warmRed, 0.5f, 0.1f));
 
     world.Add(std::make_unique<shape::Canon>(
         Vec2(520, 280), 30.0f, cannonBlue));

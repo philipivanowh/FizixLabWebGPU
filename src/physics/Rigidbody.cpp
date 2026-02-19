@@ -24,9 +24,9 @@ namespace physics {
 		public:
 			void Apply(Rigidbody& body,float ) override
 			{
-				//std::cout<<body.dragForce.x<<std::endl;
+				
 				body.netForce += body.dragForce;
-				//body.AddDisplayForce(gravityForce, ForceType::Apply);
+				
 			}
 	};
 
@@ -84,7 +84,7 @@ void Rigidbody::Update(float deltaMs, int iterations) {
 		linearVel = linearVel + (linearAcc * dtSeconds) * 0.5;
 		pos = pos + (linearVel * dtSeconds);
 		linearVel = linearVel + (linearAcc * dtSeconds) * 0.5;
-		rotation = rotation + angularVel * dtSeconds;
+		rotation = (rotation + angularVel * dtSeconds)%360.0f;
 
 		netForce = math::Vec2();
 		dragForce = math::Vec2();
@@ -100,7 +100,6 @@ void Rigidbody::Translate(const math::Vec2& amount) {
 }
 
 void Rigidbody::TranslateTo(const math::Vec2& position) {
-	std::cout<<position.x<<std::endl;
 	pos = position;
 	transformUpdateRequired = true;
 	aabbUpdateRequired = true;
@@ -166,9 +165,9 @@ void Rigidbody::FinalizeForces(float deltaMs)
     // Only show friction once it crosses a meaningful magnitude threshold.
     // This filters out sub-pixel solver noise while still showing real friction.
     // Newtons — tune to taste
-    const float frictionMag = frictionForce.Length();
+    const float frictionMag = frictionForce.Length() * invMass;
 
-    if (frictionMag > PhysicsConstants::FRICTION_DISPLAY_THRESHOLD && linearVel.Length() > 1.10f)
+    if (frictionMag >= PhysicsConstants::FRICTION_DISPLAY_THRESHOLD)
         AddDisplayForce(frictionForce, ForceType::Frictional);
 }
 

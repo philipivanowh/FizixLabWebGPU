@@ -5,6 +5,8 @@
 #include "physics/Rigidbody.hpp"
 #include "core/Snapshot.hpp"
 
+#include "common/settings.hpp"
+
 #include <cstddef>
 #include <memory>
 #include <vector>
@@ -18,7 +20,7 @@ public:
 	void RestoreSnapshot(const WorldSnapshot &snap);
 	
 	void Add(std::unique_ptr<physics::Rigidbody> body);
-	void Update(float deltaMs, int iterations);
+	void Update(float deltaMs, int iterations, Settings &settings);
 	void Draw(Renderer &renderer) const;
 
 	size_t RigidbodyCount() const;

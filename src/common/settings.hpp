@@ -26,7 +26,7 @@ namespace PhysicsConstants
     inline constexpr float MAX_DENSITY = 21.4f;
     inline constexpr float DEFAULT_RESTITUTION = 0.4f;
     inline constexpr float MAX_PENETRATION_CORRECTION = 5.0f;
-    constexpr float FRICTION_DISPLAY_THRESHOLD = 0.01f;
+    constexpr float FRICTION_DISPLAY_THRESHOLD = 0.002f;
 }
 
 namespace VisualizationConstants

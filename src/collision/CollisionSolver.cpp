@@ -196,9 +196,12 @@ void CollisionSolver::ResolveWithRotationAndFriction(const collision::ContactMan
 		bodyA.angularVel += -bodyA.invInertia * math::Vec2::Cross(ra, impulseFriction);
 		bodyB.linearVel += impulseFriction * bodyB.invMass;
 		bodyB.angularVel += bodyB.invInertia * math::Vec2::Cross(rb, impulseFriction);
-
+		std::cout << "FrictionA" << impulseFriction.Length() * bodyA.invMass << std::endl;
+		
+		std::cout << "FrictionB" << impulseFriction.Length() * bodyB.invMass << std::endl;
 			if (bodyA.bodyType != physics::RigidbodyType::Static)
 		{
+			
 			bodyA.AccumulateFrictionImpulse(impulseFriction.Negate());
 		}
 		if (bodyB.bodyType != physics::RigidbodyType::Static)
