@@ -10,7 +10,7 @@
 
 #include <array>
 #include <memory>
-#include <cmath> // sqrtf
+#include <cmath>
 #include <string>
 
 using math::PI;
@@ -18,155 +18,41 @@ using math::Vec2;
 using physics::ForceType;
 using physics::RigidbodyType;
 
-Recorder Engine::recorder;
-int Engine::recordFrameCounter = 0;
-int Engine::spawnNudgeFrames = 0;
+// ── Static members ────────────────────────────────────────────────
+Recorder    Engine::recorder;
+int         Engine::recordFrameCounter = 0;
+int         Engine::spawnNudgeFrames   = 0;
+Renderer    Engine::renderer;
+World       Engine::world;
+Settings    Engine::settings;
+UIManager   Engine::uiManager;
+physics::Rigidbody* Engine::draggedBody = nullptr;
+physics::Rigidbody* Engine::selectedBody = nullptr;
+math::Vec2  Engine::mouseWorld{};
+math::Vec2  Engine::mouseScreen{};
+bool        Engine::mouseDownLeft  = false;
+bool        Engine::mouseDownRight = false;
+math::Vec2  Engine::mouseInitialPos;
+math::Vec2  Engine::mouseInitialScreen;
+math::Vec2  Engine::mouseDeltaScale;
 
-Renderer Engine::renderer;
-// TextRenderer Engine::textRenderer;
-World Engine::world;
-Settings Engine::settings;
-UIManager Engine::uiManager;
-physics::Rigidbody *Engine::draggedBody = nullptr;
-math::Vec2 Engine::mouseWorld{};
-bool Engine::mouseDownLeft = false;
-bool Engine::mouseDownRight = false;
-math::Vec2 Engine::mouseInitialPos;
-math::Vec2 Engine::mouseDeltaScale;
+// Height of the top timeline bar — must match UIManager
+static constexpr float kTopBarHeight = 68.0f;
 
-static float DistanceVec2(const Vec2 &a, const Vec2 &b)
-{
-    const float dx = b.x - a.x;
-    const float dy = b.y - a.y;
-    return std::sqrt(dx * dx + dy * dy);
-}
+// ================================================================
+// TOOLTIP HELPERS
+// ================================================================
 
-// ============================================================
-// Draw dx/dy tooltip at mouse (auto-flip at screen edges)
-// ============================================================
-static void DrawDxDyTooltipAtMouseCorner(float dx, float dy, float dist)
-{
-    ImGuiIO &io = ImGui::GetIO();
-
-    // Mouse position in screen space
-    ImVec2 m = io.MousePos;
-
-    char buf[128];
-    // 3-line text inside one tooltip box (keeps measurement compact)
-    // If you want integers instead: change %.1f to %d with casts.
-    snprintf(buf, sizeof(buf), "dx: %.1f\ndy: %.1f\ndist: %.1f", dx, dy, dist);
-
-    // Measure multi-line size
-    ImVec2 ts = ImGui::CalcTextSize(buf, nullptr, false, -1.0f);
-
-    const float pad = 10.0f;
-    ImVec2 p(m.x + pad, m.y + pad);
-
-    const float sw = io.DisplaySize.x;
-    const float sh = io.DisplaySize.y;
-
-    // Flip horizontally if off right edge
-    if (p.x + ts.x > sw)
-        p.x = m.x - ts.x - pad;
-
-    // Flip vertically if off bottom edge
-    if (p.y + ts.y > sh)
-        p.y = m.y - ts.y - pad;
-
-    // Clamp to stay on-screen
-    if (p.x < 0)
-        p.x = 0;
-    if (p.y < 0)
-        p.y = 0;
-    if (p.x + ts.x > sw)
-        p.x = sw - ts.x;
-    if (p.y + ts.y > sh)
-        p.y = sh - ts.y;
-
-    ImDrawList *dl = ImGui::GetForegroundDrawList();
-    ImU32 bg = IM_COL32(0, 0, 0, 200);
-    ImU32 fg = IM_COL32(255, 255, 255, 255);
-
-    const float boxPadX = 6.0f;
-    const float boxPadY = 5.0f;
-
-    ImVec2 boxMin(p.x - boxPadX, p.y - boxPadY);
-    ImVec2 boxMax(p.x + ts.x + boxPadX, p.y + ts.y + boxPadY);
-
-    dl->AddRectFilled(boxMin, boxMax, bg, 5.0f);
-    dl->AddText(p, fg, buf);
-}
-
-static void DrawCurrentPositionOfMouse(float x, float y)
-{
-
-    ImGuiIO &io = ImGui::GetIO();
-
-    // Mouse position in screen space
-    ImVec2 m = io.MousePos;
-
-    char buf[128];
-    // 3-line text inside one tooltip box (keeps measurement compact)
-    // If you want integers instead: change %.1f to %d with casts.
-    snprintf(buf, sizeof(buf), "x: %.1f\ny: %.1f\n", x, y);
-
-    // Measure multi-line size
-    ImVec2 ts = ImGui::CalcTextSize(buf, nullptr, false, -1.0f);
-
-    const float pad = 10.0f;
-    ImVec2 p(m.x + pad, m.y + pad);
-
-    const float sw = io.DisplaySize.x;
-    const float sh = io.DisplaySize.y;
-
-    // Flip horizontally if off right edge
-    if (p.x + ts.x > sw)
-        p.x = m.x - ts.x - pad;
-
-    // Flip vertically if off bottom edge
-    if (p.y + ts.y > sh)
-        p.y = m.y - ts.y - pad;
-
-    // Clamp to stay on-screen
-    if (p.x < 0)
-        p.x = 0;
-    if (p.y < 0)
-        p.y = 0;
-    if (p.x + ts.x > sw)
-        p.x = sw - ts.x;
-    if (p.y + ts.y > sh)
-        p.y = sh - ts.y;
-
-    ImDrawList *dl = ImGui::GetForegroundDrawList();
-    ImU32 bg = IM_COL32(0, 0, 0, 200);
-    ImU32 fg = IM_COL32(255, 255, 255, 255);
-
-    const float boxPadX = 6.0f;
-    const float boxPadY = 5.0f;
-
-    ImVec2 boxMin(p.x - boxPadX, p.y - boxPadY);
-    ImVec2 boxMax(p.x + ts.x + boxPadX, p.y + ts.y + boxPadY);
-
-    dl->AddRectFilled(boxMin, boxMax, bg, 5.0f);
-    dl->AddText(p, fg, buf);
-}
-
+// ================================================================
+// INIT / SHUTDOWN
+// ================================================================
 bool Engine::Initialize()
 {
     if (!renderer.Initialize())
-    {
         return false;
-    }
-
-    // if(!textRenderer.Initialize_fonts(renderer.GetDevice()))
-    // {
-    //     return false;
-    // }
 
     uiManager.InitializeImGui(renderer);
     AddDefaultObjects();
-    // ComparisonScene();
-    // InclineProblemScene();
     return true;
 }
 
@@ -176,110 +62,108 @@ void Engine::Shutdown()
     uiManager.TerminateImGui();
 }
 
+// ================================================================
+// SPAWNING
+// ================================================================
 void Engine::CheckSpawning()
 {
     SpawnSettings req;
-    if (uiManager.ConsumeSpawnRequest(req))
-    {
-        if (req.shapeType == shape::ShapeType::Box)
-        {
-            world.Add(std::make_unique<shape::Box>(
-                req.position,
-                req.velocity,
-                math::Vec2(0.0f, 0.0f),
-                req.boxWidth,
-                req.boxHeight,
-                req.color,
-                req.mass,
-                req.restitution,
-                req.bodyType));
-        }
-        else if (req.shapeType == shape::ShapeType::Ball)
-        {
-            world.Add(std::make_unique<shape::Ball>(
-                req.position,
-                req.velocity,
-                math::Vec2(0.0f, 0.0f),
-                req.radius,
-                req.color,
-                req.mass,
-                req.restitution,
-                req.bodyType));
-        }
-        else if (req.shapeType == shape::ShapeType::Incline)
-        {
-            world.Add(std::make_unique<shape::Incline>(
-                req.position,
-                req.velocity,
-                math::Vec2(0.0f, 0.0f),
-                req.base,
-                req.angle,
-                req.flip,
-                req.color,
-                req.staticFriction,
-                req.kineticFriction));
-        }
-        else if (req.shapeType == shape::ShapeType::Canon)
-        {
-            world.Add(std::make_unique<shape::Canon>(
-                req.position,
-                req.angle,
-                req.color));
-        }
+    if (!uiManager.ConsumeSpawnRequest(req))
+        return;
 
-        spawnNudgeFrames = 20; // run 20 frames of physics after spawn
-        recorder.Clear();
+    if (req.shapeType == shape::ShapeType::Box)
+    {
+        world.Add(std::make_unique<shape::Box>(
+            req.position, req.velocity, Vec2(0, 0),
+            req.boxWidth, req.boxHeight,
+            req.color, req.mass, req.restitution, req.bodyType));
     }
+    else if (req.shapeType == shape::ShapeType::Ball)
+    {
+        world.Add(std::make_unique<shape::Ball>(
+            req.position, req.velocity, Vec2(0, 0),
+            req.radius, req.color, req.mass, req.restitution, req.bodyType));
+    }
+    else if (req.shapeType == shape::ShapeType::Incline)
+    {
+        world.Add(std::make_unique<shape::Incline>(
+            req.position, req.velocity, Vec2(0, 0),
+            req.base, req.angle, req.flip,
+            req.color, req.staticFriction, req.kineticFriction));
+    }
+    else if (req.shapeType == shape::ShapeType::Canon)
+    {
+        world.Add(std::make_unique<shape::Canon>(
+            req.position, req.angle, req.color));
+    }
+
+    // Always nudge physics forward after a spawn so the object
+    // visibly appears even when paused / not recording
+    spawnNudgeFrames = 1;
+
+    // Rewind history is invalid now that body count changed
+    recorder.Clear();
+    settings.scrubIndex = -1;
 }
 
+// ================================================================
+// UPDATE
+// ================================================================
 void Engine::Update(float deltaMs, int iterations)
 {
-    GLFWwindow *window = renderer.GetWindow();
+    GLFWwindow* window = renderer.GetWindow();
 
+    // ── Mouse position ────────────────────────────────────────────
     double mx, my;
     glfwGetCursorPos(window, &mx, &my);
 
     int w, h;
     glfwGetFramebufferSize(window, &w, &h);
-    mouseWorld = Vec2(static_cast<float>(mx),
-                      static_cast<float>(h - my));
 
-    bool pressedLeft = glfwGetMouseButton(window, GLFW_MOUSE_BUTTON_LEFT) == GLFW_PRESS;
+    // World space (Y-up, framebuffer origin)
+    mouseWorld  = Vec2(static_cast<float>(mx), static_cast<float>(h - my));
+    // Raw screen space (Y-down) — passed directly to measurement overlay
+    mouseScreen = Vec2(static_cast<float>(mx), static_cast<float>(my));
+
+    // ── Mouse buttons ─────────────────────────────────────────────
+    bool pressedLeft  = glfwGetMouseButton(window, GLFW_MOUSE_BUTTON_LEFT)  == GLFW_PRESS;
     bool pressedRight = glfwGetMouseButton(window, GLFW_MOUSE_BUTTON_RIGHT) == GLFW_PRESS;
 
-    // Mouse down
-    if (pressedLeft && !mouseDownLeft)
+    // Block mouse interaction when cursor is inside the top bar
+    ImGuiIO& io = ImGui::GetIO();
+    const bool overUI = io.WantCaptureMouse;
+
+    if (pressedLeft && !mouseDownLeft && !overUI)
     {
         mouseDownLeft = true;
-        draggedBody = world.PickBody(mouseWorld);
-    }
+        draggedBody   = world.PickBody(mouseWorld);
 
-    if (pressedRight && !mouseDownRight)
+        selectedBody = draggedBody;
+    }
+    if (pressedRight && !mouseDownRight && !overUI)
     {
-        mouseDownRight = true;
-        mouseInitialPos = mouseWorld.Clone();
+        mouseDownRight    = true;
+        mouseInitialPos   = mouseWorld.Clone();
+        mouseInitialScreen = mouseScreen.Clone();
     }
 
-    // Mouse up
     if (!pressedLeft)
     {
         mouseDownLeft = false;
-        draggedBody = nullptr;
+        draggedBody   = nullptr;
     }
-
     if (!pressedRight)
     {
-        mouseDownRight = false;
-        mouseInitialPos = math::Vec2();
-        mouseDeltaScale = math::Vec2();
+        mouseDownRight     = false;
+        mouseInitialPos    = math::Vec2();
+        mouseInitialScreen = math::Vec2();
+        mouseDeltaScale    = math::Vec2();
     }
 
     if (mouseDownRight)
-    {
         mouseDeltaScale = mouseWorld - mouseInitialPos;
-    }
 
-    // Apply drag force
+    // ── Drag force ────────────────────────────────────────────────
     if (draggedBody && draggedBody->bodyType == RigidbodyType::Dynamic)
     {
         switch (settings.dragMode)
@@ -290,55 +174,65 @@ void Engine::Update(float deltaMs, int iterations)
         case DragMode::physicsDrag:
         {
             const float stiffness = 2000.0f;
-            // const float damping = 2.0f * std::sqrt(stiffness * draggedBody->mass);
-            const float damping = 5.0f * std::sqrt(stiffness * math::Clamp(draggedBody->mass, 20, 100) / 20);
+            const float damping   = 5.0f * std::sqrt(
+                stiffness * math::Clamp(draggedBody->mass, 20.f, 100.f) / 20.f);
 
             Vec2 delta = mouseWorld - draggedBody->pos;
-            draggedBody->dragForce = (delta * stiffness - draggedBody->linearVel * damping) * draggedBody->mass;
-            std::cout << draggedBody->dragForce.x << std::endl;
+            draggedBody->dragForce =
+                (delta * stiffness - draggedBody->linearVel * damping) * draggedBody->mass;
             break;
         }
         }
     }
 
+    // ── Physics / time control ────────────────────────────────────
     if (settings.rewinding)
     {
-        // ── REWIND MODE ──────────────────────────────────────────
-        // Speed of rewind is controlled by timeScale too
-        // We pop one snapshot per frame (or more for fast rewind)
-        const int rewindSteps = std::max(1, static_cast<int>(settings.timeScale));
+        // Hold-button rewind (pop from back)
+        const int steps = std::max(1, static_cast<int>(settings.timeScale));
         WorldSnapshot snap;
-        for (int i = 0; i < rewindSteps; i++)
+        for (int i = 0; i < steps; i++)
         {
             if (!recorder.Rewind(snap))
             {
-                settings.rewinding = false; // hit the beginning
+                settings.rewinding = false;
                 break;
             }
         }
         world.RestoreSnapshot(snap);
-        // Do NOT call world.Update() — physics is frozen
+        // Physics does NOT run during rewind
+    }
+    else if (settings.scrubIndex >= 0)
+    {
+        // Timeline scrubber — restore the chosen frame, freeze physics
+        const WorldSnapshot* frame =
+            recorder.GetFrame(static_cast<size_t>(settings.scrubIndex));
+        if (frame)
+            world.RestoreSnapshot(*frame);
     }
     else
     {
+        // ── LIVE MODE ─────────────────────────────────────────────
+
+        // Record a snapshot if recording is enabled
         if (settings.recording)
         {
-            // ── NORMAL / PAUSED / STEP MODE ──────────────────────────
             if (++recordFrameCounter % settings.recordInterval == 0)
                 recorder.Record(world.CaptureSnapshot());
         }
 
+        // Decide how much simulated time passes this frame
         float scaledDelta = 0.0f;
 
         if (spawnNudgeFrames > 0)
         {
-            // Force physics forward even if paused
+            // Force physics forward regardless of pause state
             scaledDelta = 16.67f;
             spawnNudgeFrames--;
         }
         else if (settings.stepOneFrame)
         {
-            scaledDelta = 16.67f * settings.timeScale;
+            scaledDelta           = 16.67f * settings.timeScale;
             settings.stepOneFrame = false;
         }
         else if (!settings.paused)
@@ -351,43 +245,36 @@ void Engine::Update(float deltaMs, int iterations)
     }
 }
 
+// ================================================================
+// RENDER
+// ================================================================
 void Engine::Render()
 {
     renderer.BeginFrame();
     world.Draw(renderer);
 
-    // Existing right-click rectangle (keep)
-    if (mouseDeltaScale.Length() != 0.0f && mouseDownRight)
-        renderer.DrawMeasuringRectangle(mouseInitialPos, mouseDeltaScale);
-
-    // ------------------------------------------------------------
-    // ImGui
-    // ------------------------------------------------------------
+    // ── ImGui ─────────────────────────────────────────────────────
     uiManager.BeginImGuiFrame();
 
-    // Main UI
-    uiManager.RenderMainControls(world.RigidbodyCount(), settings);
+    uiManager.RenderMainControls(world.RigidbodyCount(), settings, selectedBody);
     uiManager.RenderSpawner();
 
-    // ------------------------------------------------------------
-    // Measurement tooltip at mouse corner (auto flip)
-    // ------------------------------------------------------------
-    if (mouseDownRight)
-    {
-        const float dx = mouseWorld.x - mouseInitialPos.x;
-        const float dy = mouseWorld.y - mouseInitialPos.y;
-        const float dist = DistanceVec2(mouseInitialPos, mouseWorld);
+    // Measurement overlay — screen coords for drawing, world coords for label values
+    uiManager.RenderMeasurementOverlay(
+        mouseInitialScreen, mouseScreen,
+        mouseInitialPos,    mouseWorld,
+        mouseDownRight);
 
-        DrawDxDyTooltipAtMouseCorner(dx, dy, dist);
-    }
-
-    DrawCurrentPositionOfMouse(mouseWorld.x, mouseWorld.y);
+    // Mouse position badge
+    uiManager.RenderMousePositionOverlay(mouseWorld);
 
     uiManager.EndImGuiFrame(renderer);
-
     renderer.EndFrame();
 }
 
+// ================================================================
+// FRAME / CONTROL
+// ================================================================
 void Engine::RunFrame(float deltaMs, int iterations)
 {
     Update(deltaMs, iterations);
@@ -399,229 +286,113 @@ bool Engine::IsRunning()
     return renderer.IsRunning();
 }
 
-Renderer &Engine::GetRenderer()
+Renderer& Engine::GetRenderer()
 {
     return renderer;
 }
 
+// ================================================================
+// SCENES
+// ================================================================
 void Engine::AddDefaultObjects()
 {
     using physics::RigidbodyType;
     using shape::Ball;
     using shape::Box;
 
-    const std::array<float, 4> warmRed{0.070588f, 0.180392f, 0.219608f, 1.0f};
-    const std::array<float, 4> white{1.0f, 1.0f, 1.0f, 1.0f};
-    const std::array<float, 4> skyBlue{0.313726f, 0.627451f, 1.0f, 1.0f};
-    const std::array<float, 4> yellow{1.0f, 0.784314f, 0.078431f, 1.0f};
+    const std::array<float, 4> warmRed { 0.070588f, 0.180392f, 0.219608f, 1.0f };
+    const std::array<float, 4> white   { 1.0f, 1.0f, 1.0f, 1.0f };
+    const std::array<float, 4> skyBlue { 0.313726f, 0.627451f, 1.0f, 1.0f };
+    const std::array<float, 4> yellow  { 1.0f, 0.784314f, 0.078431f, 1.0f };
 
-    world.Add(std::make_unique<shape::Box>(
-        Vec2(700.0f, 200.0f),
-        Vec2(0.0f, 0.0f),
-        Vec2(0.0f, 0.0f),
-        1600.0f,
-        50.0f,
-        skyBlue,
-        100.0f,
-        0.0f,
-        RigidbodyType::Static));
+    world.Add(std::make_unique<Box>(
+        Vec2(700, 200), Vec2(0, 0), Vec2(0, 0),
+        1600, 50, skyBlue, 100, 0, RigidbodyType::Static));
 
-    world.Add(std::make_unique<shape::Box>(
-        Vec2(700.0f, 300.0f),
-        Vec2(0.0f, 1.0f),
-        Vec2(0.0f, 0.0f),
-        80.0f,
-        80.0f,
-        white,
-        1.0f,
-        0.5f,
-        RigidbodyType::Dynamic));
+    world.Add(std::make_unique<Box>(
+        Vec2(700, 300), Vec2(0, 1), Vec2(0, 0),
+        80, 80, white, 1, 0.5f, RigidbodyType::Dynamic));
 
-    auto slope = std::make_unique<shape::Box>(
-        Vec2(1000.0f, 400.0f),
-        Vec2(0.0f, 0.0f),
-        Vec2(0.0f, 0.0f),
-        500.0f,
-        40.0f,
-        skyBlue,
-        100.0f,
-        0.0f,
-        RigidbodyType::Static);
-    const float slopeAngle = -PI / 6.0f;
-    slope->RotateTo(slopeAngle);
+    auto slope = std::make_unique<Box>(
+        Vec2(1000, 400), Vec2(0, 0), Vec2(0, 0),
+        500, 40, skyBlue, 100, 0, RigidbodyType::Static);
+    slope->RotateTo(-PI / 6.0f);
     world.Add(std::move(slope));
 
-    world.Add(std::make_unique<shape::Box>(
-        Vec2(500.0f, 700.0f),
-        Vec2(5.0f, 1.0f),
-        Vec2(0.0f, 0.0f),
-        200.0f,
-        200.0f,
-        white,
-        2000.0f,
-        1.0f,
-        RigidbodyType::Dynamic));
+    world.Add(std::make_unique<Box>(
+        Vec2(500, 700), Vec2(5, 1), Vec2(0, 0),
+        200, 200, white, 2000, 1, RigidbodyType::Dynamic));
 
-    world.Add(std::make_unique<shape::Box>(
-        Vec2(896.0f, 670.0f),
-        Vec2(0.0f, 0.0f),
-        Vec2(0.0f, 0.0f),
-        70.0f,
-        70.0f,
-        yellow,
-        15.0f,
-        0.5f,
-        RigidbodyType::Dynamic));
+    world.Add(std::make_unique<Box>(
+        Vec2(896, 670), Vec2(0, 0), Vec2(0, 0),
+        70, 70, yellow, 15, 0.5f, RigidbodyType::Dynamic));
 
-    world.Add(std::make_unique<shape::Box>(
-        Vec2(906.0f, 570.0f),
-        Vec2(0.0f, 0.0f),
-        Vec2(0.0f, 0.0f),
-        70.0f,
-        70.0f,
-        warmRed,
-        50.0f,
-        0.5f,
-        RigidbodyType::Dynamic));
+    world.Add(std::make_unique<Box>(
+        Vec2(906, 570), Vec2(0, 0), Vec2(0, 0),
+        70, 70, warmRed, 50, 0.5f, RigidbodyType::Dynamic));
 
-    world.Add(std::make_unique<shape::Ball>(
-        Vec2(906.0f, 770.0f),
-        Vec2(0.0f, 0.0f),
-        Vec2(0.0f, 0.0f),
-        50.0f,
-        warmRed,
-        50.0f,
-        0.5f,
-        RigidbodyType::Dynamic));
+    world.Add(std::make_unique<Ball>(
+        Vec2(906, 770), Vec2(0, 0), Vec2(0, 0),
+        50, warmRed, 50, 0.5f, RigidbodyType::Dynamic));
 
-    world.Add(std::make_unique<shape::Ball>(
-        Vec2(500.0f, 700.0f),
-        Vec2(-1.0f, 0.0f),
-        Vec2(0.0f, 0.0f),
-        20.0f,
-        warmRed,
-        5.0f,
-        0.2f,
-        RigidbodyType::Dynamic));
+    world.Add(std::make_unique<Ball>(
+        Vec2(500, 700), Vec2(-1, 0), Vec2(0, 0),
+        20, warmRed, 5, 0.2f, RigidbodyType::Dynamic));
 }
 
 void Engine::ComparisonScene()
 {
-    const std::array<float, 4> warmRed{0.070588f, 0.180392f, 0.219608f, 1.0f};
-    const std::array<float, 4> white{1.0f, 1.0f, 1.0f, 1.0f};
-    const std::array<float, 4> skyBlue{0.313726f, 0.627451f, 1.0f, 1.0f};
-    const std::array<float, 4> yellow{1.0f, 0.784314f, 0.078431f, 1.0f};
+    const std::array<float, 4> warmRed { 0.070588f, 0.180392f, 0.219608f, 1.0f };
+    const std::array<float, 4> white   { 1.0f, 1.0f, 1.0f, 1.0f };
+    const std::array<float, 4> skyBlue { 0.313726f, 0.627451f, 1.0f, 1.0f };
+    const std::array<float, 4> yellow  { 1.0f, 0.784314f, 0.078431f, 1.0f };
 
     world.Add(std::make_unique<shape::Box>(
-        Vec2(700.0f, 400.0f),
-        Vec2(0.0f, 0.0f),
-        Vec2(0.0f, 0.0f),
-        1600.0f,
-        50.0f,
-        skyBlue,
-        2000.0f,
-        0.0f,
-        RigidbodyType::Static));
+        Vec2(700, 400), Vec2(0, 0), Vec2(0, 0),
+        1600, 50, skyBlue, 2000, 0, RigidbodyType::Static));
 
     world.Add(std::make_unique<shape::Box>(
-        Vec2(100.0f, 500.0f),
-        Vec2(0.0f, 0.0f),
-        Vec2(0.0f, 0.0f),
-        25.0f,
-        25.0f,
-        warmRed,
-        10.0f,
-        0.0f,
-        RigidbodyType::Dynamic));
+        Vec2(100, 500), Vec2(0, 0), Vec2(0, 0),
+        25, 25, warmRed, 10, 0, RigidbodyType::Dynamic));
 
     world.Add(std::make_unique<shape::Box>(
-        Vec2(150.0f, 500.0f),
-        Vec2(0.0f, 0.0f),
-        Vec2(0.0f, 0.0f),
-        25.0f,
-        25.0f,
-        white,
-        1000.0f,
-        0.0f,
-        RigidbodyType::Dynamic));
+        Vec2(150, 500), Vec2(0, 0), Vec2(0, 0),
+        25, 25, white, 1000, 0, RigidbodyType::Dynamic));
 
     world.Add(std::make_unique<shape::Box>(
-        Vec2(200.0f, 500.0f),
-        Vec2(0.0f, 0.0f),
-        Vec2(0.0f, 0.0f),
-        25.0f,
-        25.0f,
-        skyBlue,
-        100.0f,
-        0.0f,
-        RigidbodyType::Dynamic));
+        Vec2(200, 500), Vec2(0, 0), Vec2(0, 0),
+        25, 25, skyBlue, 100, 0, RigidbodyType::Dynamic));
 
     world.Add(std::make_unique<shape::Box>(
-        Vec2(250.0f, 500.0f),
-        Vec2(1.0f, 0.0f),
-        Vec2(0.0f, 0.0f),
-        25.0f,
-        25.0f,
-        yellow,
-        100.0f,
-        0.0f,
-        RigidbodyType::Dynamic));
+        Vec2(250, 500), Vec2(1, 0), Vec2(0, 0),
+        25, 25, yellow, 100, 0, RigidbodyType::Dynamic));
 }
 
 void Engine::InclineProblemScene()
 {
-    const std::array<float, 4> warmRed{0.705882f, 0.164706f, 0.400000f, 1.0f};
-    const std::array<float, 4> white{1.0f, 1.0f, 1.0f, 1.0f};
-    const std::array<float, 4> cannonBlue{0.352941f, 0.549020f, 0.862745f, 1.0f};
+    const std::array<float, 4> warmRed   { 0.705882f, 0.164706f, 0.400000f, 1.0f };
+    const std::array<float, 4> white     { 1.0f, 1.0f, 1.0f, 1.0f };
+    const std::array<float, 4> cannonBlue{ 0.352941f, 0.549020f, 0.862745f, 1.0f };
 
     world.Add(std::make_unique<shape::Box>(
-        Vec2(700.0f, 200.0f),
-        Vec2(0.0f, 0.0f),
-        Vec2(0.0f, 0.0f),
-        1600.0f,
-        50.0f,
-        warmRed,
-        100.0f,
-        0.0f,
-        RigidbodyType::Static));
+        Vec2(700, 200), Vec2(0, 0), Vec2(0, 0),
+        1600, 50, warmRed, 100, 0, RigidbodyType::Static));
 
     world.Add(std::make_unique<shape::Incline>(
-        Vec2(800.0f, 400.0f),
-        Vec2(0.0f, 0.0f),
-        Vec2(0.0f, 0.0f),
-        600.0f,
-        20.0f,
-        true,
-        warmRed,
-        0.1,
-        0.1));
+        Vec2(800, 400), Vec2(0, 0), Vec2(0, 0),
+        600, 20, true, warmRed, 0.1f, 0.1f));
 
     world.Add(std::make_unique<shape::Canon>(
-        Vec2(520.0f, 280.0f),
-        30.0f,
-        cannonBlue));
+        Vec2(520, 280), 30.0f, cannonBlue));
 
     world.Add(std::make_unique<shape::Box>(
-        Vec2(970.0f, 590.0f),
-        Vec2(0.0f, 0.0f),
-        Vec2(0.0f, 0.0f),
-        100.0f,
-        100.0f,
-        white,
-        100.0f,
-        1.0f,
-        RigidbodyType::Dynamic));
+        Vec2(970, 590), Vec2(0, 0), Vec2(0, 0),
+        100, 100, white, 100, 1, RigidbodyType::Dynamic));
 }
 
 void Engine::ClearBodies()
 {
     world.ClearObjects();
+    recorder.Clear();
+    settings.scrubIndex = -1;
 }
-
-// void Engine::SpawnRandomBox()
-// {
-// }
-
-// void Engine::SpawnRandomBall()
-// {
-// }

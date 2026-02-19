@@ -145,22 +145,31 @@ void Rigidbody::AccumulateFrictionImpulse(const math::Vec2& frictionImpulse){
 	frictionImpulseAccum = frictionImpulse;
 }
 
-void Rigidbody::FinalizeForces(float deltaMs) {
-	if (deltaMs > 0.0f) {
-		normalForce = normalImpulseAccum / deltaMs;
-		frictionForce = frictionImpulseAccum / deltaMs;
-	} else {
-		normalForce = math::Vec2();
-		frictionForce = math::Vec2();
-	}
-	if (!math::NearlyEqualVec(normalForce, math::Vec2(0.0f, 0.0f))) {
-		AddDisplayForce(normalForce, ForceType::Normal);
-	}
-		//We dont need to show micro friction
-		if (!math::NearlyEqualVec(frictionForce, math::Vec2(10.0f, 10.0f))) {
-			if(linearVel.Length() > 2.0f)
-			AddDisplayForce(frictionForce, ForceType::Frictional);
-	}
+
+void Rigidbody::FinalizeForces(float deltaMs)
+{
+    if (deltaMs > 0.0f)
+    {
+        normalForce  = normalImpulseAccum  / deltaMs;
+        frictionForce = frictionImpulseAccum / deltaMs;
+    }
+    else
+    {
+        normalForce   = math::Vec2();
+        frictionForce = math::Vec2();
+    }
+
+    // Always show normal force if it exists
+    if (!math::NearlyEqualVec(normalForce, math::Vec2(0.0f, 0.0f)))
+        AddDisplayForce(normalForce, ForceType::Normal);
+
+    // Only show friction once it crosses a meaningful magnitude threshold.
+    // This filters out sub-pixel solver noise while still showing real friction.
+    // Newtons — tune to taste
+    const float frictionMag = frictionForce.Length();
+
+    if (frictionMag > PhysicsConstants::FRICTION_DISPLAY_THRESHOLD && linearVel.Length() > 1.10f)
+        AddDisplayForce(frictionForce, ForceType::Frictional);
 }
 
 math::Vec2 Rigidbody::GetNormalForce() const {

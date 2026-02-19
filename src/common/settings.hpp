@@ -1,5 +1,11 @@
 #pragma once
 
+namespace WindowConstants
+{
+    constexpr int windowWidth = 1800;
+    constexpr int windowHeight = 1000;
+}
+
 namespace SimulationConstants
 {
     // Simulation settings
@@ -20,6 +26,7 @@ namespace PhysicsConstants
     inline constexpr float MAX_DENSITY = 21.4f;
     inline constexpr float DEFAULT_RESTITUTION = 0.4f;
     inline constexpr float MAX_PENETRATION_CORRECTION = 5.0f;
+    constexpr float FRICTION_DISPLAY_THRESHOLD = 0.01f;
 }
 
 namespace VisualizationConstants
@@ -51,5 +58,6 @@ public:
     bool     stepOneFrame = false;
      bool     rewinding    = false; 
      bool     recording    = false;
-     int      recordInterval = 3;
+     int      recordInterval = 1;
+     int scrubIndex = -1;
 };

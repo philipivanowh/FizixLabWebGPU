@@ -50,9 +50,14 @@ private:
 	static World world;
 	static UIManager uiManager;
 	static physics::Rigidbody *draggedBody;
+	static physics::Rigidbody* selectedBody;
 	static math::Vec2 mouseWorld;
 	static bool mouseDownLeft;
 	static bool mouseDownRight;
 	static math::Vec2 mouseInitialPos;
 	static math::Vec2 mouseDeltaScale;
+
+	static math::Vec2 mouseScreen;  
+	
+	static math::Vec2  mouseInitialScreen;
 };

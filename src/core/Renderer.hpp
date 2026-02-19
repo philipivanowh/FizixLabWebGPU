@@ -25,6 +25,7 @@
 #include "shape/Incline.hpp"
 #include "physics/Rigidbody.hpp"
 #include "math/Vec2.hpp"
+#include "common/settings.hpp"
 
 #include <array>
 #include <cstdint>
@@ -102,10 +103,10 @@ private:
 	size_t uniformBufferStride = 0;
 	size_t uniformBufferSize = 0;
 	size_t uniformBufferOffset = 0;
-	uint32_t windowWidth = 1470;
-	uint32_t windowHeight = 956;
-	uint32_t framebufferWidth = 1470;
-	uint32_t framebufferHeight = 956;
+	uint32_t windowWidth = WindowConstants::windowWidth;
+	uint32_t windowHeight = WindowConstants::windowHeight;
+	uint32_t framebufferWidth = WindowConstants::windowWidth;
+	uint32_t framebufferHeight = WindowConstants::windowHeight;
 	const WGPUColor backgroundColor = WGPUColor{0.0055, 0.0075, 0.009, 1.0};
 		
 		//Text
