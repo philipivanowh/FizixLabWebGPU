@@ -752,6 +752,8 @@ void UIManager::RenderInspectorPanel(physics::Rigidbody *body)
     SectionHead("FORCES");
 
     const auto &forces = body->GetForcesForDisplay();
+    // When displaying to the user:
+//const float pixelsPerMeter = SimulationConstants::PIXELS_PER_METER;
     if (forces.empty())
         ImGui::TextColored(Col::InkFaint, "  No active forces.");
     else

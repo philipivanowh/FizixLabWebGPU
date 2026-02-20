@@ -64,7 +64,6 @@ namespace physics
 		const std::vector<ForceInfo> &GetForcesForDisplay() const;
 		void ClearForces();
 
-
 		void UpdateMassProperties();
 		virtual float ComputeInertia() const;
 		virtual collision::AABB GetAABB() const = 0;
@@ -87,13 +86,18 @@ namespace physics
 		float invMass = 0.0f;
 		float staticFriction = 0.0f;
 		float kineticFriction = 0.1f;
-		
-		//Normal
+
+		// Normal
 		math::Vec2 normalImpulseAccum = math::Vec2();
 		math::Vec2 normalForce = math::Vec2();
-		//Friction
+		// Friction
 		math::Vec2 frictionImpulseAccum = math::Vec2();
 		math::Vec2 frictionForce = math::Vec2();
+
+		math::Vec2 smoothedNormalForce{};
+		math::Vec2 smoothedFrictionForce{};
+
+		math::Vec2 prevSmoothedFrictionDir{};  // unit vector from last frame
 
 		math::Vec2 dragForce = math::Vec2();
 		std::vector<std::unique_ptr<ForceGenerator>> forceGenerators;
