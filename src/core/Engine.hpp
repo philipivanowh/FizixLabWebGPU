@@ -34,6 +34,7 @@ public:
 	// void SpawnBox(const math::Vec2& pos, const math::Vec2& vel, float width, float height, float mass, float restitution);
 	// void SpawnBall(const math::Vec2& pos, const math::Vec2& vel, float radius, float mass, float restitution);
 	static void CheckSpawning();
+	static void CheckCannon();
 	static void ClearBodies();
 
 	static Recorder &GetRecorder() { return recorder; }
@@ -60,4 +61,7 @@ private:
 	static math::Vec2 mouseScreen;  
 	
 	static math::Vec2  mouseInitialScreen;
+
+	static math::Vec2 staticDragOffset;
+
 };

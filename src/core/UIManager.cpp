@@ -699,6 +699,17 @@ void UIManager::RenderInspectorPanel(physics::Rigidbody *body)
         return;
     }
 
+        // ── Cannon fast-path ─────────────────────────────────────────
+    // If the selected body is a Cannon we swap the entire lower half
+    // of the inspector for the cannon control panel.
+    if (auto *cannon = dynamic_cast<shape::Cannon *>(body))
+    {
+        RenderCannonInspector(cannon);
+        ImGui::End();
+        ImGui::PopStyleColor(2);
+        return;
+    }
+
     // Type badge — animated blue underline appears on Dynamic
     const bool isStatic = body->bodyType == physics::RigidbodyType::Static;
     ImGui::TextColored(Col::InkMid, "Type");
@@ -793,6 +804,235 @@ void UIManager::RenderInspectorPanel(physics::Rigidbody *body)
 }
 
 // ================================================================
+//  CANNON INSPECTOR
+//  Shown in place of the generic inspector when the selected body
+//  is a shape::Cannon.  Lets the user:
+//    • choose Ball or Box as the projectile type
+//    • aim the barrel with a slider (mirrors cannon->barrelAngleDegrees)
+//    • set launch speed and see live Vx / Vy decomposition
+//    • click FIRE to queue a CannonFireSettings request
+// ================================================================
+void UIManager::RenderCannonInspector(shape::Cannon *cannon)
+{
+    const bool isBall = (cannonFireSettings.projectileType ==
+                         CannonFireSettings::ProjectileType::Ball);
+
+    // ── Header ───────────────────────────────────────────────────
+    SectionHead("CANNON");
+
+    ImGui::TextColored(Col::InkFaint, "  Position");
+    ImGui::SameLine(92.0f);
+    ImGui::TextColored(Col::Ink, "(%.0f,  %.0f)", cannon->pos.x, cannon->pos.y);
+
+    ImGui::Spacing();
+
+    // ── Projectile type toggle ────────────────────────────────────
+    SectionHead("PROJECTILE TYPE");
+
+    auto TypeButton = [&](const char *label, CannonFireSettings::ProjectileType t)
+    {
+        const bool active = (cannonFireSettings.projectileType == t);
+        const float halfW = (ImGui::GetContentRegionAvail().x -
+                             ImGui::GetStyle().ItemSpacing.x) * 0.5f;
+        ImGui::PushStyleColor(ImGuiCol_Button,
+                              active ? Col::BlueSoft : Col::WidgetBg);
+        ImGui::PushStyleColor(ImGuiCol_ButtonHovered, Col::HoverBg);
+        ImGui::PushStyleColor(ImGuiCol_ButtonActive,  Col::ActiveBg);
+        ImGui::PushStyleColor(ImGuiCol_Text,
+                              active ? Col::Blue : Col::InkMid);
+        ImGui::PushStyleColor(ImGuiCol_Border,
+                              active ? Col::A(Col::Blue, 0.65f) : Col::Border);
+        if (ImGui::Button(label, {halfW, 0}))
+            cannonFireSettings.projectileType = t;
+        ImGui::PopStyleColor(5);
+    };
+
+    TypeButton("  Ball  ", CannonFireSettings::ProjectileType::Ball);
+    ImGui::SameLine();
+    TypeButton("   Box  ", CannonFireSettings::ProjectileType::Box);
+
+    ImGui::Spacing();
+
+    // ── Barrel angle ──────────────────────────────────────────────
+    SectionHead("BARREL ANGLE");
+
+    ImGui::PushStyleColor(ImGuiCol_SliderGrab,       Col::Blue);
+    ImGui::PushStyleColor(ImGuiCol_SliderGrabActive, Col::BlueHov);
+    ImGui::SetNextItemWidth(-1);
+    ImGui::SliderFloat("##cangle",
+                       &cannon->barrelAngleDegrees,
+                       0.0f, 360.0f, "%.1f deg");
+    ImGui::PopStyleColor(2);
+
+    cannonFireSettings.angleDegrees = cannon->barrelAngleDegrees;
+
+    // Compact angle arrow diagram
+    {
+        const float rad    = cannon->barrelAngleDegrees * 3.14159265f / 180.0f;
+        const float armLen = 34.0f;
+        ImVec2 origin = ImGui::GetCursorScreenPos();
+        origin.x += 130.0f;
+        origin.y += 32.0f;
+        ImVec2 tip = {origin.x + armLen * std::cos(rad),
+                      origin.y - armLen * std::sin(rad)};
+
+        auto *dl = ImGui::GetWindowDrawList();
+        dl->AddCircleFilled(origin, 3.5f, Col::ToU32(Col::A(Col::Blue, 0.55f)));
+        dl->AddLine(origin, tip, Col::ToU32(Col::Blue), 2.0f);
+        dl->AddCircleFilled(tip, 3.0f, Col::ToU32(Col::Blue));
+
+        char abuf[24];
+        snprintf(abuf, sizeof(abuf), "%.0f deg", cannon->barrelAngleDegrees);
+        dl->AddText({tip.x + 5.0f, tip.y - 7.0f}, Col::ToU32(Col::Ink), abuf);
+
+        ImGui::Dummy({0, armLen + 8.0f});
+    }
+
+    ImGui::Spacing();
+
+    // ── Launch speed + live Vx/Vy decomposition ───────────────────
+    SectionHead("LAUNCH SPEED");
+
+    ImGui::SetNextItemWidth(-1);
+    ImGui::DragFloat("##cspeed",
+                     &cannonFireSettings.speed,
+                     1.0f, 1.0f, 500.0f, "%.0f vel/s");
+
+    cannonFireSettings.Recompute();
+
+    ImGui::Spacing();
+
+    // Vx / Vy card
+    {
+        const float cw    = ImGui::GetContentRegionAvail().x;
+        const float lineH = ImGui::GetTextLineHeightWithSpacing();
+        const float cardH = lineH * 2.0f + 10.0f;
+        ImVec2 cMin = ImGui::GetCursorScreenPos();
+        ImVec2 cMax = {cMin.x + cw, cMin.y + cardH};
+        ImGui::GetWindowDrawList()->AddRectFilled(
+            cMin, cMax, Col::ToU32(Col::WidgetBg), 5.0f);
+        ImGui::GetWindowDrawList()->AddRect(
+            cMin, cMax, Col::ToU32(Col::Border), 5.0f, 0, 1.0f);
+    }
+
+    ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, {6.0f, 2.0f});
+    ImGui::Dummy({4.0f, 4.0f});
+
+    ImGui::TextColored(Col::InkFaint, "  Vx");
+    ImGui::SameLine(42.0f);
+    ImGui::TextColored(Col::Green,  "%+.1f", cannonFireSettings.vx);
+    ImGui::SameLine(0, 4);
+    ImGui::TextColored(Col::InkFaint, "px/s");
+
+    ImGui::TextColored(Col::InkFaint, "  Vy");
+    ImGui::SameLine(42.0f);
+    ImGui::TextColored(Col::Amber, "%+.1f", cannonFireSettings.vy);
+    ImGui::SameLine(0, 4);
+    ImGui::TextColored(Col::InkFaint, "px/s");
+
+    ImGui::PopStyleVar();
+
+    ImGui::Spacing();
+    ImGui::Spacing();
+
+    // ── Projectile properties ─────────────────────────────────────
+    SectionHead("PROJECTILE");
+
+    // Mass
+    ImGui::TextColored(Col::InkMid, "Mass");
+    ImGui::SetNextItemWidth(-1);
+    ImGui::DragFloat("##cmass",
+                     &cannonFireSettings.mass,
+                     0.5f, 0.1f, 10000.0f, "%.1f kg");
+
+    // Restitution
+    ImGui::TextColored(Col::InkMid, "Restitution");
+    ImGui::PushStyleColor(ImGuiCol_SliderGrab,       Col::Blue);
+    ImGui::PushStyleColor(ImGuiCol_SliderGrabActive, Col::BlueHov);
+    ImGui::SetNextItemWidth(-1);
+    ImGui::SliderFloat("##crest",
+                       &cannonFireSettings.restitution,
+                       0.0f, 1.0f, "%.2f");
+    ImGui::PopStyleColor(2);
+
+    // Color — stored as 0-255 floats, ImGui wants 0-1 floats
+    ImGui::TextColored(Col::InkMid, "Color");
+    ImVec4 pickerCol = {
+        cannonFireSettings.color[0] / 255.0f,
+        cannonFireSettings.color[1] / 255.0f,
+        cannonFireSettings.color[2] / 255.0f,
+        1.0f
+    };
+    ImGui::SetNextItemWidth(-1);
+    if (ImGui::ColorEdit3("##ccol", reinterpret_cast<float *>(&pickerCol)))
+    {
+        cannonFireSettings.color[0] = pickerCol.x * 255.0f;
+        cannonFireSettings.color[1] = pickerCol.y * 255.0f;
+        cannonFireSettings.color[2] = pickerCol.z * 255.0f;
+    }
+
+    // Size — adapts to ball vs box
+    ImGui::Spacing();
+    if (isBall)
+    {
+        ImGui::TextColored(Col::InkMid, "Radius");
+        ImGui::SetNextItemWidth(-1);
+        ImGui::DragFloat("##crad",
+                         &cannonFireSettings.radius,
+                         0.5f, 1.0f, 250.0f, "%.0f px");
+    }
+    else
+    {
+        ImGui::TextColored(Col::InkMid, "Width");
+        ImGui::SetNextItemWidth(-1);
+        ImGui::DragFloat("##cbw",
+                         &cannonFireSettings.boxWidth,
+                         0.5f, 1.0f, 500.0f, "%.0f px");
+
+        ImGui::TextColored(Col::InkMid, "Height");
+        ImGui::SetNextItemWidth(-1);
+        ImGui::DragFloat("##cbh",
+                         &cannonFireSettings.boxHeight,
+                         0.5f, 1.0f, 500.0f, "%.0f px");
+    }
+
+    ImGui::Spacing();
+    ImGui::Spacing();
+
+    // ── FIRE button ───────────────────────────────────────────────
+    {
+        const float rad   = cannon->barrelAngleDegrees * 3.14159265f / 180.0f;
+        cannonFireSettings.cannonPos = {
+            cannon->pos.x + cannon->barrelLength * std::cos(rad),
+            cannon->pos.y + cannon->barrelLength * std::sin(rad)
+        };
+    }
+
+    const float t    = static_cast<float>(ImGui::GetTime());
+    const float beat = Col::Smooth(0.5f + 0.5f * sinf(t * 3.5f));
+    ImGui::PushStyleColor(ImGuiCol_Button,
+                          Col::A(Col::Amber, 0.15f + 0.07f * beat));
+    ImGui::PushStyleColor(ImGuiCol_ButtonHovered, Col::A(Col::Amber, 0.28f));
+    ImGui::PushStyleColor(ImGuiCol_ButtonActive,  Col::A(Col::Amber, 0.45f));
+    ImGui::PushStyleColor(ImGuiCol_Text,          Col::Amber);
+    ImGui::PushStyleColor(ImGuiCol_Border,
+                          Col::A(Col::Amber, 0.45f + 0.30f * beat));
+
+    if (ImGui::Button("  FIRE  ", {-1, 0}))
+        cannonFirePending = true;
+
+    ImGui::PopStyleColor(5);
+}
+bool UIManager::ConsumeCannonFireRequest(CannonFireSettings &out)
+{
+    if (!cannonFirePending)
+        return false;
+    out = cannonFireSettings;
+    cannonFirePending = false;
+    return true;
+}
+
+// ================================================================
 //  SPAWNER PANEL
 // ================================================================
 void UIManager::RenderSpawnerPanel()
@@ -845,7 +1085,7 @@ void UIManager::RenderSpawnBasics()
 {
     SectionHead("SHAPE & PLACEMENT");
 
-    const char *shapes[] = {"Ball", "Incline", "Box", "Canon"};
+    const char *shapes[] = {"Ball", "Incline", "Box", "Cannon"};
     int si = (int)spawnSettings.shapeType;
     ImGui::SetNextItemWidth(-1);
     ImGui::Combo("##shape", &si, shapes, std::size(shapes));
@@ -938,7 +1178,7 @@ void UIManager::RenderSpawnSizeControls()
         ImGui::DragFloat("##ang", &spawnSettings.angle, 1.0f, 0.0f, 89.0f);
         ImGui::Checkbox("Flip", &spawnSettings.flip);
     }
-    else if (spawnSettings.shapeType == shape::ShapeType::Canon)
+    else if (spawnSettings.shapeType == shape::ShapeType::Cannon)
     {
         ImGui::TextColored(Col::InkMid, "Angle (deg)");
         ImGui::SetNextItemWidth(-1);

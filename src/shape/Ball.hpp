@@ -26,6 +26,7 @@ public:
 	std::vector<math::Vec2> GetVertexWorldPos() const override;
 	float ComputeInertia() const override;
 	collision::AABB GetAABB() const override;
+	collision::AABB GetLocalAABB() const override;
 
 	float radius = 0.0f;
 	std::array<float, 4> color{0.0f, 0.0f, 0.0f, 1.0f};

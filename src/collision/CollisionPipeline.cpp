@@ -2,7 +2,7 @@
 
 #include "collision/Collisions.hpp"
 #include "physics/Rigidbody.hpp"
-#include "shape/Canon.hpp"
+#include "shape/Cannon.hpp"
 
 #include <cmath>
 #include <cstdint>
@@ -26,7 +26,7 @@ void CollisionPipeline::BuildPairs(const std::vector<std::unique_ptr<physics::Ri
 	for (const auto& body : bodies)
 	{
 		aabbs.push_back(body->GetAABB());
-		collidable.push_back(dynamic_cast<const shape::Canon*>(body.get()) == nullptr);
+		collidable.push_back(dynamic_cast<const shape::Cannon*>(body.get()) == nullptr);
 	}
 
 	const float inverseCellSize = 1.0f / cellSize;

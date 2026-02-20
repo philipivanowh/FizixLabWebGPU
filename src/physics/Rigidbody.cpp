@@ -84,7 +84,7 @@ void Rigidbody::Update(float deltaMs, int iterations) {
 		linearVel = linearVel + (linearAcc * dtSeconds) * 0.5;
 		pos = pos + (linearVel * dtSeconds);
 		linearVel = linearVel + (linearAcc * dtSeconds) * 0.5;
-		rotation = (rotation + angularVel * dtSeconds)%360.0f;
+		rotation = std::fmod((rotation + angularVel * dtSeconds), 360.0f);
 
 		netForce = math::Vec2();
 		dragForce = math::Vec2();

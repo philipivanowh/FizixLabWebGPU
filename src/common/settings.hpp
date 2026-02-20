@@ -29,6 +29,11 @@ namespace PhysicsConstants
     constexpr float FRICTION_DISPLAY_THRESHOLD = 0.002f;
 }
 
+namespace DragConstants
+{
+    constexpr float DRAG_STIFNESS = 2000.0f;
+}
+
 namespace VisualizationConstants
 {
     constexpr float FBD_ARROW_MIN = 100.0f;

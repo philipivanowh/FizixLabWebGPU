@@ -9,7 +9,7 @@ namespace shape
         Ball,
         Incline,
         Box,
-        Canon
+        Cannon
     };
 
     class Shape : public physics::Rigidbody
@@ -24,6 +24,7 @@ namespace shape
               physics::RigidbodyType RigidbodyType) : physics::Rigidbody(pos, vel, acc, massValue, restitution, RigidbodyType) {}
         virtual std::vector<math::Vec2> GetVertexWorldPos() const;
         virtual collision::AABB GetAABB() const;
+        virtual collision::AABB GetLocalAABB() const;
         virtual std::vector<float> GetVertexLocalPos() const;
 
         mutable std::vector<math::Vec2> vertices;

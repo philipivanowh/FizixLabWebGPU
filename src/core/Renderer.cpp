@@ -721,9 +721,9 @@ void Renderer::DrawShape(physics::Rigidbody &body)
 		DrawFBD(body);
 		return;
 	}
-	else if (auto canon = dynamic_cast<const shape::Canon *>(&body))
+	else if (auto Cannon = dynamic_cast<const shape::Cannon *>(&body))
 	{
-		DrawCanon(*canon);
+		DrawCannon(*Cannon);
 		return;
 	}
 	else if (auto incline = dynamic_cast<const shape::Incline *>(&body))
@@ -923,41 +923,57 @@ void Renderer::DrawBall(const shape::Ball &ball)
 	DrawBallLine(ball);
 }
 
-void Renderer::DrawCanon(const shape::Canon &canon)
+void Renderer::DrawCannon(const shape::Cannon &cannon)
 {
-	renderPass.setPipeline(pipeline);
-
-	// Draw the Barrel
-	const std::vector<float> barrelVertices = canon.GetBarrelVertexLocalPos();
-	EnsureVertexBufferSize(barrelVertices.size());
-
-	queue.writeBuffer(vertexBuffer, 0, barrelVertices.data(), barrelVertices.size() * sizeof(float));
-
-	vertexCount = static_cast<uint32_t>(barrelVertices.size() / 2);
-	uint32_t uniformOffset = UpdateUniforms(canon.pos, canon.barrelColor);
-
 	if (!uniformBindGroup)
 	{
-		std::cout << "Uniform bind group is invalid; skipping draw." << std::endl;
+		std::cout << "Uniform bind group is invalid; skipping DrawCannon." << std::endl;
 		return;
 	}
 
-	renderPass.setBindGroup(0, uniformBindGroup, 1, &uniformOffset);
-	renderPass.setVertexBuffer(0, vertexBuffer, 0, vertexCount * 2 * sizeof(float));
-	renderPass.draw(vertexCount, 1, 0, 0);
+	renderPass.setPipeline(pipeline);
 
-	// Draw the wheel
-	const std::vector<float> wheelVertices = canon.GetWheelVertexLocalPos();
-	EnsureVertexBufferSize(wheelVertices.size());
+	// ── Layered draw helper ────────────────────────────────────────
+	// Uploads vertices, binds the correct uniform offset, and issues
+	// one draw call.  Called once per visual layer, back-to-front.
+	auto DrawPart = [&](const std::vector<float>& verts,
+	                    const std::array<float, 4>& color)
+	{
+		if (verts.empty()) return;
+		EnsureVertexBufferSize(verts.size());
+		queue.writeBuffer(vertexBuffer, 0,
+		                  verts.data(), verts.size() * sizeof(float));
+		const uint32_t count = static_cast<uint32_t>(verts.size() / 2);
+		uint32_t off = UpdateUniforms(cannon.pos, color);
+		renderPass.setBindGroup(0, uniformBindGroup, 1, &off);
+		renderPass.setVertexBuffer(0, vertexBuffer, 0, count * 2 * sizeof(float));
+		renderPass.draw(count, 1, 0, 0);
+	};
 
-	queue.writeBuffer(vertexBuffer, 0, wheelVertices.data(), wheelVertices.size() * sizeof(float));
+	// ── Draw order: back → front ───────────────────────────────────
+	//
+	//  1. Carriage trail  (wooden base, always horizontal)
+	//  2. Wheel rim       (outer annulus ring)
+	//  3. Wheel spokes    (eight thin radial spokes)
+	//  4. Breech block    (wide rear barrel section + cascabel knob)
+	//  5. Barrel body     (tapered main tube, on top of breech)
+	//  6. Barrel band     (reinforcing ring ~44 % along tube)
+	//  7. Muzzle ring     (raised lip at barrel tip)
+	//  8. Wheel hub       (small axle disc — drawn late so it sits
+	//                      visually in front of both wheel & barrel)
+	//  9. Bore            (near-black circle at muzzle face —
+	//                      always the topmost element so the player
+	//                      can always read where shots originate)
 
-	vertexCount = static_cast<uint32_t>(wheelVertices.size() / 2);
-	uniformOffset = UpdateUniforms(canon.pos, canon.wheelColor);
-
-	renderPass.setBindGroup(0, uniformBindGroup, 1, &uniformOffset);
-	renderPass.setVertexBuffer(0, vertexBuffer, 0, vertexCount * 2 * sizeof(float));
-	renderPass.draw(vertexCount, 1, 0, 0);
+	DrawPart(cannon.GetCarriageVertexLocalPos(),    cannon.carriageColor);
+	DrawPart(cannon.GetWheelRimVertexLocalPos(),    cannon.wheelColor);
+	DrawPart(cannon.GetWheelSpokesVertexLocalPos(), cannon.spokesColor);
+	DrawPart(cannon.GetBreechVertexLocalPos(),      cannon.breechColor);
+	DrawPart(cannon.GetBarrelBodyVertexLocalPos(),  cannon.barrelColor);
+	DrawPart(cannon.GetBarrelBandVertexLocalPos(),  cannon.bandColor);
+	DrawPart(cannon.GetMuzzleRingVertexLocalPos(),  cannon.muzzleRingColor);
+	DrawPart(cannon.GetWheelHubVertexLocalPos(),    cannon.hubColor);
+	DrawPart(cannon.GetBoreVertexLocalPos(),        cannon.boreColor);
 }
 
 void Renderer::DrawBallLine(const shape::Ball &ball)

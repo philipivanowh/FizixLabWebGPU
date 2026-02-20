@@ -88,6 +88,15 @@ namespace shape
 		return aabb;
 	}
 
+	collision::AABB Ball::GetLocalAABB() const
+	{
+		// A circle is rotationally symmetric, so its local and world AABBs
+		// are identical — just pos ± radius on both axes.
+		return collision::AABB(
+			pos.x - radius, pos.y - radius,
+			pos.x + radius, pos.y + radius);
+	}
+
 	float Ball::ComputeInertia() const
 	{
 		if (mass <= 0.0f)

@@ -54,4 +54,29 @@ namespace shape
 		}
 		return aabb;
 	}
+
+	collision::AABB Shape::GetLocalAABB() const
+	{
+		// Build the AABB from the raw, unrotated local vertices translated
+		// to world position. PickBody inverse-rotates the pick point into
+		// this same space, so the test is tight regardless of body rotation.
+		float minX = std::numeric_limits<float>::infinity();
+		float minY = std::numeric_limits<float>::infinity();
+		float maxX = -std::numeric_limits<float>::infinity();
+		float maxY = -std::numeric_limits<float>::infinity();
+
+		for (const auto &v : vertices)
+		{
+			const float wx = v.x + pos.x;
+			const float wy = v.y + pos.y;
+			minX = std::min(minX, wx);
+			minY = std::min(minY, wy);
+			maxX = std::max(maxX, wx);
+			maxY = std::max(maxY, wy);
+		}
+
+		return collision::AABB(minX, minY, maxX, maxY);
+	}
+
+	
 }

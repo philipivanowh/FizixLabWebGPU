@@ -21,7 +21,7 @@
 
 #include "shape/Ball.hpp"
 #include "shape/Box.hpp"
-#include "shape/Canon.hpp"
+#include "shape/Cannon.hpp"
 #include "shape/Incline.hpp"
 #include "physics/Rigidbody.hpp"
 #include "math/Vec2.hpp"
@@ -53,7 +53,7 @@ public:
 	void DrawShape(physics::Rigidbody &body);
 	void DrawBox(const shape::Box &box);
 	void DrawBall(const shape::Ball &ball);
-	void DrawCanon(const shape::Canon &canon);
+	void DrawCannon(const shape::Cannon &Cannon);
 	void DrawIncline(const shape::Incline &incline);
 	void DrawBallLine(const shape::Ball &ball);
 	void DrawFBD(physics::Rigidbody &body);

@@ -29,6 +29,40 @@ struct SpawnSettings
     physics::RigidbodyType bodyType = physics::RigidbodyType::Dynamic;
 };
 
+struct CannonFireSettings
+{
+    // ── Projectile kind ──────────────────────────────────────────
+    enum class ProjectileType { Ball, Box } projectileType = ProjectileType::Ball;
+
+    // ── Aim ──────────────────────────────────────────────────────
+    math::Vec2 cannonPos{0.0f, 0.0f}; // world-space barrel-tip origin
+    float      angleDegrees = 45.0f;  // barrel angle (degrees, 0 = right)
+    float      speed        = 10.0f; // launch speed magnitude (vel/s)
+
+    // Derived — recomputed live whenever angle or speed changes
+    float vx = 0.0f;
+    float vy = 0.0f;
+
+    // ── Projectile properties ────────────────────────────────────
+    float mass        = 10.0f;
+    float restitution = 0.4f;                                 // 0–1
+    std::array<float, 4> color = {255.f, 255.f, 255.f, 1.f}; // RGBA 0–255
+
+    // Ball-specific
+    float radius   = 20.0f;
+
+    // Box-specific
+    float boxWidth  = 40.0f;
+    float boxHeight = 40.0f;
+
+    void Recompute()
+    {
+        const float rad = angleDegrees * math::PI / 180.0f;
+        vx = speed * std::cos(rad);
+        vy = speed * std::sin(rad);
+    }
+};
+
 class UIManager
 {
 public:
@@ -55,6 +89,10 @@ public:
 
     bool ConsumeSpawnRequest(SpawnSettings &out);
 
+    // Returns true (and fills `out`) when the user clicked FIRE in the
+    // cannon inspector.  Call once per frame; resets the pending flag.
+    bool ConsumeCannonFireRequest(CannonFireSettings &out);
+
 private:
     // ── Theme ────────────────────────────────────────────────────
     void ApplyNeonTheme();
@@ -64,6 +102,9 @@ private:
     void RenderSpawnerPanel();
     void RenderSimPanel(std::size_t bodyCount, Settings &settings);
     void RenderInspectorPanel(physics::Rigidbody* body);
+
+     // ── Cannon inspector (shown when selectedBody is a Cannon) ────
+    void RenderCannonInspector(shape::Cannon *cannon);
 
     // ── Spawner sub-sections ─────────────────────────────────────
     void RenderSpawnBasics();
@@ -84,7 +125,11 @@ private:
     SpawnSettings spawnSettings;
     bool spawnRequestPending = false;
 
+    
+    CannonFireSettings cannonFireSettings;
+    bool cannonFirePending = false;
+
     // Window dimensions — set once in RenderMainControls
-    float screenW = 1470.0f;
-    float screenH = 956.0f;
+    float screenW = WindowConstants::windowWidth;
+    float screenH = WindowConstants::windowHeight;
 };

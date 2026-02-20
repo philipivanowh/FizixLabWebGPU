@@ -52,9 +52,33 @@ physics::Rigidbody *World::PickBody(const math::Vec2 &p)
 {
 	for (auto &obj : objects)
 	{
-		auto aabb = obj->GetAABB();
-		if (p.x >= aabb.min.x && p.x <= aabb.max.x &&
-			p.y >= aabb.min.y && p.y <= aabb.max.y)
+		// Transform the pick point into the body's local space by
+		// inverse-rotating it around the body's origin. This lets us
+		// test against the local (unrotated) AABB accurately even when
+		// the body is at an angle.
+		const float angle = -obj->rotation; // inverse rotation
+		const float cosA = std::cos(angle);
+		const float sinA = std::sin(angle);
+
+		const float dx = p.x - obj->pos.x;
+		const float dy = p.y - obj->pos.y;
+
+		const math::Vec2 localP{
+			cosA * dx - sinA * dy + obj->pos.x,
+			sinA * dx + cosA * dy + obj->pos.y};
+
+		collision::AABB aabb;
+		if (const auto *shape = dynamic_cast<const shape::Shape *>(obj.get()))
+		{
+			aabb = shape->GetLocalAABB();
+		}
+		else
+		{
+			aabb = obj->GetAABB();
+		}
+
+		if (localP.x >= aabb.min.x && localP.x <= aabb.max.x &&
+			localP.y >= aabb.min.y && localP.y <= aabb.max.y)
 		{
 			return obj.get();
 		}
