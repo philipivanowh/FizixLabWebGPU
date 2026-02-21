@@ -55,7 +55,7 @@ namespace Col
     // ── Stellar Amber — warning / friction ────────────────────────
     // Muted plasma tone
     static constexpr ImVec4 Amber{0.900f, 0.600f, 0.150f, 1.00f};
-    static constexpr ImVec4 AmberSoft{0.900f, 0.600f, 0.150f, 0.12f};
+    //static constexpr ImVec4 AmberSoft{0.900f, 0.600f, 0.150f, 0.12f};
 
     // ── Ink — text hierarchy ──────────────────────────────────────
     // No pure white. Ever.
@@ -274,8 +274,11 @@ void UIManager::ApplyNeonTheme() // name unchanged so Engine.cpp compiles
 // ================================================================
 //  LIFECYCLE
 // ================================================================
-void UIManager::InitializeImGui(Renderer &renderer)
+void UIManager::InitializeImGui(Renderer &renderer, Settings* settings)
 {
+    this->settings = settings;
+    screenW = settings->windowWidth;
+    screenH = settings->windowHeight;
     IMGUI_CHECKVERSION();
     ImGui::CreateContext();
     ImGuiIO &io = ImGui::GetIO();
@@ -309,14 +312,14 @@ void UIManager::EndImGuiFrame(Renderer &renderer)
 // ================================================================
 //  PUBLIC ENTRY POINTS
 // ================================================================
-void UIManager::RenderMainControls(std::size_t bodyCount, Settings &settings,
+void UIManager::RenderMainControls(std::size_t bodyCount,
                                    physics::Rigidbody *selectedBody)
 {
     ImGuiIO &io = ImGui::GetIO();
     screenW = io.DisplaySize.x;
     screenH = io.DisplaySize.y;
-    RenderTopTimelineBar(settings);
-    RenderSimPanel(bodyCount, settings);
+    RenderTopTimelineBar();
+    RenderSimPanel(bodyCount);
     RenderInspectorPanel(selectedBody);
 }
 
@@ -366,7 +369,7 @@ void UIManager::PulsingRecordDot()
 // ================================================================
 //  TOP TIMELINE BAR
 // ================================================================
-void UIManager::RenderTopTimelineBar(Settings &settings)
+void UIManager::RenderTopTimelineBar()
 {
     const float BAR_H = 72.0f;
     const float t = static_cast<float>(ImGui::GetTime());
@@ -399,7 +402,7 @@ void UIManager::RenderTopTimelineBar(Settings &settings)
     // ── Row 1: transport controls ─────────────────────────────────
 
     // REC — red when active, animates border intensity
-    const bool isRec = settings.recording;
+    const bool isRec = settings->recording;
     {
         // Animated border alpha: pulses when recording
         float borderA = isRec
@@ -418,10 +421,10 @@ void UIManager::RenderTopTimelineBar(Settings &settings)
 
         if (ImGui::Button("  REC  "))
         {
-            settings.recording = !settings.recording;
-            if (!settings.recording)
+            settings->recording = !settings->recording;
+            if (!settings->recording)
                 Engine::GetRecorder().Clear();
-            settings.scrubIndex = -1;
+            settings->scrubIndex = -1;
         }
         ImGui::PopStyleColor(5);
     }
@@ -438,7 +441,7 @@ void UIManager::RenderTopTimelineBar(Settings &settings)
 
     // PAUSE / PLAY — blue tinted border when paused
     {
-        const bool paused = settings.paused;
+        const bool paused = settings->paused;
         // Smooth colour lerp: border animates to blue when paused
         ImGui::PushStyleColor(ImGuiCol_Text,
                               paused ? Col::Blue : Col::Ink);
@@ -450,18 +453,18 @@ void UIManager::RenderTopTimelineBar(Settings &settings)
                               paused ? Col::A(Col::Blue, 0.20f) : Col::HoverBg);
 
         if (ImGui::Button(paused ? "  PLAY  " : " PAUSE  "))
-            settings.paused = !settings.paused;
+            settings->paused = !settings->paused;
         ImGui::PopStyleColor(4);
     }
 
     ImGui::SameLine(0, 6);
 
     // STEP — greyed when not paused
-    if (!settings.paused)
+    if (!settings->paused)
         ImGui::BeginDisabled();
-    if (ImGui::Button(" STEP ") && settings.paused)
-        settings.stepOneFrame = true;
-    if (!settings.paused)
+    if (ImGui::Button(" STEP ") && settings->paused)
+        settings->stepOneFrame = true;
+    if (!settings->paused)
         ImGui::EndDisabled();
 
     ImGui::SameLine(0, 12);
@@ -475,28 +478,28 @@ void UIManager::RenderTopTimelineBar(Settings &settings)
     ImGui::PushStyleColor(ImGuiCol_SliderGrab, Col::Blue);
     ImGui::PushStyleColor(ImGuiCol_SliderGrabActive, Col::BlueHov);
     ImGui::SetNextItemWidth(130.0f);
-    ImGui::SliderFloat("##spd", &settings.timeScale, 0.01f, 3.0f, "%.2fx");
+    ImGui::SliderFloat("##spd", &settings->timeScale, 0.01f, 3.0f, "%.2fx");
     ImGui::PopStyleColor(2);
 
     ImGui::SameLine(0, 6);
     if (ImGui::Button("0.1"))
-        settings.timeScale = 0.1f;
+        settings->timeScale = 0.1f;
     ImGui::SameLine(0, 3);
     if (ImGui::Button("0.5"))
-        settings.timeScale = 0.5f;
+        settings->timeScale = 0.5f;
     ImGui::SameLine(0, 3);
     if (ImGui::Button(" 1x"))
-        settings.timeScale = 1.0f;
+        settings->timeScale = 1.0f;
     ImGui::SameLine(0, 3);
     if (ImGui::Button(" 2x"))
-        settings.timeScale = 2.0f;
+        settings->timeScale = 2.0f;
 
     ImGui::SameLine(0, 12);
     VSep();
     ImGui::SameLine(0, 12);
 
     // LIVE / SCRUB indicator — gentle breathing when live
-    if (settings.scrubIndex < 0)
+    if (settings->scrubIndex < 0)
     {
         float breath = 0.75f + 0.25f * Col::Smooth(0.5f + 0.5f * sinf(t * 1.8f));
         ImGui::TextColored(Col::A(Col::Green, breath), "● LIVE");
@@ -510,7 +513,7 @@ void UIManager::RenderTopTimelineBar(Settings &settings)
     // ── Row 2: timeline scrubber ──────────────────────────────────
     const size_t histSize = Engine::GetRecorder().HistorySize();
     const int maxFrame = histSize > 0 ? (int)histSize - 1 : 0;
-    int sliderVal = (settings.scrubIndex >= 0) ? settings.scrubIndex : maxFrame;
+    int sliderVal = (settings->scrubIndex >= 0) ? settings->scrubIndex : maxFrame;
 
     // Thin accent line above the slider track
     {
@@ -538,7 +541,7 @@ void UIManager::RenderTopTimelineBar(Settings &settings)
     else
     {
         scrubChanged = ImGui::SliderInt("##tl", &sliderVal, 0, maxFrame,
-                                        settings.scrubIndex >= 0 ? "Frame %d" : "LIVE");
+                                        settings->scrubIndex >= 0 ? "Frame %d" : "LIVE");
     }
     ImGui::PopStyleColor(3);
 
@@ -547,16 +550,16 @@ void UIManager::RenderTopTimelineBar(Settings &settings)
         if (sliderVal >= maxFrame)
         {
             Engine::GetRecorder().TruncateAfter((size_t)sliderVal);
-            settings.scrubIndex = -1;
+            settings->scrubIndex = -1;
         }
         else
         {
-            settings.scrubIndex = sliderVal;
+            settings->scrubIndex = sliderVal;
         }
     }
 
     // RESUME HERE — appears only while scrubbing
-    if (settings.scrubIndex >= 0)
+    if (settings->scrubIndex >= 0)
     {
         ImGui::SameLine(0, 10);
         ImGui::PushStyleColor(ImGuiCol_Button, Col::GreenSoft);
@@ -564,8 +567,8 @@ void UIManager::RenderTopTimelineBar(Settings &settings)
         ImGui::PushStyleColor(ImGuiCol_Border, Col::A(Col::Green, 0.55f));
         if (ImGui::Button("RESUME HERE"))
         {
-            Engine::GetRecorder().TruncateAfter((size_t)settings.scrubIndex);
-            settings.scrubIndex = -1;
+            Engine::GetRecorder().TruncateAfter((size_t)settings->scrubIndex);
+            settings->scrubIndex = -1;
         }
         ImGui::PopStyleColor(3);
     }
@@ -578,7 +581,7 @@ void UIManager::RenderTopTimelineBar(Settings &settings)
 // ================================================================
 //  SIM PANEL
 // ================================================================
-void UIManager::RenderSimPanel(std::size_t bodyCount, Settings &settings)
+void UIManager::RenderSimPanel(std::size_t bodyCount)
 {
     const float W = 270.0f;
     const float TOP = 72.0f;
@@ -616,10 +619,10 @@ void UIManager::RenderSimPanel(std::size_t bodyCount, Settings &settings)
     ImGui::Spacing();
     SectionHead("DRAG MODE");
     const char *dragType[] = {"Precision", "Physics"};
-    int dragIdx = (int)settings.dragMode;
+    int dragIdx = (int)settings->dragMode;
     ImGui::SetNextItemWidth(-1);
     ImGui::Combo("##drag", &dragIdx, dragType, 2);
-    settings.dragMode = (DragMode)dragIdx;
+    settings->dragMode = (DragMode)dragIdx;
 
     ImGui::Spacing();
     SectionHead("RECORDING");
@@ -628,11 +631,11 @@ void UIManager::RenderSimPanel(std::size_t bodyCount, Settings &settings)
     ImGui::PushStyleColor(ImGuiCol_SliderGrab, Col::Blue);
     ImGui::PushStyleColor(ImGuiCol_SliderGrabActive, Col::BlueHov);
     ImGui::SetNextItemWidth(-1);
-    ImGui::SliderInt("##ri", &settings.recordInterval, 1, 10);
+    ImGui::SliderInt("##ri", &settings->recordInterval, 1, 10);
     ImGui::PopStyleColor(2);
 
     const float fps2 = fps > 0 ? fps : 60.0f;
-    const float rewSecs = (Engine::GetRecorder().HistorySize() * settings.recordInterval) / fps2;
+    const float rewSecs = (Engine::GetRecorder().HistorySize() * settings->recordInterval) / fps2;
 
     ImGui::TextColored(Col::InkMid, "Frames");
     ImGui::SameLine(0, 4);
@@ -642,11 +645,11 @@ void UIManager::RenderSimPanel(std::size_t bodyCount, Settings &settings)
     ImGui::SameLine(0, 4);
     ImGui::TextColored(Col::Blue, "%.1fs", rewSecs);
 
-    const char *qualStr = settings.recordInterval == 1   ? "Full detail"
-                          : settings.recordInterval <= 3 ? "Balanced"
+    const char *qualStr = settings->recordInterval == 1   ? "Full detail"
+                          : settings->recordInterval <= 3 ? "Balanced"
                                                          : "Long window";
-    ImVec4 qualCol = settings.recordInterval == 1   ? Col::Amber
-                     : settings.recordInterval <= 3 ? Col::Green
+    ImVec4 qualCol = settings->recordInterval == 1   ? Col::Amber
+                     : settings->recordInterval <= 3 ? Col::Green
                                                     : Col::InkFaint;
     ImGui::SameLine(0, 10);
     ImGui::TextColored(qualCol, "— %s", qualStr);

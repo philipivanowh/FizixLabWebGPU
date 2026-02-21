@@ -1,10 +1,6 @@
 #pragma once
 
-namespace WindowConstants
-{
-    constexpr int windowWidth = 1800;
-    constexpr int windowHeight = 1000;
-}
+#include <GLFW/glfw3.h>
 
 namespace SimulationConstants
 {
@@ -52,9 +48,38 @@ enum class DragMode
     physicsDrag
 };
 
+namespace WindowConstants{
+    constexpr int defaultWindowWidth = 1500;
+    constexpr int defaultWindowHeight = 800;
+}
+
 class Settings
 {
 public:
+
+    int windowWidth = WindowConstants::defaultWindowWidth;
+    int windowHeight = WindowConstants::defaultWindowHeight;
+    float zoom = 0.7f;
+    GLFWmonitor* monitor = nullptr; 
+
+    void InitFromMonitor()
+    {
+        monitor = glfwGetPrimaryMonitor();
+        const GLFWvidmode* mode = monitor ? glfwGetVideoMode(monitor) : nullptr;
+
+        float scale = 1.0f;
+        if(mode)
+        {
+            if(scale <= 0.0f) scale = 1.0f;
+            if(scale > 1.0f) scale = 1.0f;
+
+            windowWidth = static_cast<int>(static_cast<float>(mode->width) * scale);
+            
+            windowHeight = static_cast<int>(static_cast<float>(mode->height) * scale);
+        }
+    }
+
+    //--------Drag-----------
     DragMode dragMode = DragMode::physicsDrag;
 
     // --- Time Control ---
