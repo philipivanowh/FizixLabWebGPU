@@ -11,9 +11,6 @@ https://www.youtube.com/watch?v=C9aZ5YHLRF0
 Setup
 Install Emscripten
 
-Install vcpkg
-    vcpkg install freetype
-
 Building Instruction
 
 Make sure when building the backend
