@@ -3,6 +3,11 @@ LearnWebGPU - Code
 
 Thank you Eliemichel for the WebGPU C++ Guide [Learn WebGPU](https://eliemichel.github.io/LearnWebGPU/)
 
+Video Demo
+https://www.youtube.com/watch?v=WU2XR_y64CQ
+https://www.youtube.com/watch?v=C9aZ5YHLRF0
+
+
 Setup
 Install Emscripten
 
