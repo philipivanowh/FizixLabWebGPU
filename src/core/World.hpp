@@ -36,5 +36,5 @@ private:
 	CollisionPipeline collisionPipeline;
 	CollisionSolver collisionSolver;
 
-	float viewBottom = -200.0f;
+	float viewBottom = -10000.0f;
 };

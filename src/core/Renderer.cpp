@@ -31,8 +31,7 @@ namespace
 	}
 } // namespace
 
-
-bool Renderer::Initialize(Settings& settings)
+bool Renderer::Initialize(Settings &settings, GLFWscrollfun scrollCallback)
 {
 	// Open window
 	if (!glfwInit())
@@ -41,22 +40,22 @@ bool Renderer::Initialize(Settings& settings)
 		return false;
 	}
 
-	//settings.InitFromMonitor();
+	// settings.InitFromMonitor();
 
 	// ── INSERT POINT A: native resolution ───────────────────────────────
 	// Query the primary monitor native video mode so the window matches
 	// the physical screen pixel count on every platform.
-	windowWidth = settings.windowWidth;
-	windowHeight = settings.windowHeight;
-	framebufferWidth = settings.windowWidth;
-	framebufferHeight = settings.windowHeight;
 
 	glfwWindowHint(GLFW_CLIENT_API, GLFW_NO_API);
 	glfwWindowHint(GLFW_RESIZABLE, GLFW_FALSE);
 
 	// On macOS, request a full Retina (HiDPI) framebuffer.
-	// Without this the framebuffer is half-resolution on Retina screens.
-	// The hint is a no-op on Windows and Linux.
+	settings.InitFromMonitor();
+	windowWidth = settings.windowWidth;
+	windowHeight = settings.windowHeight;
+	framebufferWidth = settings.windowWidth;
+	framebufferHeight = settings.windowHeight;
+
 #ifdef __APPLE__
 	glfwWindowHint(GLFW_COCOA_RETINA_FRAMEBUFFER, GLFW_TRUE);
 #endif
@@ -65,7 +64,13 @@ bool Renderer::Initialize(Settings& settings)
 	if (!window)
 	{
 		std::cerr << "Could not open window!" << std::endl;
+		glfwTerminate();
 		return false;
+	}
+
+	if (scrollCallback)
+	{
+		glfwSetScrollCallback(window, scrollCallback);
 	}
 
 	glfwGetFramebufferSize(window,
@@ -149,11 +154,12 @@ bool Renderer::Initialize(Settings& settings)
 	surfaceCapabilities.freeMembers();
 
 	// Record whether we ended up with an sRGB surface (macOS fallback).
-	surfaceIsSrgb = (surfaceFormat == TextureFormat::BGRA8UnormSrgb);
+
 #ifdef __APPLE__
+	surfaceIsSrgb = (surfaceFormat == TextureFormat::BGRA8UnormSrgb);
 	if (surfaceIsSrgb)
 		std::cout << "[Renderer] macOS: sRGB surface — enabling linear->sRGB colour pre-correction." << std::endl;
-else
+	else
 		std::cout << "[Renderer] macOS: linear surface — no colour pre-correction needed." << std::endl;
 #endif
 
@@ -211,15 +217,25 @@ bool Renderer::IsRunning()
 
 void Renderer::SetZoom(float value)
 {
-	zoom = value;
-	if (zoom < 0.1f)
+	currentZoom = value;
+	if (currentZoom < 0.1f)
 	{
-		zoom = 0.1f;
+		currentZoom = 0.1f;
 	}
-	else if (zoom > 4.0f)
+	else if (currentZoom > 4.0f)
 	{
-		zoom = 4.0f;
+		currentZoom = 4.0f;
 	}
+}
+
+void Renderer::SetCameraOffset(const math::Vec2 &offset)
+{
+	cameraOffset = offset;
+}
+
+math::Vec2 Renderer::GetCameraOffset() const
+{
+	return cameraOffset;
 }
 
 TextureView Renderer::GetNextSurfaceTextureView()
@@ -424,135 +440,6 @@ void Renderer::InitializePipeline()
 	}
 	shaderModule.release();
 }
-
-void Renderer::InitializeTextPipeline()
-{
-	// Load text shader
-	ShaderModuleDescriptor textShaderDesc;
-#ifdef WEBGPU_BACKEND_WGPU
-	textShaderDesc.hintCount = 0;
-	textShaderDesc.hints = nullptr;
-#endif
-	std::string textShaderSource = Utility::LoadFileToString("src/shaders/text.wgsl");
-
-	ShaderModuleWGSLDescriptor textShaderCodeDesc;
-	textShaderCodeDesc.chain.next = nullptr;
-	textShaderCodeDesc.chain.sType = SType::ShaderModuleWGSLDescriptor;
-	textShaderDesc.nextInChain = &textShaderCodeDesc.chain;
-	textShaderCodeDesc.code = textShaderSource.c_str();
-	textShaderModule = device.createShaderModule(textShaderDesc);
-
-	// Create bind group layout for text rendering
-	std::array<BindGroupLayoutEntry, 3> textLayoutEntries = {};
-
-	// Binding 0: Uniforms (projection + textColor)
-	textLayoutEntries[0].binding = 0;
-	textLayoutEntries[0].visibility = ShaderStage::Vertex | ShaderStage::Fragment;
-	textLayoutEntries[0].buffer.type = BufferBindingType::Uniform;
-	textLayoutEntries[0].buffer.minBindingSize = sizeof(float) * 16 + sizeof(float) * 4; // mat4 + vec3 (padded to vec4)
-
-	// Binding 1: Sampler
-	textLayoutEntries[1].binding = 1;
-	textLayoutEntries[1].visibility = ShaderStage::Fragment;
-	textLayoutEntries[1].sampler.type = SamplerBindingType::Filtering;
-
-	// Binding 2: Texture
-	textLayoutEntries[2].binding = 2;
-	textLayoutEntries[2].visibility = ShaderStage::Fragment;
-	textLayoutEntries[2].texture.sampleType = TextureSampleType::Float;
-	textLayoutEntries[2].texture.viewDimension = TextureViewDimension::_2D;
-
-	BindGroupLayoutDescriptor textLayoutDesc = {};
-	textLayoutDesc.entryCount = textLayoutEntries.size();
-	textLayoutDesc.entries = textLayoutEntries.data();
-	textBindGroupLayout = device.createBindGroupLayout(textLayoutDesc);
-
-	// Create pipeline layout
-	PipelineLayoutDescriptor textPipelineLayoutDesc = {};
-	textPipelineLayoutDesc.bindGroupLayoutCount = 1;
-	WGPUBindGroupLayout textBindGroupLayouts[] = {textBindGroupLayout};
-	textPipelineLayoutDesc.bindGroupLayouts = textBindGroupLayouts; // Remove the & here
-	textPipelineLayout = device.createPipelineLayout(textPipelineLayoutDesc);
-
-	// Create render pipeline
-	RenderPipelineDescriptor textPipelineDesc = {};
-
-	// Vertex input: vec4 (xy = position, zw = texcoord)
-	VertexAttribute textVertexAttrib = {};
-	textVertexAttrib.shaderLocation = 0;
-	textVertexAttrib.format = VertexFormat::Float32x4;
-	textVertexAttrib.offset = 0;
-
-	VertexBufferLayout textVertexBufferLayout = {};
-	textVertexBufferLayout.attributeCount = 1;
-	textVertexBufferLayout.attributes = &textVertexAttrib;
-	textVertexBufferLayout.arrayStride = 4 * sizeof(float);
-	textVertexBufferLayout.stepMode = VertexStepMode::Vertex;
-
-	textPipelineDesc.vertex.bufferCount = 1;
-	textPipelineDesc.vertex.buffers = &textVertexBufferLayout;
-	textPipelineDesc.vertex.module = textShaderModule;
-	textPipelineDesc.vertex.entryPoint = "vs_main";
-	textPipelineDesc.vertex.constantCount = 0;
-	textPipelineDesc.vertex.constants = nullptr;
-
-	// Primitive state
-	textPipelineDesc.primitive.topology = PrimitiveTopology::TriangleList;
-	textPipelineDesc.primitive.stripIndexFormat = IndexFormat::Undefined;
-	textPipelineDesc.primitive.frontFace = FrontFace::CCW;
-	textPipelineDesc.primitive.cullMode = CullMode::None;
-
-	// Fragment state
-	FragmentState textFragmentState = {};
-	textFragmentState.module = textShaderModule;
-	textFragmentState.entryPoint = "fs_main";
-	textFragmentState.constantCount = 0;
-	textFragmentState.constants = nullptr;
-
-	// Blend state for text (alpha blending)
-	BlendState textBlendState = {};
-	textBlendState.color.srcFactor = BlendFactor::SrcAlpha;
-	textBlendState.color.dstFactor = BlendFactor::OneMinusSrcAlpha;
-	textBlendState.color.operation = BlendOperation::Add;
-	textBlendState.alpha.srcFactor = BlendFactor::One;
-	textBlendState.alpha.dstFactor = BlendFactor::OneMinusSrcAlpha;
-	textBlendState.alpha.operation = BlendOperation::Add;
-
-	ColorTargetState textColorTarget = {};
-	textColorTarget.format = surfaceFormat;
-	textColorTarget.blend = &textBlendState;
-	textColorTarget.writeMask = ColorWriteMask::All;
-
-	textFragmentState.targetCount = 1;
-	textFragmentState.targets = &textColorTarget;
-	textPipelineDesc.fragment = &textFragmentState;
-
-	textPipelineDesc.depthStencil = nullptr;
-
-	textPipelineDesc.multisample.count = 1;
-	textPipelineDesc.multisample.mask = ~0u;
-	textPipelineDesc.multisample.alphaToCoverageEnabled = false;
-
-	textPipelineDesc.layout = textPipelineLayout;
-
-	textPipeline = device.createRenderPipeline(textPipelineDesc);
-
-	// Create sampler for text textures
-	SamplerDescriptor samplerDesc = {};
-	samplerDesc.addressModeU = AddressMode::ClampToEdge;
-	samplerDesc.addressModeV = AddressMode::ClampToEdge;
-	samplerDesc.addressModeW = AddressMode::ClampToEdge;
-	samplerDesc.magFilter = FilterMode::Linear;
-	samplerDesc.minFilter = FilterMode::Linear;
-	samplerDesc.mipmapFilter = MipmapFilterMode::Nearest;
-	samplerDesc.lodMinClamp = 0.0f;
-	samplerDesc.lodMaxClamp = 1.0f;
-	samplerDesc.compare = CompareFunction::Undefined;
-	samplerDesc.maxAnisotropy = 1;
-
-	textSampler = device.createSampler(samplerDesc);
-}
-
 void Renderer::BeginFrame()
 {
 	glfwPollEvents();
@@ -604,19 +491,6 @@ void Renderer::BeginFrame()
 	renderPassColorAttachment.storeOp = StoreOp::Store;
 	// 0-1 color (normalize if values are 0-255, then apply macOS-only brightness bump + sRGB pre-correction)
 	WGPUColor clearColor = backgroundColor;
-	//const bool clearNeedsNormalization = clearColor.r > 1.0 || clearColor.g > 1.0 || clearColor.b > 1.0;
-#ifdef __APPLE__
-	// Subtle brightness lift for macOS (keep stored backgroundColor unchanged)
-	// auto brighten = [](double c, double add) -> double
-	// {
-	// 	double v = c + add;
-	// 	return (v < 0.0) ? 0.0 : (v > 1.0) ? 1.0 : v;
-	// };
-	// clearColor.r = brighten(clearColor.r, 0.015);
-	// clearColor.g = brighten(clearColor.g, 0.018);
-	// clearColor.b = brighten(clearColor.b, 0.022);
-
-#endif
 	renderPassColorAttachment.clearValue = clearColor;
 #ifndef WEBGPU_BACKEND_WGPU
 	renderPassColorAttachment.depthSlice = WGPU_DEPTH_SLICE_UNDEFINED;
@@ -641,37 +515,48 @@ void Renderer::DrawGrid()
 	std::array<float, 4> minorColor{0.1f, 0.5f, 0.6f, 0.05f};
 	std::array<float, 4> majorColor{0.2f, 0.7f, 0.8f, 0.1f};
 
-	#ifdef __APPLE__
-	    for (float& value : minorColor) {
-        value *= 1.5f;
-    	}
-		 for (float& value : majorColor) {
-        value *= 1.5f;
-    	}
-
-	#endif
-
+	for (float &value : minorColor)
+	{
+		value *= 1.2f;
+	}
+	for (float &value : majorColor)
+	{
+		value *= 1.2f;
+	}
 
 	std::vector<float> minorVertices;
 	std::vector<float> majorVertices;
 
-	for (float x = 0.0f; x <= windowWidth; x += kGridSpacing)
+	// Calculate visible world space at current zoom
+	const float visibleWorldWidth = windowWidth / currentZoom;
+	const float visibleWorldHeight = windowHeight / currentZoom;
+
+	const float padding = std::max(visibleWorldWidth, visibleWorldHeight) * 0.5f;
+
+	const float startX = std::floor((cameraOffset.x - visibleWorldWidth * 0.5f - padding) / kGridSpacing) * kGridSpacing;
+	const float endX = std::ceil((cameraOffset.x + visibleWorldWidth * 0.5f + padding) / kGridSpacing) * kGridSpacing;
+	const float startY = std::floor((cameraOffset.y - visibleWorldHeight * 0.5f - padding) / kGridSpacing) * kGridSpacing;
+	const float endY = std::ceil((cameraOffset.y + visibleWorldHeight * 0.5f + padding) / kGridSpacing) * kGridSpacing;
+
+	// Vertical lines
+	for (float x = startX; x <= endX; x += kGridSpacing)
 	{
-		const bool isMajor = std::fmod(x, kMajorSpacing) < 0.5f;
+		const bool isMajor = std::fabs(std::fmod(x, kMajorSpacing)) < 0.5f;
 		auto &vertices = isMajor ? majorVertices : minorVertices;
 		vertices.push_back(x);
-		vertices.push_back(0.0f);
+		vertices.push_back(startY);
 		vertices.push_back(x);
-		vertices.push_back(static_cast<float>(windowHeight));
+		vertices.push_back(endY);
 	}
 
-	for (float y = 0.0f; y <= windowHeight; y += kGridSpacing)
+	// Horizontal lines
+	for (float y = startY; y <= endY; y += kGridSpacing)
 	{
-		const bool isMajor = std::fmod(y, kMajorSpacing) < 0.5f;
+		const bool isMajor = std::fabs(std::fmod(y, kMajorSpacing)) < 0.5f;
 		auto &vertices = isMajor ? majorVertices : minorVertices;
-		vertices.push_back(0.0f);
+		vertices.push_back(startX);
 		vertices.push_back(y);
-		vertices.push_back(static_cast<float>(windowWidth));
+		vertices.push_back(endX);
 		vertices.push_back(y);
 	}
 
@@ -680,9 +565,7 @@ void Renderer::DrawGrid()
 	auto drawLines = [&](const std::vector<float> &vertices, const std::array<float, 4> &color)
 	{
 		if (vertices.empty())
-		{
 			return;
-		}
 
 		EnsureVertexBufferSize(static_cast<int>(vertices.size()));
 		queue.writeBuffer(vertexBuffer, 0, vertices.data(), vertices.size() * sizeof(float));
@@ -697,9 +580,22 @@ void Renderer::DrawGrid()
 	drawLines(minorVertices, minorColor);
 	drawLines(majorVertices, majorColor);
 
+	// ── Draw destruction line at y = -10000.0f ────────────────────
+	constexpr float kDestructionY = -10000.0f;
+
+	// Only draw if it's in the visible range
+	if (kDestructionY >= startY && kDestructionY <= endY)
+	{
+		std::array<float, 4> destructionColor{1.0f, 0.2f, 0.2f, 0.8f}; // Bright red, high opacity
+		std::vector<float> destructionLine = {
+			startX, kDestructionY,
+			endX, kDestructionY};
+
+		drawLines(destructionLine, destructionColor);
+	}
+
 	renderPass.setPipeline(pipeline);
 }
-
 void Renderer::EndFrame()
 {
 
@@ -1020,13 +916,14 @@ void Renderer::DrawCannon(const shape::Cannon &cannon)
 	// ── Layered draw helper ────────────────────────────────────────
 	// Uploads vertices, binds the correct uniform offset, and issues
 	// one draw call.  Called once per visual layer, back-to-front.
-	auto DrawPart = [&](const std::vector<float>& verts,
-	                    const std::array<float, 4>& color)
+	auto DrawPart = [&](const std::vector<float> &verts,
+						const std::array<float, 4> &color)
 	{
-		if (verts.empty()) return;
+		if (verts.empty())
+			return;
 		EnsureVertexBufferSize(verts.size());
 		queue.writeBuffer(vertexBuffer, 0,
-		                  verts.data(), verts.size() * sizeof(float));
+						  verts.data(), verts.size() * sizeof(float));
 		const uint32_t count = static_cast<uint32_t>(verts.size() / 2);
 		uint32_t off = UpdateUniforms(cannon.pos, color);
 		renderPass.setBindGroup(0, uniformBindGroup, 1, &off);
@@ -1049,15 +946,15 @@ void Renderer::DrawCannon(const shape::Cannon &cannon)
 	//                      always the topmost element so the player
 	//                      can always read where shots originate)
 
-	DrawPart(cannon.GetCarriageVertexLocalPos(),    cannon.carriageColor);
-	DrawPart(cannon.GetWheelRimVertexLocalPos(),    cannon.wheelColor);
+	DrawPart(cannon.GetCarriageVertexLocalPos(), cannon.carriageColor);
+	DrawPart(cannon.GetWheelRimVertexLocalPos(), cannon.wheelColor);
 	DrawPart(cannon.GetWheelSpokesVertexLocalPos(), cannon.spokesColor);
-	DrawPart(cannon.GetBreechVertexLocalPos(),      cannon.breechColor);
-	DrawPart(cannon.GetBarrelBodyVertexLocalPos(),  cannon.barrelColor);
-	DrawPart(cannon.GetBarrelBandVertexLocalPos(),  cannon.bandColor);
-	DrawPart(cannon.GetMuzzleRingVertexLocalPos(),  cannon.muzzleRingColor);
-	DrawPart(cannon.GetWheelHubVertexLocalPos(),    cannon.hubColor);
-	DrawPart(cannon.GetBoreVertexLocalPos(),        cannon.boreColor);
+	DrawPart(cannon.GetBreechVertexLocalPos(), cannon.breechColor);
+	DrawPart(cannon.GetBarrelBodyVertexLocalPos(), cannon.barrelColor);
+	DrawPart(cannon.GetBarrelBandVertexLocalPos(), cannon.bandColor);
+	DrawPart(cannon.GetMuzzleRingVertexLocalPos(), cannon.muzzleRingColor);
+	DrawPart(cannon.GetWheelHubVertexLocalPos(), cannon.hubColor);
+	DrawPart(cannon.GetBoreVertexLocalPos(), cannon.boreColor);
 }
 
 void Renderer::DrawBallLine(const shape::Ball &ball)
@@ -1119,14 +1016,14 @@ uint32_t Renderer::UpdateUniforms(const math::Vec2 &position, const std::array<f
 	uniforms.resolution[1] = static_cast<float>(windowHeight);
 	uniforms.translation[0] = position.x;
 	uniforms.translation[1] = position.y;
-	uniforms.extras[0] = zoom;
-	uniforms.extras[1] = 0.0f;
-	uniforms.extras[2] = 0.0f;
+	uniforms.extras[0] = currentZoom;
+	uniforms.extras[1] = cameraOffset.x;
+	uniforms.extras[2] = cameraOffset.y;
 	uniforms.extras[3] = 0.0f;
 
 	// Normalise 0-255 inputs to 0-1 (no-op if already in 0-1 range)
-	const bool  rgbNeedsNormalization = color[0] > 1.0f || color[1] > 1.0f ||
-	                                    color[2] > 1.0f;
+	const bool rgbNeedsNormalization = color[0] > 1.0f || color[1] > 1.0f ||
+									   color[2] > 1.0f;
 	const float rgbScale = rgbNeedsNormalization ? (1.0f / 255.0f) : 1.0f;
 	float r = color[0] * rgbScale;
 	float g = color[1] * rgbScale;
@@ -1146,10 +1043,11 @@ uint32_t Renderer::UpdateUniforms(const math::Vec2 &position, const std::array<f
 	{
 		auto linearToSrgb = [](float c) -> float
 		{
-			c = (c < 0.0f) ? 0.0f : (c > 1.0f) ? 1.0f : c;
+			c = (c < 0.0f) ? 0.0f : (c > 1.0f) ? 1.0f
+											   : c;
 			return (c <= 0.0031308f)
-				? 12.92f * c
-				: 1.055f * std::pow(c, 1.0f / 2.4f) - 0.055f;
+					   ? 12.92f * c
+					   : 1.055f * std::pow(c, 1.0f / 2.4f) - 0.055f;
 		};
 		r = linearToSrgb(r);
 		g = linearToSrgb(g);

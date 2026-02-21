@@ -37,6 +37,8 @@ public:
 	static void CheckCannon();
 	static void ClearBodies();
 
+	static void Scroll_Feedback(GLFWwindow* window, double xoffset, double yoffset);
+
 	static Recorder &GetRecorder() { return recorder; }
 
 private:
@@ -63,5 +65,11 @@ private:
 	static math::Vec2  mouseInitialScreen;
 
 	static math::Vec2 staticDragOffset;
+
+	// Camera panning
+    static math::Vec2 cameraOffset;        // Current camera pan offset
+    static math::Vec2 panStartMouse;       // Mouse position when pan started
+    static math::Vec2 panStartCamera;      // Camera offset when pan started
+    static bool isPanning;                 // Is currently panning the camera
 
 };

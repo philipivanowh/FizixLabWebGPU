@@ -212,7 +212,6 @@ namespace physics
 			AddDisplayForce(smoothedNormalForce, ForceType::Normal);
 
 		const float frictionMag = smoothedFrictionForce.Length() * invMass;
-		std::cout << frictionMag <<
 		if (frictionMag >= PhysicsConstants::FRICTION_DISPLAY_THRESHOLD)
 			AddDisplayForce(smoothedFrictionForce, ForceType::Frictional);
 	}

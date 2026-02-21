@@ -38,7 +38,7 @@ class Renderer
 {
 public:
 	// Initialize everything and return true if it went all right
-	bool Initialize(Settings& settings);
+	bool Initialize(Settings& settings, GLFWscrollfun scrollCallback = nullptr);
 
 	// Uninitialize everything that was initialized
 	void Terminate();
@@ -69,13 +69,14 @@ public:
 	RenderPassEncoder GetRenderPass() const { return renderPass; };
 	TextureFormat GetSurfaceFormat() const { return surfaceFormat; };
 	void SetZoom(float value);
-	float GetZoom() const { return zoom; }
+	void SetCameraOffset(const math::Vec2& offset);  // Add this
+    math::Vec2 GetCameraOffset() const;              // Add this
+	float GetZoom() const { return currentZoom; }
 
 private:
 	wgpu::TextureView GetNextSurfaceTextureView();
 	// Substep of Initialize() that creates the render pipeline
 	void InitializePipeline();
-	void InitializeTextPipeline();
 	wgpu::RequiredLimits GetRequiredLimits(Adapter adapter) const;
 	void InitializeBuffers();
 	void EnsureVertexBufferSize(int size);
@@ -111,13 +112,11 @@ private:
 	uint32_t framebufferHeight = WindowConstants::defaultWindowHeight;
 
 	bool surfaceIsSrgb = true;
+	//Camera
+	float currentZoom = 1.0f;
+    math::Vec2 cameraOffset{0.0f, 0.0f}; 
 
-	const WGPUColor backgroundColor = WGPUColor{0.0055*15, 0.0075*15, 0.009*15, 1.0};
-
-	float zoom = 1.0f;
-
-	//const WGPUColor backgroundColor = WGPUColor{0.0055, 0.0075, 0.009, 1.0};
-	//const WGPUColor backgroundColor = WGPUColor{1.4*10, 1.9*10, 2.3*10, 1.0};
+	const WGPUColor backgroundColor = WGPUColor{0.0055*8.4, 0.0075*8.9, 0.009*8.6, 1.0};
 	
 		
 	//Text

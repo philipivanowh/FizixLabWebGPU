@@ -22,7 +22,7 @@ namespace PhysicsConstants
     inline constexpr float MAX_DENSITY = 21.4f;
     inline constexpr float DEFAULT_RESTITUTION = 0.4f;
     inline constexpr float MAX_PENETRATION_CORRECTION = 5.0f;
-    constexpr float FRICTION_DISPLAY_THRESHOLD = 0.03f;
+    constexpr float FRICTION_DISPLAY_THRESHOLD = 1.0f;
 }
 
 namespace DragConstants
@@ -59,7 +59,7 @@ public:
 
     int windowWidth = WindowConstants::defaultWindowWidth;
     int windowHeight = WindowConstants::defaultWindowHeight;
-    float zoom = 0.7f;
+    float zoom = 1.0f;
     GLFWmonitor* monitor = nullptr; 
 
     void InitFromMonitor()

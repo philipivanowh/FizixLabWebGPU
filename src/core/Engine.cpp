@@ -37,19 +37,17 @@ math::Vec2 Engine::mouseInitialScreen;
 math::Vec2 Engine::mouseDeltaScale;
 math::Vec2 Engine::staticDragOffset;
 
-// Height of the top timeline bar — must match UIManager
-//static constexpr float kTopBarHeight = 68.0f;
-
-// ================================================================
-// TOOLTIP HELPERS
-// ================================================================
+math::Vec2 Engine::cameraOffset{0.0f, 0.0f};
+math::Vec2 Engine::panStartMouse;
+math::Vec2 Engine::panStartCamera;
+bool Engine::isPanning = false;
 
 // ================================================================
 // INIT / SHUTDOWN
 // ================================================================
 bool Engine::Initialize()
 {
-    if (!renderer.Initialize(settings))
+    if (!renderer.Initialize(settings, Engine::Scroll_Feedback))
         return false;
 
     uiManager.InitializeImGui(renderer, &settings);
@@ -107,13 +105,26 @@ void Engine::CheckSpawning()
     settings.scrubIndex = -1;
 }
 
+void Engine::Scroll_Feedback(GLFWwindow *window, double xoffset, double yoffset)
+{
+    settings.zoom += static_cast<float>(yoffset) * 0.1f;
+    (void)xoffset;
+    (void)(window);
+}
+
 // ================================================================
 // UPDATE
 // ================================================================
 void Engine::Update(float deltaMs, int iterations)
 {
     glfwPollEvents();
+
     GLFWwindow *window = renderer.GetWindow();
+
+    if (glfwGetKey(window, GLFW_KEY_ESCAPE) == GLFW_PRESS)
+    {
+        renderer.Terminate();
+    }
 
     // ── Mouse position ────────────────────────────────────────────
     double mx, my;
@@ -123,8 +134,7 @@ void Engine::Update(float deltaMs, int iterations)
     int winW, winH;
     glfwGetWindowSize(window, &winW, &winH);
 
-    // Cursor is already in window coordinates; keep everything in the
-    // same space the renderer uses (windowWidth/windowHeight).
+    // Screen space: Y-down, origin at top-left
     const float scaledMx = static_cast<float>(mx);
     const float scaledMy = static_cast<float>(my);
 
@@ -138,29 +148,9 @@ void Engine::Update(float deltaMs, int iterations)
     // Block mouse interaction when cursor is inside the top bar
     ImGuiIO &io = ImGui::GetIO();
     const bool overUI = io.WantCaptureMouse;
-    const bool overUIKeyboard = io.WantCaptureKeyboard;
 
     // ── Zoom controls (global) ────────────────────────────────────
-    if (!overUIKeyboard)
-    {
-        const float zoomStep = 0.05f;
-        if (glfwGetKey(window, GLFW_KEY_EQUAL) == GLFW_PRESS ||
-            glfwGetKey(window, GLFW_KEY_KP_ADD) == GLFW_PRESS)
-        {
-            settings.zoom *= (1.0f + zoomStep);
-        }
-        if (glfwGetKey(window, GLFW_KEY_MINUS) == GLFW_PRESS ||
-            glfwGetKey(window, GLFW_KEY_KP_SUBTRACT) == GLFW_PRESS)
-        {
-            settings.zoom *= (1.0f - zoomStep);
-        }
-        if (glfwGetKey(window, GLFW_KEY_0) == GLFW_PRESS ||
-            glfwGetKey(window, GLFW_KEY_KP_0) == GLFW_PRESS)
-        {
-            settings.zoom = 1.0f;
-        }
-        settings.zoom = math::Clamp(settings.zoom, 0.1f, 4.0f);
-    }
+    settings.zoom = math::Clamp(settings.zoom, 0.1f, 4.0f);
 
     renderer.SetZoom(settings.zoom);
 
@@ -168,27 +158,36 @@ void Engine::Update(float deltaMs, int iterations)
     const float zoom = settings.zoom;
     const float cx = static_cast<float>(winW) * 0.5f;
     const float cy = static_cast<float>(winH) * 0.5f;
+
+    // Apply zoom around center, then add camera offset
+    // NEW (CORRECT)
     const float zoomedX = (scaledMx - cx) / zoom + cx;
     const float zoomedY = (scaledMy - cy) / zoom + cy;
-    mouseWorld = Vec2(zoomedX, static_cast<float>(winH) - zoomedY);
+    const float worldX = zoomedX + cameraOffset.x;
+    const float worldY = static_cast<float>(winH) - zoomedY + cameraOffset.y;
+    mouseWorld = Vec2(worldX, worldY);
 
     if (pressedLeft && !mouseDownLeft && !overUI)
     {
         mouseDownLeft = true;
-        draggedBody = world.PickBody(mouseWorld);
 
+        // Try to pick a body first
+        draggedBody = world.PickBody(mouseWorld);
         selectedBody = draggedBody;
 
         if (draggedBody)
         {
+            // Dragging an object
             staticDragOffset = draggedBody->pos - mouseWorld;
+            isPanning = false;
         }
-    }
-    if (pressedRight && !mouseDownRight && !overUI)
-    {
-        mouseDownRight = true;
-        mouseInitialPos = mouseWorld.Clone();
-        mouseInitialScreen = mouseScreen.Clone();
+        else
+        {
+            // No object picked - start camera panning
+            isPanning = true;
+            panStartMouse = mouseScreen;
+            panStartCamera = cameraOffset;
+        }
     }
 
     if (!pressedLeft)
@@ -196,7 +195,32 @@ void Engine::Update(float deltaMs, int iterations)
         mouseDownLeft = false;
         draggedBody = nullptr;
         staticDragOffset = Vec2(0.0f, 0.0f);
+        isPanning = false;
     }
+
+    // ── Camera panning update ─────────────────────────────────────
+    if (isPanning && mouseDownLeft)
+    {
+        // Calculate mouse delta in screen space
+        Vec2 mouseDelta = mouseScreen - panStartMouse;
+
+        // Apply delta to camera offset (invert X and Y for natural panning)
+        // Divide by zoom so panning speed stays consistent at different zoom levels
+        cameraOffset.x = panStartCamera.x - mouseDelta.x / zoom;
+        cameraOffset.y = panStartCamera.y + mouseDelta.y / zoom;
+
+        // Update renderer camera offset
+        renderer.SetCameraOffset(cameraOffset);
+    }
+
+    // ── Right mouse button (measurement) ──────────────────────────
+    if (pressedRight && !mouseDownRight && !overUI)
+    {
+        mouseDownRight = true;
+        mouseInitialPos = mouseWorld.Clone();
+        mouseInitialScreen = mouseScreen.Clone();
+    }
+
     if (!pressedRight)
     {
         mouseDownRight = false;
@@ -209,13 +233,13 @@ void Engine::Update(float deltaMs, int iterations)
         mouseDeltaScale = mouseWorld - mouseInitialPos;
 
     // ── Drag force ────────────────────────────────────────────────
-    if (draggedBody)
+    if (draggedBody && !isPanning)
     {
 
         // If the body is static then it can only move in percisionDragMode
         if (draggedBody->bodyType == RigidbodyType::Static)
         {
-            if(!(dynamic_cast<shape::Cannon*>(draggedBody)))
+            if (!(dynamic_cast<shape::Cannon *>(draggedBody)))
                 draggedBody->TranslateTo(mouseWorld + staticDragOffset);
             else
                 draggedBody->TranslateTo(mouseWorld);
