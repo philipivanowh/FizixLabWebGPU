@@ -66,12 +66,12 @@ struct CannonFireSettings
 class UIManager
 {
 public:
-    void InitializeImGui(Renderer &renderer);
+    void InitializeImGui(Renderer &renderer, Settings* settings);
     void TerminateImGui();
     void BeginImGuiFrame();
     void EndImGuiFrame(Renderer &renderer);
 
-    void RenderMainControls(std::size_t bodyCount, Settings &settings, physics::Rigidbody *selectedBody);
+    void RenderMainControls(std::size_t bodyCount, physics::Rigidbody *selectedBody);
     void RenderSpawner();
 
     // ── Measurement overlay ──────────────────────────────────────
@@ -98,9 +98,9 @@ private:
     void ApplyNeonTheme();
 
     // ── Panels ───────────────────────────────────────────────────
-    void RenderTopTimelineBar(Settings &settings);
+    void RenderTopTimelineBar();
     void RenderSpawnerPanel();
-    void RenderSimPanel(std::size_t bodyCount, Settings &settings);
+    void RenderSimPanel(std::size_t bodyCount);
     void RenderInspectorPanel(physics::Rigidbody* body);
 
      // ── Cannon inspector (shown when selectedBody is a Cannon) ────
@@ -129,7 +129,9 @@ private:
     CannonFireSettings cannonFireSettings;
     bool cannonFirePending = false;
 
+    Settings* settings = nullptr;
+
     // Window dimensions — set once in RenderMainControls
-    float screenW = WindowConstants::windowWidth;
-    float screenH = WindowConstants::windowHeight;
+    float screenW = 1800;
+    float screenH = 1000;
 };

@@ -38,7 +38,7 @@ class Renderer
 {
 public:
 	// Initialize everything and return true if it went all right
-	bool Initialize();
+	bool Initialize(Settings& settings);
 
 	// Uninitialize everything that was initialized
 	void Terminate();
@@ -68,6 +68,8 @@ public:
 	Queue GetQueue() const { return queue; }
 	RenderPassEncoder GetRenderPass() const { return renderPass; };
 	TextureFormat GetSurfaceFormat() const { return surfaceFormat; };
+	void SetZoom(float value);
+	float GetZoom() const { return zoom; }
 
 private:
 	wgpu::TextureView GetNextSurfaceTextureView();
@@ -103,13 +105,22 @@ private:
 	size_t uniformBufferStride = 0;
 	size_t uniformBufferSize = 0;
 	size_t uniformBufferOffset = 0;
-	uint32_t windowWidth = WindowConstants::windowWidth;
-	uint32_t windowHeight = WindowConstants::windowHeight;
-	uint32_t framebufferWidth = WindowConstants::windowWidth;
-	uint32_t framebufferHeight = WindowConstants::windowHeight;
-	const WGPUColor backgroundColor = WGPUColor{0.0055, 0.0075, 0.009, 1.0};
+	uint32_t windowWidth = WindowConstants::defaultWindowWidth;
+	uint32_t windowHeight = WindowConstants::defaultWindowHeight;
+	uint32_t framebufferWidth = WindowConstants::defaultWindowWidth;
+	uint32_t framebufferHeight = WindowConstants::defaultWindowHeight;
+
+	bool surfaceIsSrgb = true;
+
+	const WGPUColor backgroundColor = WGPUColor{0.0055*15, 0.0075*15, 0.009*15, 1.0};
+
+	float zoom = 1.0f;
+
+	//const WGPUColor backgroundColor = WGPUColor{0.0055, 0.0075, 0.009, 1.0};
+	//const WGPUColor backgroundColor = WGPUColor{1.4*10, 1.9*10, 2.3*10, 1.0};
+	
 		
-		//Text
+	//Text
 	ShaderModule textShaderModule;
 	RenderPipeline textPipeline;
 	BindGroupLayout textBindGroupLayout;

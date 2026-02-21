@@ -173,7 +173,7 @@ namespace physics
 			frictionForce = math::Vec2();
 		}
 
-		const float alpha = 0.08f;
+		const float alpha = 0.5f;
 		smoothedNormalForce = smoothedNormalForce * (1.0f - alpha) + normalForce * alpha;
 		smoothedFrictionForce = smoothedFrictionForce * (1.0f - alpha) + frictionForce * alpha;
 
@@ -182,7 +182,7 @@ namespace physics
 		// every frame. A real friction force never does that — if the direction
 		// dot product is negative the body is at rest and we're seeing solver noise.
 		const float frictionLen = smoothedFrictionForce.Length();
-		if (frictionLen > 1e-4f)
+		if (frictionLen > 1e-1f)
 		{
 			const math::Vec2 currentDir = smoothedFrictionForce * (1.0f / frictionLen);
 

@@ -22,6 +22,7 @@ namespace
 		float resolution[2];
 		float translation[2];
 		float color[4];
+		float extras[4];
 	};
 
 	size_t AlignTo(size_t value, size_t alignment)
@@ -30,7 +31,8 @@ namespace
 	}
 } // namespace
 
-bool Renderer::Initialize()
+
+bool Renderer::Initialize(Settings& settings)
 {
 	// Open window
 	if (!glfwInit())
@@ -38,8 +40,27 @@ bool Renderer::Initialize()
 		std::cerr << "Could not initialize GLFW!" << std::endl;
 		return false;
 	}
+
+	//settings.InitFromMonitor();
+
+	// ── INSERT POINT A: native resolution ───────────────────────────────
+	// Query the primary monitor native video mode so the window matches
+	// the physical screen pixel count on every platform.
+	windowWidth = settings.windowWidth;
+	windowHeight = settings.windowHeight;
+	framebufferWidth = settings.windowWidth;
+	framebufferHeight = settings.windowHeight;
+
 	glfwWindowHint(GLFW_CLIENT_API, GLFW_NO_API);
 	glfwWindowHint(GLFW_RESIZABLE, GLFW_FALSE);
+
+	// On macOS, request a full Retina (HiDPI) framebuffer.
+	// Without this the framebuffer is half-resolution on Retina screens.
+	// The hint is a no-op on Windows and Linux.
+#ifdef __APPLE__
+	glfwWindowHint(GLFW_COCOA_RETINA_FRAMEBUFFER, GLFW_TRUE);
+#endif
+
 	window = glfwCreateWindow(windowWidth, windowHeight, "FizixEngine", nullptr, nullptr);
 	if (!window)
 	{
@@ -106,10 +127,36 @@ bool Renderer::Initialize()
 	config.width = framebufferWidth;
 	config.height = framebufferHeight;
 	config.usage = TextureUsage::RenderAttachment;
+	// ── INSERT POINT B: surface format — prefer linear, detect sRGB ────
+	// Windows/Linux: first format is usually BGRA8Unorm (linear). ✓
+	// macOS/Metal  : first format is BGRA8UnormSrgb — the GPU will
+	//                gamma-encode shader output automatically.
+	// We scan the capability list for the linear variant first.
+	// If unavailable we set surfaceIsSrgb so UpdateUniforms() can
+	// pre-correct colours before upload.
 	SurfaceCapabilities surfaceCapabilities;
 	surface.getCapabilities(adapter, &surfaceCapabilities);
-	surfaceFormat = surfaceCapabilities.formats[0];
+
+	surfaceFormat = surfaceCapabilities.formats[0]; // safe fallback
+	for (size_t fi = 0; fi < surfaceCapabilities.formatCount; ++fi)
+	{
+		if (surfaceCapabilities.formats[fi] == TextureFormat::BGRA8Unorm)
+		{
+			surfaceFormat = TextureFormat::BGRA8Unorm; // prefer linear
+			break;
+		}
+	}
 	surfaceCapabilities.freeMembers();
+
+	// Record whether we ended up with an sRGB surface (macOS fallback).
+	surfaceIsSrgb = (surfaceFormat == TextureFormat::BGRA8UnormSrgb);
+#ifdef __APPLE__
+	if (surfaceIsSrgb)
+		std::cout << "[Renderer] macOS: sRGB surface — enabling linear->sRGB colour pre-correction." << std::endl;
+else
+		std::cout << "[Renderer] macOS: linear surface — no colour pre-correction needed." << std::endl;
+#endif
+
 	config.format = surfaceFormat;
 
 	// And we do not need any particular view format:
@@ -160,6 +207,19 @@ void Renderer::Terminate()
 bool Renderer::IsRunning()
 {
 	return !glfwWindowShouldClose(window);
+}
+
+void Renderer::SetZoom(float value)
+{
+	zoom = value;
+	if (zoom < 0.1f)
+	{
+		zoom = 0.1f;
+	}
+	else if (zoom > 4.0f)
+	{
+		zoom = 4.0f;
+	}
 }
 
 TextureView Renderer::GetNextSurfaceTextureView()
@@ -542,8 +602,22 @@ void Renderer::BeginFrame()
 	renderPassColorAttachment.resolveTarget = nullptr;
 	renderPassColorAttachment.loadOp = LoadOp::Clear;
 	renderPassColorAttachment.storeOp = StoreOp::Store;
-	// 0-1 color
-	renderPassColorAttachment.clearValue = backgroundColor;
+	// 0-1 color (normalize if values are 0-255, then apply macOS-only brightness bump + sRGB pre-correction)
+	WGPUColor clearColor = backgroundColor;
+	//const bool clearNeedsNormalization = clearColor.r > 1.0 || clearColor.g > 1.0 || clearColor.b > 1.0;
+#ifdef __APPLE__
+	// Subtle brightness lift for macOS (keep stored backgroundColor unchanged)
+	// auto brighten = [](double c, double add) -> double
+	// {
+	// 	double v = c + add;
+	// 	return (v < 0.0) ? 0.0 : (v > 1.0) ? 1.0 : v;
+	// };
+	// clearColor.r = brighten(clearColor.r, 0.015);
+	// clearColor.g = brighten(clearColor.g, 0.018);
+	// clearColor.b = brighten(clearColor.b, 0.022);
+
+#endif
+	renderPassColorAttachment.clearValue = clearColor;
 #ifndef WEBGPU_BACKEND_WGPU
 	renderPassColorAttachment.depthSlice = WGPU_DEPTH_SLICE_UNDEFINED;
 #endif // NOT WEBGPU_BACKEND_WGPU
@@ -564,8 +638,19 @@ void Renderer::DrawGrid()
 {
 	constexpr float kGridSpacing = 50.0f;
 	constexpr float kMajorSpacing = 200.0f;
-	const std::array<float, 4> minorColor{0.1f, 0.5f, 0.6f, 0.05f};
-	const std::array<float, 4> majorColor{0.2f, 0.7f, 0.8f, 0.1f};
+	std::array<float, 4> minorColor{0.1f, 0.5f, 0.6f, 0.05f};
+	std::array<float, 4> majorColor{0.2f, 0.7f, 0.8f, 0.1f};
+
+	#ifdef __APPLE__
+	    for (float& value : minorColor) {
+        value *= 1.5f;
+    	}
+		 for (float& value : majorColor) {
+        value *= 1.5f;
+    	}
+
+	#endif
+
 
 	std::vector<float> minorVertices;
 	std::vector<float> majorVertices;
@@ -755,13 +840,13 @@ void Renderer::DrawFBD(physics::Rigidbody &body)
 		switch (type)
 		{
 		case physics::ForceType::Normal:
-			return {0.3f, 0.7f, 0.9f, 0.6f};
+			return {0.3f, 0.7f, 0.9f, 0.4f};
 		case physics::ForceType::Frictional:
-			return {0.9f, 0.5f, 0.2f, 0.6f};
+			return {0.9f, 0.5f, 0.2f, 0.4f};
 		case physics::ForceType::Gravitational:
-			return {0.2f, 0.6f, 0.3f, 0.6f};
+			return {0.2f, 0.6f, 0.3f, 0.4f};
 		case physics::ForceType::Tension:
-			return {0.9f, 0.9f, 0.2f, 0.6f};
+			return {0.9f, 0.9f, 0.2f, 0.4f};
 		case physics::ForceType::Apply:
 		default:
 			return {0.5f, 0.3f, 0.5f, 0.4f};
@@ -820,7 +905,6 @@ void Renderer::DrawFBD(physics::Rigidbody &body)
 
 void Renderer::DrawMeasuringRectangle(math::Vec2 &start, math::Vec2 &size)
 {
-
 	const std::array<float, 4> rectangleColor = {0.7f, 0.7f, 0.0f, 0.1f};
 	const std::vector<float> rectangleVertices = {
 
@@ -1035,14 +1119,48 @@ uint32_t Renderer::UpdateUniforms(const math::Vec2 &position, const std::array<f
 	uniforms.resolution[1] = static_cast<float>(windowHeight);
 	uniforms.translation[0] = position.x;
 	uniforms.translation[1] = position.y;
+	uniforms.extras[0] = zoom;
+	uniforms.extras[1] = 0.0f;
+	uniforms.extras[2] = 0.0f;
+	uniforms.extras[3] = 0.0f;
 
-	const bool rgbNeedsNormalization = color[0] > 1.0f || color[1] > 1.0f ||
-									   color[2] > 1.0f;
+	// Normalise 0-255 inputs to 0-1 (no-op if already in 0-1 range)
+	const bool  rgbNeedsNormalization = color[0] > 1.0f || color[1] > 1.0f ||
+	                                    color[2] > 1.0f;
 	const float rgbScale = rgbNeedsNormalization ? (1.0f / 255.0f) : 1.0f;
-	uniforms.color[0] = color[0] * rgbScale;
-	uniforms.color[1] = color[1] * rgbScale;
-	uniforms.color[2] = color[2] * rgbScale;
-	uniforms.color[3] = (color[3] > 1.0f) ? (color[3] * (1.0f / 255.0f)) : color[3];
+	float r = color[0] * rgbScale;
+	float g = color[1] * rgbScale;
+	float b = color[2] * rgbScale;
+	const float a = (color[3] > 1.0f) ? (color[3] * (1.0f / 255.0f)) : color[3];
+
+	// ── INSERT POINT C: linear → sRGB pre-correction (macOS only) ───────
+	// When surfaceIsSrgb is true the GPU automatically gamma-encodes every
+	// value the fragment shader writes.  Our colours are linear floats, so
+	// without this they get gamma-encoded twice and appear washed-out.
+	// Pre-applying the inverse sRGB transfer function here means the GPU
+	// pass produces the correct original linear value on screen.
+	//
+	// Windows/Linux: surfaceIsSrgb == false → this block is skipped entirely.
+#ifdef __APPLE__
+	if (surfaceIsSrgb)
+	{
+		auto linearToSrgb = [](float c) -> float
+		{
+			c = (c < 0.0f) ? 0.0f : (c > 1.0f) ? 1.0f : c;
+			return (c <= 0.0031308f)
+				? 12.92f * c
+				: 1.055f * std::pow(c, 1.0f / 2.4f) - 0.055f;
+		};
+		r = linearToSrgb(r);
+		g = linearToSrgb(g);
+		b = linearToSrgb(b);
+	}
+#endif
+
+	uniforms.color[0] = r;
+	uniforms.color[1] = g;
+	uniforms.color[2] = b;
+	uniforms.color[3] = a;
 
 	if (uniformBufferOffset + uniformBufferStride > uniformBufferSize)
 	{

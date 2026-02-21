@@ -38,7 +38,7 @@ math::Vec2 Engine::mouseDeltaScale;
 math::Vec2 Engine::staticDragOffset;
 
 // Height of the top timeline bar — must match UIManager
-static constexpr float kTopBarHeight = 68.0f;
+//static constexpr float kTopBarHeight = 68.0f;
 
 // ================================================================
 // TOOLTIP HELPERS
@@ -49,10 +49,10 @@ static constexpr float kTopBarHeight = 68.0f;
 // ================================================================
 bool Engine::Initialize()
 {
-    if (!renderer.Initialize())
+    if (!renderer.Initialize(settings))
         return false;
 
-    uiManager.InitializeImGui(renderer);
+    uiManager.InitializeImGui(renderer, &settings);
     AddDefaultObjects();
     return true;
 }
@@ -112,19 +112,24 @@ void Engine::CheckSpawning()
 // ================================================================
 void Engine::Update(float deltaMs, int iterations)
 {
+    glfwPollEvents();
     GLFWwindow *window = renderer.GetWindow();
 
     // ── Mouse position ────────────────────────────────────────────
     double mx, my;
     glfwGetCursorPos(window, &mx, &my);
 
-    int w, h;
-    glfwGetFramebufferSize(window, &w, &h);
+    // Window size in OS screen-points (what glfwGetCursorPos uses).
+    int winW, winH;
+    glfwGetWindowSize(window, &winW, &winH);
 
-    // World space (Y-up, framebuffer origin)
-    mouseWorld = Vec2(static_cast<float>(mx), static_cast<float>(h - my));
-    // Raw screen space (Y-down) — passed directly to measurement overlay
-    mouseScreen = Vec2(static_cast<float>(mx), static_cast<float>(my));
+    // Cursor is already in window coordinates; keep everything in the
+    // same space the renderer uses (windowWidth/windowHeight).
+    const float scaledMx = static_cast<float>(mx);
+    const float scaledMy = static_cast<float>(my);
+
+    // Screen space: Y-down, origin at top-left — used by measurement overlay
+    mouseScreen = Vec2(scaledMx, scaledMy);
 
     // ── Mouse buttons ─────────────────────────────────────────────
     bool pressedLeft = glfwGetMouseButton(window, GLFW_MOUSE_BUTTON_LEFT) == GLFW_PRESS;
@@ -133,6 +138,39 @@ void Engine::Update(float deltaMs, int iterations)
     // Block mouse interaction when cursor is inside the top bar
     ImGuiIO &io = ImGui::GetIO();
     const bool overUI = io.WantCaptureMouse;
+    const bool overUIKeyboard = io.WantCaptureKeyboard;
+
+    // ── Zoom controls (global) ────────────────────────────────────
+    if (!overUIKeyboard)
+    {
+        const float zoomStep = 0.05f;
+        if (glfwGetKey(window, GLFW_KEY_EQUAL) == GLFW_PRESS ||
+            glfwGetKey(window, GLFW_KEY_KP_ADD) == GLFW_PRESS)
+        {
+            settings.zoom *= (1.0f + zoomStep);
+        }
+        if (glfwGetKey(window, GLFW_KEY_MINUS) == GLFW_PRESS ||
+            glfwGetKey(window, GLFW_KEY_KP_SUBTRACT) == GLFW_PRESS)
+        {
+            settings.zoom *= (1.0f - zoomStep);
+        }
+        if (glfwGetKey(window, GLFW_KEY_0) == GLFW_PRESS ||
+            glfwGetKey(window, GLFW_KEY_KP_0) == GLFW_PRESS)
+        {
+            settings.zoom = 1.0f;
+        }
+        settings.zoom = math::Clamp(settings.zoom, 0.1f, 4.0f);
+    }
+
+    renderer.SetZoom(settings.zoom);
+
+    // World space: apply inverse zoom around window center, then Y-up flip.
+    const float zoom = settings.zoom;
+    const float cx = static_cast<float>(winW) * 0.5f;
+    const float cy = static_cast<float>(winH) * 0.5f;
+    const float zoomedX = (scaledMx - cx) / zoom + cx;
+    const float zoomedY = (scaledMy - cy) / zoom + cy;
+    mouseWorld = Vec2(zoomedX, static_cast<float>(winH) - zoomedY);
 
     if (pressedLeft && !mouseDownLeft && !overUI)
     {
@@ -300,7 +338,7 @@ void Engine::Render()
     // ── ImGui ─────────────────────────────────────────────────────
     uiManager.BeginImGuiFrame();
 
-    uiManager.RenderMainControls(world.RigidbodyCount(), settings, selectedBody);
+    uiManager.RenderMainControls(world.RigidbodyCount(), selectedBody);
 
     uiManager.RenderSpawner();
 
