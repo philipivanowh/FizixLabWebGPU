@@ -18,7 +18,7 @@ class World
 public:
 	WorldSnapshot CaptureSnapshot() const;
 	void RestoreSnapshot(const WorldSnapshot &snap);
-	
+
 	void Add(std::unique_ptr<physics::Rigidbody> body);
 	void Update(float deltaMs, int iterations, Settings &settings);
 	void Draw(Renderer &renderer) const;
@@ -28,7 +28,9 @@ public:
 
 	physics::Rigidbody *PickBody(const math::Vec2 &p);
 
-private:
+	math::Vec2 SnapToNearestDynamicObject(const math::Vec2 &position, float snapRadius);
+
+private : 
 	int ClampIterations(int value);
 	void RemoveObjects();
 

@@ -112,6 +112,7 @@ void Engine::Scroll_Feedback(GLFWwindow *window, double xoffset, double yoffset)
     (void)(window);
 }
 
+
 // ================================================================
 // UPDATE
 // ================================================================
@@ -130,47 +131,63 @@ void Engine::Update(float deltaMs, int iterations)
     double mx, my;
     glfwGetCursorPos(window, &mx, &my);
 
-    // Window size in OS screen-points (what glfwGetCursorPos uses).
     int winW, winH;
     glfwGetWindowSize(window, &winW, &winH);
 
-    // Screen space: Y-down, origin at top-left
     const float scaledMx = static_cast<float>(mx);
     const float scaledMy = static_cast<float>(my);
 
-    // Screen space: Y-down, origin at top-left — used by measurement overlay
+    // Screen space: Y-down, origin at top-left
     mouseScreen = Vec2(scaledMx, scaledMy);
 
     // ── Mouse buttons ─────────────────────────────────────────────
     bool pressedLeft = glfwGetMouseButton(window, GLFW_MOUSE_BUTTON_LEFT) == GLFW_PRESS;
     bool pressedRight = glfwGetMouseButton(window, GLFW_MOUSE_BUTTON_RIGHT) == GLFW_PRESS;
 
-    // Block mouse interaction when cursor is inside the top bar
     ImGuiIO &io = ImGui::GetIO();
     const bool overUI = io.WantCaptureMouse;
+    const bool overUIKeyboard = io.WantCaptureKeyboard;
 
-    // ── Zoom controls (global) ────────────────────────────────────
-    settings.zoom = math::Clamp(settings.zoom, 0.1f, 4.0f);
+    // ── Zoom controls ─────────────────────────────────────────────
+    if (!overUIKeyboard)
+    {
+        const float zoomStep = 0.05f;
+        if (glfwGetKey(window, GLFW_KEY_EQUAL) == GLFW_PRESS ||
+            glfwGetKey(window, GLFW_KEY_KP_ADD) == GLFW_PRESS)
+        {
+            settings.zoom *= (1.0f + zoomStep);
+        }
+        if (glfwGetKey(window, GLFW_KEY_MINUS) == GLFW_PRESS ||
+            glfwGetKey(window, GLFW_KEY_KP_SUBTRACT) == GLFW_PRESS)
+        {
+            settings.zoom *= (1.0f - zoomStep);
+        }
+        if (glfwGetKey(window, GLFW_KEY_0) == GLFW_PRESS ||
+            glfwGetKey(window, GLFW_KEY_KP_0) == GLFW_PRESS)
+        {
+            settings.zoom = 1.0f;
+            cameraOffset = Vec2(0.0f, 0.0f); // Reset camera position too
+        }
+        settings.zoom = math::Clamp(settings.zoom, 0.1f, 4.0f);
+    }
 
     renderer.SetZoom(settings.zoom);
 
-    // World space: apply inverse zoom around window center, then Y-up flip.
+    // ── World space calculation with camera offset ────────────────
     const float zoom = settings.zoom;
     const float cx = static_cast<float>(winW) * 0.5f;
     const float cy = static_cast<float>(winH) * 0.5f;
-
+    
     // Apply zoom around center, then add camera offset
-    // NEW (CORRECT)
-    const float zoomedX = (scaledMx - cx) / zoom + cx;
-    const float zoomedY = (scaledMy - cy) / zoom + cy;
-    const float worldX = zoomedX + cameraOffset.x;
-    const float worldY = static_cast<float>(winH) - zoomedY + cameraOffset.y;
-    mouseWorld = Vec2(worldX, worldY);
+    const float zoomedX = (scaledMx - cx) / zoom + cx + cameraOffset.x;
+    const float zoomedY = (scaledMy - cy) / zoom + cy + cameraOffset.y;
+    mouseWorld = Vec2(zoomedX, static_cast<float>(winH) - zoomedY);
 
+    // ── Left mouse button handling ────────────────────────────────
     if (pressedLeft && !mouseDownLeft && !overUI)
     {
         mouseDownLeft = true;
-
+        
         // Try to pick a body first
         draggedBody = world.PickBody(mouseWorld);
         selectedBody = draggedBody;
@@ -203,12 +220,12 @@ void Engine::Update(float deltaMs, int iterations)
     {
         // Calculate mouse delta in screen space
         Vec2 mouseDelta = mouseScreen - panStartMouse;
-
+        
         // Apply delta to camera offset (invert X and Y for natural panning)
         // Divide by zoom so panning speed stays consistent at different zoom levels
         cameraOffset.x = panStartCamera.x - mouseDelta.x / zoom;
         cameraOffset.y = panStartCamera.y + mouseDelta.y / zoom;
-
+        
         // Update renderer camera offset
         renderer.SetCameraOffset(cameraOffset);
     }
@@ -232,11 +249,9 @@ void Engine::Update(float deltaMs, int iterations)
     if (mouseDownRight)
         mouseDeltaScale = mouseWorld - mouseInitialPos;
 
-    // ── Drag force ────────────────────────────────────────────────
+    // ── Object dragging ───────────────────────────────────────────
     if (draggedBody && !isPanning)
     {
-
-        // If the body is static then it can only move in percisionDragMode
         if (draggedBody->bodyType == RigidbodyType::Static)
         {
             if (!(dynamic_cast<shape::Cannon *>(draggedBody)))
@@ -244,20 +259,18 @@ void Engine::Update(float deltaMs, int iterations)
             else
                 draggedBody->TranslateTo(mouseWorld);
         }
-
         else if (draggedBody->bodyType == RigidbodyType::Dynamic)
         {
             switch (settings.dragMode)
             {
             case DragMode::percisionDrag:
-
                 draggedBody->TranslateTo(mouseWorld);
                 break;
             case DragMode::physicsDrag:
             {
                 const float stiffness = DragConstants::DRAG_STIFNESS;
                 const float damping = 5.0f * std::sqrt(
-                                                 stiffness * math::Clamp(draggedBody->mass, 20.f, 100.f) / 20.f);
+                    stiffness * math::Clamp(draggedBody->mass, 20.f, 100.f) / 20.f);
 
                 Vec2 delta = mouseWorld - draggedBody->pos;
                 draggedBody->dragForce =
@@ -271,7 +284,6 @@ void Engine::Update(float deltaMs, int iterations)
     // ── Physics / time control ────────────────────────────────────
     if (settings.rewinding)
     {
-        // Hold-button rewind (pop from back)
         const int steps = std::max(1, static_cast<int>(settings.timeScale));
         WorldSnapshot snap;
         for (int i = 0; i < steps; i++)
@@ -283,11 +295,9 @@ void Engine::Update(float deltaMs, int iterations)
             }
         }
         world.RestoreSnapshot(snap);
-        // Physics does NOT run during rewind
     }
     else if (settings.scrubIndex >= 0)
     {
-        // Timeline scrubber — restore the chosen frame, freeze physics
         const WorldSnapshot *frame =
             recorder.GetFrame(static_cast<size_t>(settings.scrubIndex));
         if (frame)
@@ -296,20 +306,16 @@ void Engine::Update(float deltaMs, int iterations)
     else
     {
         // ── LIVE MODE ─────────────────────────────────────────────
-
-        // Record a snapshot if recording is enabled
         if (settings.recording)
         {
             if (++recordFrameCounter % settings.recordInterval == 0)
                 recorder.Record(world.CaptureSnapshot());
         }
 
-        // Decide how much simulated time passes this frame
         float scaledDelta = 0.0f;
 
         if (spawnNudgeFrames > 0)
         {
-            // Force physics forward regardless of pause state
             scaledDelta = 16.67f;
             spawnNudgeFrames--;
         }

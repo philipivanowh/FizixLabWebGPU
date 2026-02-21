@@ -86,6 +86,37 @@ physics::Rigidbody *World::PickBody(const math::Vec2 &p)
 	return nullptr;
 }
 
+math::Vec2 World::SnapToNearestDynamicObject(const math::Vec2 &position, float snapRadius)
+{
+    physics::Rigidbody *nearestBody = nullptr;
+    float nearestDistSq = snapRadius * snapRadius;
+
+    // Search through all objects
+    for (const auto &obj : objects)
+    {
+        // Only snap to dynamic objects
+        if (obj->bodyType != physics::RigidbodyType::Dynamic)
+            continue;
+
+        // Calculate distance to object center
+        math::Vec2 delta = obj->pos - position;
+        float distSq = delta.x * delta.x + delta.y * delta.y;
+
+        // Check if this is the nearest object within snap radius
+        if (distSq < nearestDistSq)
+        {
+            nearestDistSq = distSq;
+            nearestBody = obj.get();
+        }
+    }
+
+	if(nearestBody)
+		std::cout << nearestBody->pos.x << " " << nearestBody->pos.y << std::endl;
+
+    // Return snapped position or original position if no snap
+    return nearestBody ? nearestBody->pos : position;
+}
+
 void World::Update(float deltaMs, int iterations, Settings &settings)
 {
 	iterations = ClampIterations(iterations);

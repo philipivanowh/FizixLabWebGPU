@@ -37,7 +37,7 @@ public:
 	static void CheckCannon();
 	static void ClearBodies();
 
-	static void Scroll_Feedback(GLFWwindow* window, double xoffset, double yoffset);
+	static void Scroll_Feedback(GLFWwindow *window, double xoffset, double yoffset);
 
 	static Recorder &GetRecorder() { return recorder; }
 
@@ -53,23 +53,22 @@ private:
 	static World world;
 	static UIManager uiManager;
 	static physics::Rigidbody *draggedBody;
-	static physics::Rigidbody* selectedBody;
+	static physics::Rigidbody *selectedBody;
 	static math::Vec2 mouseWorld;
 	static bool mouseDownLeft;
 	static bool mouseDownRight;
 	static math::Vec2 mouseInitialPos;
 	static math::Vec2 mouseDeltaScale;
 
-	static math::Vec2 mouseScreen;  
-	
-	static math::Vec2  mouseInitialScreen;
+	static math::Vec2 mouseScreen;
+
+	static math::Vec2 mouseInitialScreen;
 
 	static math::Vec2 staticDragOffset;
 
 	// Camera panning
-    static math::Vec2 cameraOffset;        // Current camera pan offset
-    static math::Vec2 panStartMouse;       // Mouse position when pan started
-    static math::Vec2 panStartCamera;      // Camera offset when pan started
-    static bool isPanning;                 // Is currently panning the camera
-
+	static math::Vec2 cameraOffset;	  // Current camera pan offset
+	static math::Vec2 panStartMouse;  // Mouse position when pan started
+	static math::Vec2 panStartCamera; // Camera offset when pan started
+	static bool isPanning;			  // Is currently panning the camera
 };
