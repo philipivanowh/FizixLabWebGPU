@@ -20,11 +20,11 @@ cmake -B build-dawn -DWEBGPU_BACKEND=DAWN -DWEBGPU_BUILD_FROM_SOURCE=ON
 cmake --build build-dawn
 ```
 # Build using Dawn backend
-cmake -G "MinGW Makefiles" -S . -B build
-cmake --build build
+cmake -G "MinGW Makefiles" -S . -B build-dawn -DWEBGPU_BACKEND=DAWN -DWEBGPU_BUILD_FROM_SOURCE=ON
+cmake --build build-dawn
 
-# Build using emscripten
+# Build using emscripten 
 NOT YET
 ```
 
-Then run either `./build/App`
+Then run either `./build-dawn/App`
