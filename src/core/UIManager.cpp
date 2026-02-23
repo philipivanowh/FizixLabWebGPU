@@ -1027,6 +1027,8 @@ void UIManager::RenderCannonInspector(shape::Cannon *cannon)
         cannonFirePending = true;
 
     ImGui::PopStyleColor(5);
+    ImGui::Spacing();
+    ImGui::Spacing();
 }
 bool UIManager::ConsumeCannonFireRequest(CannonFireSettings &out)
 {

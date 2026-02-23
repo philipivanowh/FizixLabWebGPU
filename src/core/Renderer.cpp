@@ -50,7 +50,7 @@ bool Renderer::Initialize(Settings &settings, GLFWscrollfun scrollCallback)
 	glfwWindowHint(GLFW_RESIZABLE, GLFW_FALSE);
 
 	// On macOS, request a full Retina (HiDPI) framebuffer.
-	settings.InitFromMonitor();
+	//settings.InitFromMonitor();
 	windowWidth = settings.windowWidth;
 	windowHeight = settings.windowHeight;
 	framebufferWidth = settings.windowWidth;
@@ -517,11 +517,11 @@ void Renderer::DrawGrid()
 
 	for (float &value : minorColor)
 	{
-		value *= 1.2f;
+		value *= 1.5f;
 	}
 	for (float &value : majorColor)
 	{
-		value *= 1.2f;
+		value *= 1.5f;
 	}
 
 	std::vector<float> minorVertices;

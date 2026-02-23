@@ -142,7 +142,12 @@ void Engine::Update(float deltaMs, int iterations)
 
     // ── Mouse buttons ─────────────────────────────────────────────
     bool pressedLeft = glfwGetMouseButton(window, GLFW_MOUSE_BUTTON_LEFT) == GLFW_PRESS;
-    bool pressedRight = glfwGetMouseButton(window, GLFW_MOUSE_BUTTON_RIGHT) == GLFW_PRESS;
+    bool pressedRight = false;
+    #ifdef __APPLE__
+        pressedRight = glfwGetKey(window, GLFW_KEY_LEFT_CONTROL) == GLFW_PRESS;
+    #else
+        pressedRight = glfwGetMouseButton(window, GLFW_MOUSE_BUTTON_RIGHT) == GLFW_PRESS;
+    #endif
 
     ImGuiIO &io = ImGui::GetIO();
     const bool overUI = io.WantCaptureMouse;
@@ -180,7 +185,7 @@ void Engine::Update(float deltaMs, int iterations)
     
     // Apply zoom around center, then add camera offset
     const float zoomedX = (scaledMx - cx) / zoom + cx + cameraOffset.x;
-    const float zoomedY = (scaledMy - cy) / zoom + cy + cameraOffset.y;
+    const float zoomedY = (scaledMy - cy) / zoom + cy - cameraOffset.y;
     mouseWorld = Vec2(zoomedX, static_cast<float>(winH) - zoomedY);
 
     // ── Left mouse button handling ────────────────────────────────
