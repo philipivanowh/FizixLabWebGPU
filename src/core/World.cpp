@@ -154,7 +154,7 @@ void World::Draw(Renderer &renderer) const
 {
 	for (const auto &object : objects)
 	{
-		renderer.DrawShape(*object);
+		renderer.DrawShape(*object, object->isHighlighted);
 	}
 }
 

@@ -5,6 +5,7 @@
 #include "common/settings.hpp"
 #include "math/Math.hpp"
 #include "physics/Rigidbody.hpp"
+#include "shape/Incline.hpp"
 
 #include <algorithm>
 #include <cmath>
@@ -15,8 +16,8 @@
 static constexpr float kRestVelThreshold = 5.0f;
 
 // ─────────────────────────────────────────────────────────────────────────────
-bool CollisionSolver::ResolveIfColliding(physics::Rigidbody& bodyA,
-                                         physics::Rigidbody& bodyB)
+bool CollisionSolver::ResolveIfColliding(physics::Rigidbody &bodyA,
+                                         physics::Rigidbody &bodyB)
 {
     const collision::HitInfo hit = collision::Collide(bodyA, bodyB);
     if (!hit.result)
@@ -37,13 +38,13 @@ bool CollisionSolver::ResolveIfColliding(physics::Rigidbody& bodyA,
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-void CollisionSolver::SeparateBodies(physics::Rigidbody& bodyA,
-                                     physics::Rigidbody& bodyB,
-                                     const math::Vec2&   mtv)
+void CollisionSolver::SeparateBodies(physics::Rigidbody &bodyA,
+                                     physics::Rigidbody &bodyB,
+                                     const math::Vec2 &mtv)
 {
     const float maxCorrectionDepth = PhysicsConstants::MAX_PENETRATION_CORRECTION;
-    const float mtvLength          = mtv.Length();
-    math::Vec2  correction         = mtv;
+    const float mtvLength = mtv.Length();
+    math::Vec2 correction = mtv;
 
     if (mtvLength > maxCorrectionDepth)
         correction = mtv * (maxCorrectionDepth / mtvLength);
@@ -55,35 +56,64 @@ void CollisionSolver::SeparateBodies(physics::Rigidbody& bodyA,
     else
     {
         bodyA.Translate(correction.Negate() / 2.0f);
-        bodyB.Translate(correction         / 2.0f);
+        bodyB.Translate(correction / 2.0f);
     }
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
 void CollisionSolver::ResolveWithRotationAndFriction(
-    const collision::ContactManifold& contact)
+    const collision::ContactManifold &contact)
 {
-    physics::Rigidbody& bodyA = *const_cast<physics::Rigidbody*>(contact.bodyA);
-    physics::Rigidbody& bodyB = *const_cast<physics::Rigidbody*>(contact.bodyB);
+    physics::Rigidbody &bodyA = *const_cast<physics::Rigidbody *>(contact.bodyA);
+    physics::Rigidbody &bodyB = *const_cast<physics::Rigidbody *>(contact.bodyB);
 
-    const math::Vec2& normal      = contact.normal;
-    const int         contactCount= contact.contactCount;
+    const math::Vec2 &normal = contact.normal;
+    const int contactCount = contact.contactCount;
 
-    const float restitution     = std::min(bodyA.restitution,    bodyB.restitution);
-    const float staticFriction  = (bodyA.staticFriction  + bodyB.staticFriction)  * 0.5f;
-    const float kineticFriction = (bodyA.kineticFriction + bodyB.kineticFriction) * 0.5f;
+    const float restitution = std::min(bodyA.restitution, bodyB.restitution);
 
+    float staticFriction;
+    float kineticFriction;
+
+    auto *inclineA = dynamic_cast<shape::Incline *>(&bodyA);
+    auto *inclineB = dynamic_cast<shape::Incline *>(&bodyB);
+
+    if (inclineA && inclineB)
+    {
+        // Both are inclines (rare) - use the one with higher friction
+        staticFriction = std::max(inclineA->GetStaticFriction(), inclineB->GetStaticFriction());
+        kineticFriction = std::max(inclineA->GetKineticFriction(), inclineB->GetKineticFriction());
+    }
+    else if (inclineA)
+    {
+        // Body A is an incline - its surface properties dominate
+        staticFriction = inclineA->GetStaticFriction();
+        kineticFriction = inclineA->GetKineticFriction();
+    }
+    else if (inclineB)
+    {
+        // Body B is an incline - its surface properties dominate
+        staticFriction = inclineB->GetStaticFriction();
+        kineticFriction = inclineB->GetKineticFriction();
+    }
+    else
+    {
+        // Neither is an incline - average the friction coefficients
+        // (geometric mean is more physically accurate than arithmetic mean)
+        staticFriction = std::sqrt(bodyA.staticFriction * bodyB.staticFriction);
+        kineticFriction = std::sqrt(bodyA.kineticFriction * bodyB.kineticFriction);
+    }
     contactList[0] = contact.contact1;
     contactList[1] = contact.contact2;
 
     // Zero all working arrays for this contact manifold
     for (int i = 0; i < contactCount; i++)
     {
-        impulseList[i]         = math::Vec2();
-        raList[i]              = math::Vec2();
-        rbList[i]              = math::Vec2();
+        impulseList[i] = math::Vec2();
+        raList[i] = math::Vec2();
+        rbList[i] = math::Vec2();
         impulseFrictionList[i] = math::Vec2();
-        jList[i]               = 0.0f;
+        jList[i] = 0.0f;
     }
 
     // =========================================================================
@@ -112,15 +142,13 @@ void CollisionSolver::ResolveWithRotationAndFriction(
 
         const float raPerpDotN = math::Vec2::Dot(raPerp, normal);
         const float rbPerpDotN = math::Vec2::Dot(rbPerp, normal);
-        const float denom      = bodyA.invMass + bodyB.invMass
-                               + raPerpDotN * raPerpDotN * bodyA.invInertia
-                               + rbPerpDotN * rbPerpDotN * bodyB.invInertia;
+        const float denom = bodyA.invMass + bodyB.invMass + raPerpDotN * raPerpDotN * bodyA.invInertia + rbPerpDotN * rbPerpDotN * bodyB.invInertia;
 
         float j = -(1.0f + restitution) * contactVelMag;
         j /= denom;
         j /= static_cast<float>(contactCount);
 
-        jList[i]       = j;
+        jList[i] = j;
         impulseList[i] = normal * j;
     }
 
@@ -129,13 +157,13 @@ void CollisionSolver::ResolveWithRotationAndFriction(
     for (int i = 0; i < contactCount; i++)
     {
         const math::Vec2 impulse = impulseList[i];
-        const math::Vec2 ra      = raList[i];
-        const math::Vec2 rb      = rbList[i];
+        const math::Vec2 ra = raList[i];
+        const math::Vec2 rb = rbList[i];
 
-        bodyA.linearVel  += impulse * -bodyA.invMass;
+        bodyA.linearVel += impulse * -bodyA.invMass;
         bodyA.angularVel += -bodyA.invInertia * math::Vec2::Cross(ra, impulse);
-        bodyB.linearVel  += impulse *  bodyB.invMass;
-        bodyB.angularVel +=  bodyB.invInertia * math::Vec2::Cross(rb, impulse);
+        bodyB.linearVel += impulse * bodyB.invMass;
+        bodyB.angularVel += bodyB.invInertia * math::Vec2::Cross(rb, impulse);
 
         if (bodyA.bodyType != physics::RigidbodyType::Static)
             bodyA.AccumulateNormalImpulse(impulse.Negate());
@@ -186,7 +214,7 @@ void CollisionSolver::ResolveWithRotationAndFriction(
             // Accumulates the analytical static-friction force for one body.
             // 'accumSign' applies Newton's 3rd law for the partner body.
             auto accumulateAnalyticStaticFriction =
-                [&](physics::Rigidbody& body, float accumSign)
+                [&](physics::Rigidbody &body, float accumSign)
             {
                 if (body.bodyType == physics::RigidbodyType::Static)
                     return;
@@ -197,8 +225,7 @@ void CollisionSolver::ResolveWithRotationAndFriction(
                 if (body.linearVel.Length() > kRestVelThreshold)
                     return;
 
-                const float gPPM = PhysicsConstants::GRAVITY
-                                 * SimulationConstants::PIXELS_PER_METER;
+                const float gPPM = PhysicsConstants::GRAVITY * SimulationConstants::PIXELS_PER_METER;
                 const math::Vec2 gravForce(0.0f, -body.mass * gPPM);
 
                 // Decompose gravity into the component perpendicular to the
@@ -210,7 +237,7 @@ void CollisionSolver::ResolveWithRotationAndFriction(
 
                 const float gravTangMag = gravTangential.Length();
                 if (gravTangMag < 1e-4f)
-                    return;  // flat surface — no tangential gravity, no friction to show
+                    return; // flat surface — no tangential gravity, no friction to show
 
                 // N = |gravity · surface_normal| (magnitude only)
                 const float normalForceMag =
@@ -231,7 +258,7 @@ void CollisionSolver::ResolveWithRotationAndFriction(
 
             // bodyA is on the surface → friction acts on it directly (+1)
             // bodyB is the surface  → equal-and-opposite reaction        (-1)
-            accumulateAnalyticStaticFriction(bodyA,  1.0f);
+            accumulateAnalyticStaticFriction(bodyA, 1.0f);
             accumulateAnalyticStaticFriction(bodyB, -1.0f);
 
             // Body is at rest — no velocity correction required
@@ -243,9 +270,7 @@ void CollisionSolver::ResolveWithRotationAndFriction(
 
         const float raPerpDotT = math::Vec2::Dot(raPerp, tangent);
         const float rbPerpDotT = math::Vec2::Dot(rbPerp, tangent);
-        const float denom      = bodyA.invMass + bodyB.invMass
-                               + raPerpDotT * raPerpDotT * bodyA.invInertia
-                               + rbPerpDotT * rbPerpDotT * bodyB.invInertia;
+        const float denom = bodyA.invMass + bodyB.invMass + raPerpDotT * raPerpDotT * bodyA.invInertia + rbPerpDotT * rbPerpDotT * bodyB.invInertia;
 
         float jt = -math::Vec2::Dot(relativeVelocity, tangent);
         jt /= denom;
@@ -273,10 +298,10 @@ void CollisionSolver::ResolveWithRotationAndFriction(
         const math::Vec2 ra = raList[i];
         const math::Vec2 rb = rbList[i];
 
-        bodyA.linearVel  += impulseFriction * -bodyA.invMass;
+        bodyA.linearVel += impulseFriction * -bodyA.invMass;
         bodyA.angularVel += -bodyA.invInertia * math::Vec2::Cross(ra, impulseFriction);
-        bodyB.linearVel  += impulseFriction *  bodyB.invMass;
-        bodyB.angularVel +=  bodyB.invInertia * math::Vec2::Cross(rb, impulseFriction);
+        bodyB.linearVel += impulseFriction * bodyB.invMass;
+        bodyB.angularVel += bodyB.invInertia * math::Vec2::Cross(rb, impulseFriction);
 
         if (bodyA.bodyType != physics::RigidbodyType::Static)
             bodyA.AccumulateFrictionImpulse(impulseFriction.Negate());

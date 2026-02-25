@@ -50,7 +50,8 @@ public:
 	// Return true as long as the main loop should keep on running
 	bool IsRunning();
 
-	void DrawShape(physics::Rigidbody &body);
+	void DrawHighlightOutline(physics::Rigidbody &body);
+	void DrawShape(physics::Rigidbody &body, bool highlight = false);
 	void DrawBox(const shape::Box &box);
 	void DrawBall(const shape::Ball &ball);
 	void DrawCannon(const shape::Cannon &Cannon);

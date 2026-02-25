@@ -106,6 +106,9 @@ private:
      // ── Cannon inspector (shown when selectedBody is a Cannon) ────
     void RenderCannonInspector(shape::Cannon *cannon);
 
+    // -- Incline inspector (shown when selectedBody is an Incline) ────
+    void RenderInclineInspector(shape::Incline *incline);
+
     // ── Spawner sub-sections ─────────────────────────────────────
     void RenderSpawnBasics();
     void RenderSpawnPhysicsControls();

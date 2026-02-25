@@ -688,8 +688,142 @@ void Renderer::InitializeBuffers()
 	queue.writeBuffer(vertexBuffer, 0, vertexData.data(), bufferDesc.size);
 }
 
-void Renderer::DrawShape(physics::Rigidbody &body)
+void Renderer::DrawHighlightOutline(physics::Rigidbody &body)
 {
+	float outlineThickness = 7.0f; // Thickness of the highlight outline in world units
+	// Highlight color - bright yellow/white glow
+	const std::array<float, 4> highlightColor{1.0f, 0.9f, 0.4f, 0.6f};
+
+	if (auto box = dynamic_cast<const shape::Box *>(&body))
+	{
+		// Draw box slightly larger
+		renderPass.setPipeline(pipeline);
+
+		// Get vertices and scale them outward
+		std::vector<float> vertices = box->GetVertexLocalPos();
+
+		// Scale vertices outward from center by outline thickness
+		for (size_t i = 0; i < vertices.size(); i += 2)
+		{
+			float x = vertices[i];
+			float y = vertices[i + 1];
+
+			// Calculate distance from center
+			float dist = std::sqrt(x * x + y * y);
+			if (dist > 0.001f)
+			{
+				// Push outward
+				float scale = 1.0f + outlineThickness / dist;
+				vertices[i] = x * scale;
+				vertices[i + 1] = y * scale;
+			}
+		}
+
+		EnsureVertexBufferSize(vertices.size());
+		queue.writeBuffer(vertexBuffer, 0, vertices.data(), vertices.size() * sizeof(float));
+
+		vertexCount = static_cast<uint32_t>(vertices.size() / 2);
+		uint32_t uniformOffset = UpdateUniforms(box->pos, highlightColor);
+
+		renderPass.setBindGroup(0, uniformBindGroup, 1, &uniformOffset);
+		renderPass.setVertexBuffer(0, vertexBuffer, 0, vertexCount * 2 * sizeof(float));
+		renderPass.draw(vertexCount, 1, 0, 0);
+	}
+	else if (auto ball = dynamic_cast<const shape::Ball *>(&body))
+	{
+		// Draw ball slightly larger
+		renderPass.setPipeline(pipeline);
+
+		std::vector<float> vertices = ball->GetVertexLocalPos();
+
+		// Scale all vertices by a factor
+		float scale = (ball->radius + outlineThickness * 0.7) / ball->radius;
+		for (size_t i = 0; i < vertices.size(); i++)
+		{
+			vertices[i] *= scale;
+		}
+
+		EnsureVertexBufferSize(vertices.size());
+		queue.writeBuffer(vertexBuffer, 0, vertices.data(), vertices.size() * sizeof(float));
+
+		vertexCount = static_cast<uint32_t>(vertices.size() / 2);
+		uint32_t uniformOffset = UpdateUniforms(ball->pos, highlightColor);
+
+		renderPass.setBindGroup(0, uniformBindGroup, 1, &uniformOffset);
+		renderPass.setVertexBuffer(0, vertexBuffer, 0, vertexCount * 2 * sizeof(float));
+		renderPass.draw(vertexCount, 1, 0, 0);
+	}
+	else if (auto incline = dynamic_cast<const shape::Incline *>(&body))
+	{
+		renderPass.setPipeline(pipeline);
+
+		std::vector<float> vertices = incline->GetVertexLocalPos();
+
+		// Incline has exactly 3 vertices (6 floats)
+		// Extract the 3 corner points
+		math::Vec2 v0(vertices[0], vertices[1]);
+		math::Vec2 v1(vertices[2], vertices[3]);
+		math::Vec2 v2(vertices[4], vertices[5]);
+
+		// Calculate centroid of the triangle
+		math::Vec2 centroid = (v0 + v1 + v2) / 3.0f;
+
+		// Scale each vertex away from centroid
+		math::Vec2 outV0 = centroid + (v0 - centroid) * (1.0f + outlineThickness * 1.7 / (v0 - centroid).Length());
+		math::Vec2 outV1 = centroid + (v1 - centroid) * (1.0f + outlineThickness * 1.7 / (v1 - centroid).Length());
+		math::Vec2 outV2 = centroid + (v2 - centroid) * (1.0f + outlineThickness * 1.7 / (v2 - centroid).Length());
+
+		// Create vertex array for the outline triangle
+		std::vector<float> outlineVertices = {
+			outV0.x, outV0.y,
+			outV1.x, outV1.y,
+			outV2.x, outV2.y};
+
+		EnsureVertexBufferSize(outlineVertices.size());
+		queue.writeBuffer(vertexBuffer, 0, outlineVertices.data(), outlineVertices.size() * sizeof(float));
+
+		vertexCount = static_cast<uint32_t>(outlineVertices.size() / 2);
+		uint32_t uniformOffset = UpdateUniforms(incline->pos, highlightColor);
+
+		renderPass.setBindGroup(0, uniformBindGroup, 1, &uniformOffset);
+		renderPass.setVertexBuffer(0, vertexBuffer, 0, vertexCount * 2 * sizeof(float));
+		renderPass.draw(vertexCount, 1, 0, 0);
+	}
+	else if (auto cannon = dynamic_cast<const shape::Cannon *>(&body))
+	{
+		// For cannon, draw a simple circle around it
+		const float cannonSize = 50.0f; // Approximate cannon size
+		std::vector<float> circleVerts;
+		const int segments = 32;
+
+		for (int i = 0; i < segments; i++)
+		{
+			float angle1 = (float)i / segments * 2.0f * math::PI;
+			float angle2 = (float)(i + 1) / segments * 2.0f * math::PI;
+
+			circleVerts.push_back(std::cos(angle1) * cannonSize);
+			circleVerts.push_back(std::sin(angle1) * cannonSize);
+			circleVerts.push_back(std::cos(angle2) * cannonSize);
+			circleVerts.push_back(std::sin(angle2) * cannonSize);
+			circleVerts.push_back(0.0f);
+			circleVerts.push_back(0.0f);
+		}
+
+		EnsureVertexBufferSize(circleVerts.size());
+		queue.writeBuffer(vertexBuffer, 0, circleVerts.data(), circleVerts.size() * sizeof(float));
+
+		uint32_t uniformOffset = UpdateUniforms(cannon->pos, highlightColor);
+		renderPass.setBindGroup(0, uniformBindGroup, 1, &uniformOffset);
+		renderPass.setVertexBuffer(0, vertexBuffer, 0, circleVerts.size() * sizeof(float));
+		renderPass.draw(static_cast<uint32_t>(circleVerts.size() / 2), 1, 0, 0);
+	}
+}
+void Renderer::DrawShape(physics::Rigidbody &body, bool highlight)
+{
+	if (highlight)
+	{
+		DrawHighlightOutline(body);
+	}
 	if (auto box = dynamic_cast<const shape::Box *>(&body))
 	{
 		DrawBox(*box);

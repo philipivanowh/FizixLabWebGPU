@@ -112,7 +112,6 @@ void Engine::Scroll_Feedback(GLFWwindow *window, double xoffset, double yoffset)
     (void)(window);
 }
 
-
 // ================================================================
 // UPDATE
 // ================================================================
@@ -148,6 +147,11 @@ void Engine::Update(float deltaMs, int iterations)
     const bool overUI = io.WantCaptureMouse;
     const bool overUIKeyboard = io.WantCaptureKeyboard;
 
+    if(glfwGetKey(window, GLFW_KEY_P) == GLFW_PRESS)
+    {
+        settings.paused = !settings.paused;
+    }
+
     // ── Zoom controls ─────────────────────────────────────────────
     if (!overUIKeyboard)
     {
@@ -177,36 +181,42 @@ void Engine::Update(float deltaMs, int iterations)
     const float zoom = settings.zoom;
     const float cx = static_cast<float>(winW) * 0.5f;
     const float cy = static_cast<float>(winH) * 0.5f;
-    
+
     // Apply zoom around center, then add camera offset
     const float zoomedX = (scaledMx - cx) / zoom + cx + cameraOffset.x;
     const float zoomedY = (scaledMy - cy) / zoom + cy + cameraOffset.y;
     mouseWorld = Vec2(zoomedX, static_cast<float>(winH) - zoomedY);
 
     // ── Left mouse button handling ────────────────────────────────
+    // In Engine::Update(), after selecting an object
     if (pressedLeft && !mouseDownLeft && !overUI)
     {
         mouseDownLeft = true;
-        
-        // Try to pick a body first
+
+        // Clear previous highlight
+        if (selectedBody)
+        {
+            selectedBody->isHighlighted = false;
+        }
+
         draggedBody = world.PickBody(mouseWorld);
         selectedBody = draggedBody;
 
         if (draggedBody)
         {
-            // Dragging an object
+            // Set new highlight
+            draggedBody->isHighlighted = true;
             staticDragOffset = draggedBody->pos - mouseWorld;
             isPanning = false;
         }
         else
         {
-            // No object picked - start camera panning
             isPanning = true;
             panStartMouse = mouseScreen;
             panStartCamera = cameraOffset;
         }
     }
-
+    
     if (!pressedLeft)
     {
         mouseDownLeft = false;
@@ -220,12 +230,12 @@ void Engine::Update(float deltaMs, int iterations)
     {
         // Calculate mouse delta in screen space
         Vec2 mouseDelta = mouseScreen - panStartMouse;
-        
+
         // Apply delta to camera offset (invert X and Y for natural panning)
         // Divide by zoom so panning speed stays consistent at different zoom levels
         cameraOffset.x = panStartCamera.x - mouseDelta.x / zoom;
         cameraOffset.y = panStartCamera.y + mouseDelta.y / zoom;
-        
+
         // Update renderer camera offset
         renderer.SetCameraOffset(cameraOffset);
     }
@@ -270,7 +280,7 @@ void Engine::Update(float deltaMs, int iterations)
             {
                 const float stiffness = DragConstants::DRAG_STIFNESS;
                 const float damping = 5.0f * std::sqrt(
-                    stiffness * math::Clamp(draggedBody->mass, 20.f, 100.f) / 20.f);
+                                                 stiffness * math::Clamp(draggedBody->mass, 20.f, 100.f) / 20.f);
 
                 Vec2 delta = mouseWorld - draggedBody->pos;
                 draggedBody->dragForce =

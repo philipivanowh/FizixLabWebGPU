@@ -55,7 +55,7 @@ namespace Col
     // ── Stellar Amber — warning / friction ────────────────────────
     // Muted plasma tone
     static constexpr ImVec4 Amber{0.900f, 0.600f, 0.150f, 1.00f};
-    //static constexpr ImVec4 AmberSoft{0.900f, 0.600f, 0.150f, 0.12f};
+    // static constexpr ImVec4 AmberSoft{0.900f, 0.600f, 0.150f, 0.12f};
 
     // ── Ink — text hierarchy ──────────────────────────────────────
     // No pure white. Ever.
@@ -274,7 +274,7 @@ void UIManager::ApplyNeonTheme() // name unchanged so Engine.cpp compiles
 // ================================================================
 //  LIFECYCLE
 // ================================================================
-void UIManager::InitializeImGui(Renderer &renderer, Settings* settings)
+void UIManager::InitializeImGui(Renderer &renderer, Settings *settings)
 {
     this->settings = settings;
     screenW = settings->windowWidth;
@@ -647,10 +647,10 @@ void UIManager::RenderSimPanel(std::size_t bodyCount)
 
     const char *qualStr = settings->recordInterval == 1   ? "Full detail"
                           : settings->recordInterval <= 3 ? "Balanced"
-                                                         : "Long window";
+                                                          : "Long window";
     ImVec4 qualCol = settings->recordInterval == 1   ? Col::Amber
                      : settings->recordInterval <= 3 ? Col::Green
-                                                    : Col::InkFaint;
+                                                     : Col::InkFaint;
     ImGui::SameLine(0, 10);
     ImGui::TextColored(qualCol, "— %s", qualStr);
 
@@ -702,12 +702,19 @@ void UIManager::RenderInspectorPanel(physics::Rigidbody *body)
         return;
     }
 
-        // ── Cannon fast-path ─────────────────────────────────────────
+    // ── Cannon fast-path ─────────────────────────────────────────
     // If the selected body is a Cannon we swap the entire lower half
     // of the inspector for the cannon control panel.
     if (auto *cannon = dynamic_cast<shape::Cannon *>(body))
     {
         RenderCannonInspector(cannon);
+        ImGui::End();
+        ImGui::PopStyleColor(2);
+        return;
+    }
+    else if (auto *incline = dynamic_cast<shape::Incline *>(body))
+    {
+        RenderInclineInspector(incline);
         ImGui::End();
         ImGui::PopStyleColor(2);
         return;
@@ -756,7 +763,7 @@ void UIManager::RenderInspectorPanel(physics::Rigidbody *body)
 
     const auto &forces = body->GetForcesForDisplay();
     // When displaying to the user:
-//const float pixelsPerMeter = SimulationConstants::PIXELS_PER_METER;
+    // const float pixelsPerMeter = SimulationConstants::PIXELS_PER_METER;
     if (forces.empty())
         ImGui::TextColored(Col::InkFaint, "  No active forces.");
     else
@@ -838,11 +845,12 @@ void UIManager::RenderCannonInspector(shape::Cannon *cannon)
     {
         const bool active = (cannonFireSettings.projectileType == t);
         const float halfW = (ImGui::GetContentRegionAvail().x -
-                             ImGui::GetStyle().ItemSpacing.x) * 0.5f;
+                             ImGui::GetStyle().ItemSpacing.x) *
+                            0.5f;
         ImGui::PushStyleColor(ImGuiCol_Button,
                               active ? Col::BlueSoft : Col::WidgetBg);
         ImGui::PushStyleColor(ImGuiCol_ButtonHovered, Col::HoverBg);
-        ImGui::PushStyleColor(ImGuiCol_ButtonActive,  Col::ActiveBg);
+        ImGui::PushStyleColor(ImGuiCol_ButtonActive, Col::ActiveBg);
         ImGui::PushStyleColor(ImGuiCol_Text,
                               active ? Col::Blue : Col::InkMid);
         ImGui::PushStyleColor(ImGuiCol_Border,
@@ -861,7 +869,7 @@ void UIManager::RenderCannonInspector(shape::Cannon *cannon)
     // ── Barrel angle ──────────────────────────────────────────────
     SectionHead("BARREL ANGLE");
 
-    ImGui::PushStyleColor(ImGuiCol_SliderGrab,       Col::Blue);
+    ImGui::PushStyleColor(ImGuiCol_SliderGrab, Col::Blue);
     ImGui::PushStyleColor(ImGuiCol_SliderGrabActive, Col::BlueHov);
     ImGui::SetNextItemWidth(-1);
     ImGui::SliderFloat("##cangle",
@@ -873,7 +881,7 @@ void UIManager::RenderCannonInspector(shape::Cannon *cannon)
 
     // Compact angle arrow diagram
     {
-        const float rad    = cannon->barrelAngleDegrees * 3.14159265f / 180.0f;
+        const float rad = cannon->barrelAngleDegrees * 3.14159265f / 180.0f;
         const float armLen = 34.0f;
         ImVec2 origin = ImGui::GetCursorScreenPos();
         origin.x += 130.0f;
@@ -909,7 +917,7 @@ void UIManager::RenderCannonInspector(shape::Cannon *cannon)
 
     // Vx / Vy card
     {
-        const float cw    = ImGui::GetContentRegionAvail().x;
+        const float cw = ImGui::GetContentRegionAvail().x;
         const float lineH = ImGui::GetTextLineHeightWithSpacing();
         const float cardH = lineH * 2.0f + 10.0f;
         ImVec2 cMin = ImGui::GetCursorScreenPos();
@@ -925,7 +933,7 @@ void UIManager::RenderCannonInspector(shape::Cannon *cannon)
 
     ImGui::TextColored(Col::InkFaint, "  Vx");
     ImGui::SameLine(42.0f);
-    ImGui::TextColored(Col::Green,  "%+.1f", cannonFireSettings.vx);
+    ImGui::TextColored(Col::Green, "%+.1f", cannonFireSettings.vx);
     ImGui::SameLine(0, 4);
     ImGui::TextColored(Col::InkFaint, "px/s");
 
@@ -952,7 +960,7 @@ void UIManager::RenderCannonInspector(shape::Cannon *cannon)
 
     // Restitution
     ImGui::TextColored(Col::InkMid, "Restitution");
-    ImGui::PushStyleColor(ImGuiCol_SliderGrab,       Col::Blue);
+    ImGui::PushStyleColor(ImGuiCol_SliderGrab, Col::Blue);
     ImGui::PushStyleColor(ImGuiCol_SliderGrabActive, Col::BlueHov);
     ImGui::SetNextItemWidth(-1);
     ImGui::SliderFloat("##crest",
@@ -966,8 +974,7 @@ void UIManager::RenderCannonInspector(shape::Cannon *cannon)
         cannonFireSettings.color[0] / 255.0f,
         cannonFireSettings.color[1] / 255.0f,
         cannonFireSettings.color[2] / 255.0f,
-        1.0f
-    };
+        1.0f};
     ImGui::SetNextItemWidth(-1);
     if (ImGui::ColorEdit3("##ccol", reinterpret_cast<float *>(&pickerCol)))
     {
@@ -1006,20 +1013,19 @@ void UIManager::RenderCannonInspector(shape::Cannon *cannon)
 
     // ── FIRE button ───────────────────────────────────────────────
     {
-        const float rad   = cannon->barrelAngleDegrees * 3.14159265f / 180.0f;
+        const float rad = cannon->barrelAngleDegrees * 3.14159265f / 180.0f;
         cannonFireSettings.cannonPos = {
             cannon->pos.x + cannon->barrelLength * std::cos(rad),
-            cannon->pos.y + cannon->barrelLength * std::sin(rad)
-        };
+            cannon->pos.y + cannon->barrelLength * std::sin(rad)};
     }
 
-    const float t    = static_cast<float>(ImGui::GetTime());
+    const float t = static_cast<float>(ImGui::GetTime());
     const float beat = Col::Smooth(0.5f + 0.5f * sinf(t * 3.5f));
     ImGui::PushStyleColor(ImGuiCol_Button,
                           Col::A(Col::Amber, 0.15f + 0.07f * beat));
     ImGui::PushStyleColor(ImGuiCol_ButtonHovered, Col::A(Col::Amber, 0.28f));
-    ImGui::PushStyleColor(ImGuiCol_ButtonActive,  Col::A(Col::Amber, 0.45f));
-    ImGui::PushStyleColor(ImGuiCol_Text,          Col::Amber);
+    ImGui::PushStyleColor(ImGuiCol_ButtonActive, Col::A(Col::Amber, 0.45f));
+    ImGui::PushStyleColor(ImGuiCol_Text, Col::Amber);
     ImGui::PushStyleColor(ImGuiCol_Border,
                           Col::A(Col::Amber, 0.45f + 0.30f * beat));
 
@@ -1028,6 +1034,120 @@ void UIManager::RenderCannonInspector(shape::Cannon *cannon)
 
     ImGui::PopStyleColor(5);
 }
+
+void UIManager::RenderInclineInspector(shape::Incline *incline)
+{
+    SectionHead("INCLINE");
+
+    ImGui::TextColored(Col::InkFaint, "  Position");
+    ImGui::SameLine(92.0f);
+    ImGui::TextColored(Col::Ink, "(%.0f,  %.0f)", incline->pos.x, incline->pos.y);
+
+    ImGui::Spacing();
+
+    // ── Angle Section ──────────────────────────────────────────────
+    SectionHead("INCLINE ANGLE");
+    ImGui::TextColored(Col::InkMid, "Angle");
+    ImGui::SameLine(92.0f);
+    float currentAngle = incline->GetAngle();
+    ImGui::TextColored(Col::Blue, "%.1f deg", currentAngle);
+
+    ImGui::PushStyleColor(ImGuiCol_SliderGrab, Col::Blue);
+    ImGui::PushStyleColor(ImGuiCol_SliderGrabActive, Col::BlueHov);
+    ImGui::SetNextItemWidth(-1);
+
+    if (ImGui::SliderFloat("##angle", &currentAngle, 0.0f, 89.0f, "%.1f°"))
+    {
+        incline->SetAngle(currentAngle);
+    }
+    ImGui::PopStyleColor(2);
+
+    ImGui::Spacing();
+
+    // ── Dimensions Section ─────────────────────────────────────────
+    SectionHead("DIMENSIONS");
+
+    ImGui::TextColored(Col::InkMid, "Base Width");
+    ImGui::SameLine(92.0f);
+    float currentBase = incline->GetBase();
+    ImGui::TextColored(Col::Ink, "%.0f", currentBase);
+
+    ImGui::PushStyleColor(ImGuiCol_SliderGrab, Col::Blue);
+    ImGui::PushStyleColor(ImGuiCol_SliderGrabActive, Col::BlueHov);
+    ImGui::SetNextItemWidth(-1);
+
+    if (ImGui::SliderFloat("##base", &currentBase, 50.0f, 1000.0f, "%.0f"))
+    {
+        incline->SetBase(currentBase);
+    }
+    ImGui::PopStyleColor(2);
+
+    ImGui::TextColored(Col::InkFaint, "  Height");
+    ImGui::SameLine(92.0f);
+    ImGui::TextColored(Col::Ink, "%.2f", incline->GetHeight());
+
+    // Flip toggle
+    bool isFlipped = incline->IsFlipped();
+    if (ImGui::Checkbox("Flip Direction", &isFlipped))
+    {
+        incline->SetFlip(isFlipped);
+    }
+
+    ImGui::Spacing();
+
+    // ── Friction Section ───────────────────────────────────────────
+    SectionHead("FRICTION");
+
+    // Static friction
+    ImGui::TextColored(Col::InkMid, "Static coeff");
+    ImGui::SameLine(92.0f);
+    float staticFriction = incline->GetStaticFriction();
+    ImVec4 orange_color = ImVec4(1.0f, 0.647f, 0.0f, 1.0f);
+    ImGui::TextColored(orange_color, "%.3f", staticFriction);
+
+    ImGui::PushStyleColor(ImGuiCol_SliderGrab, orange_color);
+    ImGui::PushStyleColor(ImGuiCol_SliderGrabActive, ImVec4(1.0f, 0.6f, 0.2f, 1.0f));
+    ImGui::SetNextItemWidth(-1);
+
+    if (ImGui::SliderFloat("#static_friction", &staticFriction, 0.0f, 2.0f, "%.3f"))
+    {
+        incline->SetStaticFriction(staticFriction);
+    }
+    if (ImGui::IsItemHovered())
+    {
+        ImGui::SetTooltip("Coefficient of static friction\nTypical values: Ice 0.02-0.1, Wood 0.25-0.5, Rubber 0.6-1.0");
+    }
+    ImGui::PopStyleColor(2);
+
+    // Kinetic friction
+    ImGui::TextColored(Col::InkMid, "Kinetic coeff");
+    ImGui::SameLine(92.0f);
+    float kineticFriction = incline->GetKineticFriction();
+    ImGui::TextColored(orange_color, "%.3f", kineticFriction);
+
+    ImGui::PushStyleColor(ImGuiCol_SliderGrab, orange_color);
+    ImGui::PushStyleColor(ImGuiCol_SliderGrabActive, ImVec4(1.0f, 0.6f, 0.2f, 1.0f));
+    ImGui::SetNextItemWidth(-1);
+
+    if (ImGui::SliderFloat("#kinetic_friction", &kineticFriction, 0.0f, 2.0f, "%.3f"))
+    {
+        incline->SetKineticFriction(kineticFriction);
+    }
+    if (ImGui::IsItemHovered())
+    {
+        ImGui::SetTooltip("Coefficient of kinetic friction\nTypical values: Ice 0.01-0.05, Wood 0.2-0.4, Rubber 0.5-0.8\nMust be ≤ static friction");
+    }
+    ImGui::PopStyleColor(2);
+
+    // Display note about friction
+    if (kineticFriction > staticFriction)
+    {
+        ImGui::TextColored(ImVec4(1.0f, 0.3f, 0.3f, 1.0f), "⚠ Kinetic must be ≤ static!");
+    }
+
+    ImGui::Spacing();
+}
+
 bool UIManager::ConsumeCannonFireRequest(CannonFireSettings &out)
 {
     if (!cannonFirePending)
@@ -1327,7 +1447,6 @@ void UIManager::DrawMeasurementOverlay(const math::Vec2 &screenA,
     ImVec2 bMin = {lp.x - padX, lp.y - padY};
     ImVec2 bMax = {lp.x + tw + padX, lp.y + th + padY};
 
-    
     const ImU32 cBg = IM_COL32(14.025, 17.85, 26, 200);
     ShadowRect(dl, bMin, bMax,
                cBg,

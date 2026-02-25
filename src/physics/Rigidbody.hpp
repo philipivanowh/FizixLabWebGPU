@@ -104,6 +104,8 @@ namespace physics
 		mutable bool transformUpdateRequired = true;
 		mutable bool aabbUpdateRequired = true;
 
+		bool isHighlighted = false; // For rendering highlight outline
+
 	protected:
 		void UpdateGravity();
 	};
