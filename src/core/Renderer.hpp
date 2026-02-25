@@ -116,7 +116,7 @@ private:
 	float currentZoom = 1.0f;
     math::Vec2 cameraOffset{0.0f, 0.0f}; 
 
-	const WGPUColor backgroundColor = WGPUColor{0.0055*9.6, 0.0075*10.1, 0.009*9.8, 1.0};
+	const WGPUColor backgroundColor = WGPUColor{0.0060*9.6, 0.0075*10.5, 0.010*9.8, 1.0};
 	
 		
 	//Text

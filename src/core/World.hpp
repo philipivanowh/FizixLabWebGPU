@@ -20,7 +20,7 @@ public:
 	void RestoreSnapshot(const WorldSnapshot &snap);
 
 	void Add(std::unique_ptr<physics::Rigidbody> body);
-	void Update(float deltaMs, int iterations, Settings &settings);
+	void Update(float deltaMs, int iterations, Settings &settings,physics::Rigidbody *selectedBody,physics::Rigidbody *draggedBody);
 	void Draw(Renderer &renderer) const;
 
 	size_t RigidbodyCount() const;
@@ -32,7 +32,7 @@ public:
 
 private : 
 	int ClampIterations(int value);
-	void RemoveObjects();
+	void RemoveObjects(physics::Rigidbody *selectedBody,physics::Rigidbody *draggedBody);
 
 	std::vector<std::unique_ptr<physics::Rigidbody>> objects;
 	CollisionPipeline collisionPipeline;

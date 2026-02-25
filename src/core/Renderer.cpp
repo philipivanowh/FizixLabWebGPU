@@ -931,8 +931,7 @@ void Renderer::DrawCannon(const shape::Cannon &cannon)
 		renderPass.draw(count, 1, 0, 0);
 	};
 
-	// ── Draw order: back → front ───────────────────────────────────
-	//
+	// ── Draw order: back → front ─────────────────────────────────
 	//  1. Carriage trail  (wooden base, always horizontal)
 	//  2. Wheel rim       (outer annulus ring)
 	//  3. Wheel spokes    (eight thin radial spokes)
