@@ -1033,6 +1033,8 @@ void UIManager::RenderCannonInspector(shape::Cannon *cannon)
         cannonFirePending = true;
 
     ImGui::PopStyleColor(5);
+    ImGui::Spacing();
+    ImGui::Spacing();
 }
 
 void UIManager::RenderInclineInspector(shape::Incline *incline)

@@ -18,7 +18,7 @@ using math::Vec2;
 using physics::ForceType;
 using physics::RigidbodyType;
 
-// ── Static members ────────────────────────────────────────────────
+//Static members Initialization
 Recorder Engine::recorder;
 int Engine::recordFrameCounter = 0;
 int Engine::spawnNudgeFrames = 0;
@@ -42,9 +42,7 @@ math::Vec2 Engine::panStartMouse;
 math::Vec2 Engine::panStartCamera;
 bool Engine::isPanning = false;
 
-// ================================================================
 // INIT / SHUTDOWN
-// ================================================================
 bool Engine::Initialize()
 {
     if (!renderer.Initialize(settings, Engine::Scroll_Feedback))
@@ -61,9 +59,7 @@ void Engine::Shutdown()
     uiManager.TerminateImGui();
 }
 
-// ================================================================
 // SPAWNING
-// ================================================================
 void Engine::CheckSpawning()
 {
     SpawnSettings req;
@@ -107,14 +103,17 @@ void Engine::CheckSpawning()
 
 void Engine::Scroll_Feedback(GLFWwindow *window, double xoffset, double yoffset)
 {
+    ImGuiIO &io = ImGui::GetIO();
+    const bool overUI = io.WantCaptureMouse;
+    if(overUI)
+        return;
+    
     settings.zoom += static_cast<float>(yoffset) * 0.1f;
     (void)xoffset;
     (void)(window);
 }
 
-// ================================================================
 // UPDATE
-// ================================================================
 void Engine::Update(float deltaMs, int iterations)
 {
     glfwPollEvents();
@@ -139,9 +138,24 @@ void Engine::Update(float deltaMs, int iterations)
     // Screen space: Y-down, origin at top-left
     mouseScreen = Vec2(scaledMx, scaledMy);
 
+    bool pressedControl = glfwGetKey(window, GLFW_KEY_LEFT_CONTROL) == GLFW_PRESS ||
+                          glfwGetKey(window, GLFW_KEY_RIGHT_CONTROL) == GLFW_PRESS;
+
+    bool mouseButtonLeft = glfwGetMouseButton(window, GLFW_MOUSE_BUTTON_LEFT) == GLFW_PRESS;
+    bool mouseButtonRight = glfwGetMouseButton(window, GLFW_MOUSE_BUTTON_RIGHT) == GLFW_PRESS;
     // ── Mouse buttons ─────────────────────────────────────────────
-    bool pressedLeft = glfwGetMouseButton(window, GLFW_MOUSE_BUTTON_LEFT) == GLFW_PRESS;
-    bool pressedRight = glfwGetMouseButton(window, GLFW_MOUSE_BUTTON_RIGHT) == GLFW_PRESS;
+    bool pressedLeft = false;
+    
+    bool pressedRight = false;
+    #ifdef __APPLE__
+        pressedRight = pressedControl && mouseButtonLeft;
+        pressedLeft = mouseButtonLeft && !pressedControl;
+        (void)mouseButtonRight; // Silence unused variable warning when Control is not used for right-click
+    #else
+        pressedRight = mouseButtonRight;
+        pressedLeft =   mouseButtonLeft;
+        (void)pressedControl;
+    #endif
 
     ImGuiIO &io = ImGui::GetIO();
     const bool overUI = io.WantCaptureMouse;
@@ -184,9 +198,16 @@ void Engine::Update(float deltaMs, int iterations)
 
     // Apply zoom around center, then add camera offset
     const float zoomedX = (scaledMx - cx) / zoom + cx + cameraOffset.x;
-    const float zoomedY = (scaledMy - cy) / zoom + cy + cameraOffset.y;
+    const float zoomedY = (scaledMy - cy) / zoom + cy - cameraOffset.y;
     mouseWorld = Vec2(zoomedX, static_cast<float>(winH) - zoomedY);
 
+    if(world.PickBody(mouseWorld))
+    {
+        selectedBody = world.PickBody(mouseWorld);
+    }
+   
+
+    //Add highlight for selected body first and then the inspector will be locked to that body until another body is selected or the current one is deleted. This way the inspector can be used to modify a body and see the changes in real time without having to keep the mouse button pressed on it.
     // ── Left mouse button handling ────────────────────────────────
     // In Engine::Update(), after selecting an object
     if (pressedLeft && !mouseDownLeft && !overUI)
@@ -339,7 +360,7 @@ void Engine::Update(float deltaMs, int iterations)
             scaledDelta = deltaMs * settings.timeScale;
         }
 
-        world.Update(scaledDelta, iterations, settings);
+        world.Update(scaledDelta, iterations, settings, selectedBody, draggedBody);
         CheckSpawning();
         CheckCannon();
     }

@@ -78,7 +78,7 @@ public:
             windowHeight = static_cast<int>(static_cast<float>(mode->height) * scale);
         }
     }
-
+    
     //--------Drag-----------
     DragMode dragMode = DragMode::physicsDrag;
 

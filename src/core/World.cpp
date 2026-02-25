@@ -117,7 +117,7 @@ math::Vec2 World::SnapToNearestDynamicObject(const math::Vec2 &position, float s
     return nearestBody ? nearestBody->pos : position;
 }
 
-void World::Update(float deltaMs, int iterations, Settings &settings)
+void World::Update(float deltaMs, int iterations, Settings &settings, physics::Rigidbody *selectedBody, physics::Rigidbody *draggedBody)
 {
 	iterations = ClampIterations(iterations);
 
@@ -147,7 +147,7 @@ void World::Update(float deltaMs, int iterations, Settings &settings)
 	}
 
 	if (!settings.recording)
-		RemoveObjects();
+		RemoveObjects(selectedBody,draggedBody);
 }
 
 void World::Draw(Renderer &renderer) const
@@ -163,7 +163,7 @@ size_t World::RigidbodyCount() const
 	return objects.size();
 }
 
-void World::RemoveObjects()
+void World::RemoveObjects(physics::Rigidbody *selectedBody, physics::Rigidbody *draggedBody)
 {
 
 	for (size_t i = 0; i < objects.size();)
@@ -171,6 +171,14 @@ void World::RemoveObjects()
 		collision::AABB box = objects[i]->GetAABB();
 		if (box.max.y < viewBottom)
 		{
+			if(selectedBody == objects[i].get())
+			{
+				selectedBody = nullptr;
+			}
+			if(draggedBody == objects[i].get())
+			{
+				draggedBody = nullptr;
+			}
 			objects.erase(objects.begin() + static_cast<long>(i));
 		}
 		else
