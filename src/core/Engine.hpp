@@ -71,4 +71,9 @@ private:
 	static math::Vec2 panStartMouse;  // Mouse position when pan started
 	static math::Vec2 panStartCamera; // Camera offset when pan started
 	static bool isPanning;			  // Is currently panning the camera
+
+	// Key state tracking for press-only detection
+	static bool prevKeyP; // Previous frame state of P key
+	static bool prevKeyO; // Previous frame state of O key
+	static bool prevKeyR; // Previous frame state of R key
 };

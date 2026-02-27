@@ -28,6 +28,9 @@ public:
 
 	physics::Rigidbody *PickBody(const math::Vec2 &p);
 
+	// If `position` lies within `snapRadius` of any body’s center, return
+	// the body's position; otherwise return the original coordinate.  This
+	// helps the UI snap measurements when the user clicks near an object.
 	math::Vec2 SnapToNearestDynamicObject(const math::Vec2 &position, float snapRadius);
 
 private : 

@@ -95,7 +95,8 @@ math::Vec2 World::SnapToNearestDynamicObject(const math::Vec2 &position, float s
     for (const auto &obj : objects)
     {
         // Only snap to dynamic objects
-        if (obj->bodyType != physics::RigidbodyType::Dynamic)
+	
+        if (obj->bodyType != physics::RigidbodyType::Dynamic && (!(dynamic_cast<const shape::Incline *>(&*obj)) || !(dynamic_cast<const shape::Cannon *>(&*obj))))
             continue;
 
         // Calculate distance to object center
@@ -109,9 +110,6 @@ math::Vec2 World::SnapToNearestDynamicObject(const math::Vec2 &position, float s
             nearestBody = obj.get();
         }
     }
-
-	if(nearestBody)
-		std::cout << nearestBody->pos.x << " " << nearestBody->pos.y << std::endl;
 
     // Return snapped position or original position if no snap
     return nearestBody ? nearestBody->pos : position;

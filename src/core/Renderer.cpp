@@ -40,7 +40,7 @@ bool Renderer::Initialize(Settings &settings, GLFWscrollfun scrollCallback)
 		return false;
 	}
 
-	// settings.InitFromMonitor();
+	 settings.InitFromMonitor();
 
 	// ── INSERT POINT A: native resolution ───────────────────────────────
 	// Query the primary monitor native video mode so the window matches

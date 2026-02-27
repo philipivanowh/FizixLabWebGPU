@@ -42,6 +42,10 @@ math::Vec2 Engine::panStartMouse;
 math::Vec2 Engine::panStartCamera;
 bool Engine::isPanning = false;
 
+bool Engine::prevKeyP = false;
+bool Engine::prevKeyO = false;
+bool Engine::prevKeyR = false;
+
 // INIT / SHUTDOWN
 bool Engine::Initialize()
 {
@@ -161,10 +165,26 @@ void Engine::Update(float deltaMs, int iterations)
     const bool overUI = io.WantCaptureMouse;
     const bool overUIKeyboard = io.WantCaptureKeyboard;
 
-    if(glfwGetKey(window, GLFW_KEY_P) == GLFW_PRESS)
+    bool keyP = glfwGetKey(window, GLFW_KEY_P) == GLFW_PRESS;
+    if(keyP && !prevKeyP)
     {
         settings.paused = !settings.paused;
     }
+    prevKeyP = keyP;
+
+    bool keyO = glfwGetKey(window, GLFW_KEY_O) == GLFW_PRESS;
+    if(keyO && !prevKeyO)
+    {
+        settings.stepOneFrame = true;
+    }
+    prevKeyO = keyO;
+
+    bool keyR = glfwGetKey(window, GLFW_KEY_R) == GLFW_PRESS;
+    if(keyR && !prevKeyR)
+    {
+        settings.recording = true;
+    }
+    prevKeyR = keyR;
 
     // ── Zoom controls ─────────────────────────────────────────────
     if (!overUIKeyboard)
@@ -201,11 +221,6 @@ void Engine::Update(float deltaMs, int iterations)
     const float zoomedY = (scaledMy - cy) / zoom + cy - cameraOffset.y;
     mouseWorld = Vec2(zoomedX, static_cast<float>(winH) - zoomedY);
 
-    if(world.PickBody(mouseWorld))
-    {
-        selectedBody = world.PickBody(mouseWorld);
-    }
-   
 
     //Add highlight for selected body first and then the inspector will be locked to that body until another body is selected or the current one is deleted. This way the inspector can be used to modify a body and see the changes in real time without having to keep the mouse button pressed on it.
     // ── Left mouse button handling ────────────────────────────────
@@ -403,14 +418,44 @@ void Engine::Render()
 
     uiManager.RenderSpawner();
 
-    // Measurement overlay — screen coords for drawing, world coords for label values
-    uiManager.RenderMeasurementOverlay(
-        mouseInitialScreen, mouseScreen,
-        mouseInitialPos, mouseWorld,
-        mouseDownRight);
+    ImGuiIO &io = ImGui::GetIO();
+    const bool overUI = io.WantCaptureMouse;
+    if (!overUI)
+    {
+        // Snap measurement endpoints to nearby dynamic bodies so it's easy to
+        // measure between objects.  World::SnapToNearestDynamicObject returns
+        // the input position when nothing is in range.
+        const float snapRadius = 25.0f; // world units; tweak as needed
+        math::Vec2 snappedStartWorld = world.SnapToNearestDynamicObject(mouseInitialPos, snapRadius);
+        math::Vec2 snappedEndWorld = world.SnapToNearestDynamicObject(mouseWorld, snapRadius);
 
+        // Convert snapped world coordinates back to screen space so the overlay
+        // lines up with the clicked shapes.  This mirrors the transformation
+        // done in Engine::Update() when converting screen->world.
+        GLFWwindow *window = renderer.GetWindow();
+        int winW, winH;
+        glfwGetWindowSize(window, &winW, &winH);
+        const float zoom = settings.zoom;
+        const float cx = static_cast<float>(winW) * 0.5f;
+        const float cy = static_cast<float>(winH) * 0.5f;
+        auto worldToScreen = [&](const math::Vec2 &w) {
+            float sx = (w.x - cameraOffset.x - cx) * zoom + cx;
+            float sy = ((static_cast<float>(winH) - w.y) - cy + cameraOffset.y) * zoom + cy;
+            return math::Vec2(sx, sy);
+        };
+        math::Vec2 snappedStartScreen = worldToScreen(snappedStartWorld);
+        math::Vec2 snappedEndScreen = worldToScreen(snappedEndWorld);
+
+        // Measurement overlay — screen coords for drawing, world coords for label values
+        uiManager.RenderMeasurementOverlay(
+            snappedStartScreen, snappedEndScreen,
+            snappedStartWorld, snappedEndWorld,
+            mouseDownRight);
+    }
     // Mouse position badge
-    uiManager.RenderMousePositionOverlay(mouseWorld);
+    
+    if (!overUI)
+        uiManager.RenderMousePositionOverlay(mouseWorld);
 
     uiManager.EndImGuiFrame(renderer);
     renderer.EndFrame();
