@@ -1,6 +1,7 @@
 #include "shape/Box.hpp"
 #include "collision/AABB.hpp"
 #include "physics/Rigidbody.hpp"
+#include "common/settings.hpp"
 
 #include <algorithm>
 #include <cmath>
@@ -18,7 +19,7 @@ namespace shape
 			 float massValue,
 			 float restitution,
 			 physics::RigidbodyType RigidbodyTypeValue)
-		: Shape(pos, vel, acc, massValue, restitution, RigidbodyTypeValue), width(widthValue), height(heightValue), color(colorValue)
+		: Shape(pos, vel, acc, massValue, restitution, RigidbodyTypeValue), width(widthValue * SimulationConstants::PIXELS_PER_METER), height(heightValue * SimulationConstants::PIXELS_PER_METER), color(colorValue)
 	{
 		verticesSize = 6;
 		UpdateMassProperties();

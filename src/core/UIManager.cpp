@@ -1,5 +1,6 @@
 #include "UIManager.hpp"
 #include "core/Engine.hpp"
+#include "common/settings.hpp"
 #include <imgui.h>
 #include <backends/imgui_impl_wgpu.h>
 #include <backends/imgui_impl_glfw.h>
@@ -742,7 +743,30 @@ void UIManager::RenderInspectorPanel(physics::Rigidbody *body)
     ImGui::Spacing();
     SectionHead("TRANSFORM");
 
-    KVRowVec("Position", body->pos, Col::ToU32(Col::Ink));
+    KVRowVec("Position", body->pos / SimulationConstants::PIXELS_PER_METER, Col::ToU32(Col::Ink));
+
+    ImGui::TextColored(Col::InkMid, "Position");
+    ImGui::SetNextItemWidth(-1);
+    math::Vec2 posInMeters = body->pos / SimulationConstants::PIXELS_PER_METER;
+    ImGui::DragFloat2("##pos", &posInMeters.x, 0.01f);
+
+    // Update body position in pixels
+    body->pos = posInMeters * SimulationConstants::PIXELS_PER_METER;
+
+    // Pause/unpause simulation when position is being edited
+    positionBeingEdited = ImGui::IsItemActive();
+    if (positionBeingEdited && !wasPositionEditedLastFrame)
+    {
+        // Just started editing position — pause
+        settings->paused = true;
+    }
+    else if (!positionBeingEdited && wasPositionEditedLastFrame)
+    {
+        // Just finished editing position — unpause
+        settings->paused = false;
+    }
+    wasPositionEditedLastFrame = positionBeingEdited;
+
     KVRowVec("Velocity", body->linearVel, Col::ToU32(Col::Blue));
     KVRowVec("Accel", body->linearAcc, Col::ToU32(Col::InkMid));
     {
@@ -752,6 +776,15 @@ void UIManager::RenderInspectorPanel(physics::Rigidbody *body)
 
     ImGui::Spacing();
     SectionHead("PROPERTIES");
+    if (auto box = dynamic_cast<shape::Box *>(body))
+    {
+        KVRow("Width", Col::ToU32(Col::Ink), "%.2f m", box->width / SimulationConstants::PIXELS_PER_METER);
+        KVRow("Height", Col::ToU32(Col::Ink), "%.2f m", box->height / SimulationConstants::PIXELS_PER_METER);
+    }
+    else if (auto ball = dynamic_cast<shape::Ball *>(body))
+    {
+        KVRow("Radius", Col::ToU32(Col::Ink), "%.2f m", ball->radius / SimulationConstants::PIXELS_PER_METER);
+    }
 
     KVRow("Mass", Col::ToU32(Col::Ink), "%.2f kg", body->mass);
     KVRow("Restitution", Col::ToU32(Col::Ink), "%.2f", body->restitution);
@@ -834,7 +867,24 @@ void UIManager::RenderCannonInspector(shape::Cannon *cannon)
 
     ImGui::TextColored(Col::InkFaint, "  Position");
     ImGui::SameLine(92.0f);
-    ImGui::TextColored(Col::Ink, "(%.0f,  %.0f)", cannon->pos.x, cannon->pos.y);
+    ImGui::TextColored(Col::Ink, "(%.0f,  %.0f)", cannon->pos.x / SimulationConstants::PIXELS_PER_METER, cannon->pos.y / SimulationConstants::PIXELS_PER_METER);
+    math::Vec2 posInMeters = cannon->pos / SimulationConstants::PIXELS_PER_METER;
+    ImGui::DragFloat2("##pos", &posInMeters.x, 0.01f);
+
+    // Write back in pixels and pause while editing
+    cannon->pos = posInMeters * SimulationConstants::PIXELS_PER_METER;
+    positionBeingEdited = ImGui::IsItemActive();
+    if (positionBeingEdited && !wasPositionEditedLastFrame)
+    {
+        settings->paused = true;
+    }
+    else if (!positionBeingEdited && wasPositionEditedLastFrame)
+    {
+        settings->paused = false;
+    }
+    wasPositionEditedLastFrame = positionBeingEdited;
+    
+    cannon->pos = posInMeters * SimulationConstants::PIXELS_PER_METER;
 
     ImGui::Spacing();
 
@@ -935,13 +985,13 @@ void UIManager::RenderCannonInspector(shape::Cannon *cannon)
     ImGui::SameLine(42.0f);
     ImGui::TextColored(Col::Green, "%+.1f", cannonFireSettings.vx);
     ImGui::SameLine(0, 4);
-    ImGui::TextColored(Col::InkFaint, "px/s");
+    ImGui::TextColored(Col::InkFaint, "m/s");
 
     ImGui::TextColored(Col::InkFaint, "  Vy");
     ImGui::SameLine(42.0f);
     ImGui::TextColored(Col::Amber, "%+.1f", cannonFireSettings.vy);
     ImGui::SameLine(0, 4);
-    ImGui::TextColored(Col::InkFaint, "px/s");
+    ImGui::TextColored(Col::InkFaint, "m/s");
 
     ImGui::PopStyleVar();
 
@@ -983,29 +1033,29 @@ void UIManager::RenderCannonInspector(shape::Cannon *cannon)
         cannonFireSettings.color[2] = pickerCol.z * 255.0f;
     }
 
-    // Size — adapts to ball vs box
+    // Size — adapts to ball vs box.
+    // DragFloat needs a real pointer so we round-trip through a local metre variable.
     ImGui::Spacing();
     if (isBall)
     {
         ImGui::TextColored(Col::InkMid, "Radius");
         ImGui::SetNextItemWidth(-1);
-        ImGui::DragFloat("##crad",
-                         &cannonFireSettings.radius,
-                         0.5f, 1.0f, 250.0f, "%.0f px");
+        // radius stored directly in metres — no PPM conversion needed here;
+        // the Ball constructor scales it to pixels internally.
+        if (ImGui::DragFloat("##crad", &cannonFireSettings.radius, 0.1f, 0.1f, 250.0f, "%.1f m"))
+        {
+        } // value written directly
     }
     else
     {
         ImGui::TextColored(Col::InkMid, "Width");
         ImGui::SetNextItemWidth(-1);
-        ImGui::DragFloat("##cbw",
-                         &cannonFireSettings.boxWidth,
-                         0.5f, 1.0f, 500.0f, "%.0f px");
+        // boxWidth/boxHeight stored directly in metres — no PPM conversion needed here.
+        ImGui::DragFloat("##cbw", &cannonFireSettings.boxWidth, 0.1f, 0.1f, 500.0f, "%.1f m");
 
         ImGui::TextColored(Col::InkMid, "Height");
         ImGui::SetNextItemWidth(-1);
-        ImGui::DragFloat("##cbh",
-                         &cannonFireSettings.boxHeight,
-                         0.5f, 1.0f, 500.0f, "%.0f px");
+        ImGui::DragFloat("##cbh", &cannonFireSettings.boxHeight, 0.1f, 0.1f, 500.0f, "%.1f m");
     }
 
     ImGui::Spacing();
@@ -1014,9 +1064,13 @@ void UIManager::RenderCannonInspector(shape::Cannon *cannon)
     // ── FIRE button ───────────────────────────────────────────────
     {
         const float rad = cannon->barrelAngleDegrees * 3.14159265f / 180.0f;
+        // Both terms must be in metres:
+        //   cannon->pos is internal pixels  → divide by PPM
+        //   barrelLength is a pixel-space visual size → divide by PPM
+        const float barrelLengthM = cannon->barrelLength / SimulationConstants::PIXELS_PER_METER;
         cannonFireSettings.cannonPos = {
-            cannon->pos.x + cannon->barrelLength * std::cos(rad),
-            cannon->pos.y + cannon->barrelLength * std::sin(rad)};
+            cannon->pos.x / SimulationConstants::PIXELS_PER_METER + barrelLengthM * std::cos(rad),
+            cannon->pos.y / SimulationConstants::PIXELS_PER_METER + barrelLengthM * std::sin(rad)};
     }
 
     const float t = static_cast<float>(ImGui::GetTime());
@@ -1043,7 +1097,23 @@ void UIManager::RenderInclineInspector(shape::Incline *incline)
 
     ImGui::TextColored(Col::InkFaint, "  Position");
     ImGui::SameLine(92.0f);
-    ImGui::TextColored(Col::Ink, "(%.0f,  %.0f)", incline->pos.x, incline->pos.y);
+    ImGui::TextColored(Col::Ink, "(%.2f,  %.2f)", incline->pos.x / SimulationConstants::PIXELS_PER_METER, incline->pos.y / SimulationConstants::PIXELS_PER_METER);
+    math::Vec2 posInMeters = incline->pos / SimulationConstants::PIXELS_PER_METER;
+    ImGui::DragFloat2("##pos", &posInMeters.x, 0.01f);
+
+    // Write back in pixels and pause while editing
+    incline->pos = posInMeters * SimulationConstants::PIXELS_PER_METER;
+    positionBeingEdited = ImGui::IsItemActive();
+    if (positionBeingEdited && !wasPositionEditedLastFrame)
+    {
+        settings->paused = true;
+    }
+    else if (!positionBeingEdited && wasPositionEditedLastFrame)
+    {
+        settings->paused = false;
+    }
+    wasPositionEditedLastFrame = positionBeingEdited;
+    incline->pos = posInMeters * SimulationConstants::PIXELS_PER_METER;
 
     ImGui::Spacing();
 
@@ -1071,22 +1141,22 @@ void UIManager::RenderInclineInspector(shape::Incline *incline)
 
     ImGui::TextColored(Col::InkMid, "Base Width");
     ImGui::SameLine(92.0f);
-    float currentBase = incline->GetBase();
-    ImGui::TextColored(Col::Ink, "%.0f", currentBase);
+    float baseMeters = incline->GetBase() / SimulationConstants::PIXELS_PER_METER;
+    ImGui::TextColored(Col::Ink, "%.2f m", baseMeters);
 
     ImGui::PushStyleColor(ImGuiCol_SliderGrab, Col::Blue);
     ImGui::PushStyleColor(ImGuiCol_SliderGrabActive, Col::BlueHov);
     ImGui::SetNextItemWidth(-1);
 
-    if (ImGui::SliderFloat("##base", &currentBase, 50.0f, 1000.0f, "%.0f"))
+    if (ImGui::SliderFloat("##base", &baseMeters, 50.0f / SimulationConstants::PIXELS_PER_METER, 1000.0f / SimulationConstants::PIXELS_PER_METER, "%.2f m"))
     {
-        incline->SetBase(currentBase);
+        incline->SetBase(baseMeters * SimulationConstants::PIXELS_PER_METER);
     }
     ImGui::PopStyleColor(2);
 
     ImGui::TextColored(Col::InkFaint, "  Height");
     ImGui::SameLine(92.0f);
-    ImGui::TextColored(Col::Ink, "%.2f", incline->GetHeight());
+    ImGui::TextColored(Col::Ink, "%.2f m", incline->GetHeight() / SimulationConstants::PIXELS_PER_METER);
 
     // Flip toggle
     bool isFlipped = incline->IsFlipped();
@@ -1212,7 +1282,7 @@ void UIManager::RenderSpawnBasics()
 {
     SectionHead("SHAPE & PLACEMENT");
 
-    const char *shapes[] = {"Ball", "Incline", "Box", "Cannon"};
+    const char *shapes[] = {"Ball", "Incline", "Box", "Cannon", "Trigger"};
     int si = (int)spawnSettings.shapeType;
     ImGui::SetNextItemWidth(-1);
     ImGui::Combo("##shape", &si, shapes, std::size(shapes));
@@ -1311,6 +1381,16 @@ void UIManager::RenderSpawnSizeControls()
         ImGui::SetNextItemWidth(-1);
         ImGui::DragFloat("##cang", &spawnSettings.angle, 1.0f, 0.0f, 89.0f);
     }
+    else if (spawnSettings.shapeType == shape::ShapeType::Trigger)
+    {
+        ImGui::TextColored(Col::InkMid, "Width");
+        ImGui::SetNextItemWidth(-1);
+        ImGui::DragFloat("##bw", &spawnSettings.boxWidth, 1.0f, 1.0f, 500.0f);
+        ImGui::TextColored(Col::InkMid, "Height");
+        ImGui::SetNextItemWidth(-1);
+        ImGui::DragFloat("##bh", &spawnSettings.boxHeight, 1.0f, 1.0f, 500.0f);
+    }
+    
 }
 
 void UIManager::RenderSpawnActions()
@@ -1420,15 +1500,16 @@ void UIManager::DrawMeasurementOverlay(const math::Vec2 &screenA,
     dl->AddCircle(B, 8.5f, Col::ToU32(Col::A(Col::Blue, 0.22f)), 20, 1.2f);
 
     // Label card — Void with drop shadow
-    const float wdx = wEnd.x - wStart.x;
-    const float wdy = wEnd.y - wStart.y;
+    // Convert internal pixel world-space deltas to meters for display
+    const float wdx = (wEnd.x - wStart.x) / SimulationConstants::PIXELS_PER_METER;
+    const float wdy = (wEnd.y - wStart.y) / SimulationConstants::PIXELS_PER_METER;
     const float wdist = sqrtf(wdx * wdx + wdy * wdy);
 
     const float lineH = ImGui::GetTextLineHeightWithSpacing();
     char lx[40], ly[40], ld[40];
-    snprintf(lx, sizeof(lx), "dx      %+.1f", wdx);
-    snprintf(ly, sizeof(ly), "dy      %+.1f", wdy);
-    snprintf(ld, sizeof(ld), "dist     %.1f", wdist);
+    snprintf(lx, sizeof(lx), "dx      %+.2f m", wdx);
+    snprintf(ly, sizeof(ly), "dy      %+.2f m", wdy);
+    snprintf(ld, sizeof(ld), "dist     %.2f m", wdist);
 
     const float tw = std::max({ImGui::CalcTextSize(lx).x,
                                ImGui::CalcTextSize(ly).x,
@@ -1475,9 +1556,13 @@ void UIManager::RenderMousePositionOverlay(const math::Vec2 &worldPos)
     const ImU32 cY = Col::ToU32(Col::Amber);
     const ImU32 cHair = Col::ToU32(Col::A(Col::Blue, 0.45f));
 
+    // Convert internal pixel coords to meters for display
+    const float mX = worldPos.x / SimulationConstants::PIXELS_PER_METER;
+    const float mY = worldPos.y / SimulationConstants::PIXELS_PER_METER;
+
     char xb[32], yb[32];
-    snprintf(xb, sizeof(xb), "%.1f", worldPos.x);
-    snprintf(yb, sizeof(yb), "%.1f", worldPos.y);
+    snprintf(xb, sizeof(xb), "%.2f m", mX);
+    snprintf(yb, sizeof(yb), "%.2f m", mY);
 
     const float lineH = ImGui::GetTextLineHeight();
     const float lineGap = ImGui::GetTextLineHeightWithSpacing() - lineH;

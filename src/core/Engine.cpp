@@ -5,6 +5,7 @@
 #include "shape/Box.hpp"
 #include "shape/Cannon.hpp"
 #include "shape/Incline.hpp"
+#include "shape/Trigger.hpp"
 #include "shape/Shape.hpp"
 #include "math/Math.hpp"
 
@@ -18,7 +19,7 @@ using math::Vec2;
 using physics::ForceType;
 using physics::RigidbodyType;
 
-//Static members Initialization
+// Static members Initialization
 Recorder Engine::recorder;
 int Engine::recordFrameCounter = 0;
 int Engine::spawnNudgeFrames = 0;
@@ -45,6 +46,10 @@ bool Engine::isPanning = false;
 bool Engine::prevKeyP = false;
 bool Engine::prevKeyO = false;
 bool Engine::prevKeyR = false;
+
+int Engine::selectedBodyHoldFrames = 0;
+int Engine::dragThresholdFrames = 20; // Hold for 5 frames before allowing drag
+bool Engine::wasSelectedBodyJustClicked = false;
 
 // INIT / SHUTDOWN
 bool Engine::Initialize()
@@ -95,6 +100,13 @@ void Engine::CheckSpawning()
         world.Add(std::make_unique<shape::Cannon>(
             req.position, req.angle, req.color));
     }
+    else if (req.shapeType == shape::ShapeType::Trigger)
+    {
+        world.Add(std::make_unique<shape::Trigger>(
+            req.position, req.velocity, Vec2(0, 0),
+            req.boxWidth, req.boxHeight,
+            req.color, req.mass, req.restitution, req.bodyType));
+    }
 
     // Always nudge physics forward after a spawn so the object
     // visibly appears even when paused / not recording
@@ -109,9 +121,9 @@ void Engine::Scroll_Feedback(GLFWwindow *window, double xoffset, double yoffset)
 {
     ImGuiIO &io = ImGui::GetIO();
     const bool overUI = io.WantCaptureMouse;
-    if(overUI)
+    if (overUI)
         return;
-    
+
     settings.zoom += static_cast<float>(yoffset) * 0.1f;
     (void)xoffset;
     (void)(window);
@@ -149,38 +161,38 @@ void Engine::Update(float deltaMs, int iterations)
     bool mouseButtonRight = glfwGetMouseButton(window, GLFW_MOUSE_BUTTON_RIGHT) == GLFW_PRESS;
     // ── Mouse buttons ─────────────────────────────────────────────
     bool pressedLeft = false;
-    
+
     bool pressedRight = false;
-    #ifdef __APPLE__
-        pressedRight = pressedControl && mouseButtonLeft;
-        pressedLeft = mouseButtonLeft && !pressedControl;
-        (void)mouseButtonRight; // Silence unused variable warning when Control is not used for right-click
-    #else
-        pressedRight = mouseButtonRight;
-        pressedLeft =   mouseButtonLeft;
-        (void)pressedControl;
-    #endif
+#ifdef __APPLE__
+    pressedRight = pressedControl && mouseButtonLeft;
+    pressedLeft = mouseButtonLeft && !pressedControl;
+    (void)mouseButtonRight; // Silence unused variable warning when Control is not used for right-click
+#else
+    pressedRight = mouseButtonRight;
+    pressedLeft = mouseButtonLeft;
+    (void)pressedControl;
+#endif
 
     ImGuiIO &io = ImGui::GetIO();
     const bool overUI = io.WantCaptureMouse;
     const bool overUIKeyboard = io.WantCaptureKeyboard;
 
     bool keyP = glfwGetKey(window, GLFW_KEY_P) == GLFW_PRESS;
-    if(keyP && !prevKeyP)
+    if (keyP && !prevKeyP)
     {
         settings.paused = !settings.paused;
     }
     prevKeyP = keyP;
 
     bool keyO = glfwGetKey(window, GLFW_KEY_O) == GLFW_PRESS;
-    if(keyO && !prevKeyO)
+    if (keyO && !prevKeyO)
     {
         settings.stepOneFrame = true;
     }
     prevKeyO = keyO;
 
     bool keyR = glfwGetKey(window, GLFW_KEY_R) == GLFW_PRESS;
-    if(keyR && !prevKeyR)
+    if (keyR && !prevKeyR)
     {
         settings.recording = true;
     }
@@ -221,44 +233,72 @@ void Engine::Update(float deltaMs, int iterations)
     const float zoomedY = (scaledMy - cy) / zoom + cy - cameraOffset.y;
     mouseWorld = Vec2(zoomedX, static_cast<float>(winH) - zoomedY);
 
-
-    //Add highlight for selected body first and then the inspector will be locked to that body until another body is selected or the current one is deleted. This way the inspector can be used to modify a body and see the changes in real time without having to keep the mouse button pressed on it.
-    // ── Left mouse button handling ────────────────────────────────
-    // In Engine::Update(), after selecting an object
+    // Pattern: single-click to select, hold/double-click to drag
     if (pressedLeft && !mouseDownLeft && !overUI)
     {
         mouseDownLeft = true;
+        physics::Rigidbody *clickedBody = world.PickBody(mouseWorld);
 
-        // Clear previous highlight
-        if (selectedBody)
+        if (clickedBody == selectedBody && selectedBody != nullptr)
         {
-            selectedBody->isHighlighted = false;
-        }
-
-        draggedBody = world.PickBody(mouseWorld);
-        selectedBody = draggedBody;
-
-        if (draggedBody)
-        {
-            // Set new highlight
-            draggedBody->isHighlighted = true;
+            // Second click on same body — enable dragging
+            draggedBody = selectedBody;
             staticDragOffset = draggedBody->pos - mouseWorld;
+            wasSelectedBodyJustClicked = false;
+            selectedBodyHoldFrames = 0;
+            isPanning = false;
+        }
+        else if (clickedBody)
+        {
+            // First click on a new body — only select and highlight
+            if (selectedBody)
+            {
+                selectedBody->isHighlighted = false;
+            }
+            selectedBody = clickedBody;
+            selectedBody->isHighlighted = true;
+            draggedBody = nullptr; // Don't drag yet
+            wasSelectedBodyJustClicked = true;
+            selectedBodyHoldFrames = 0;
             isPanning = false;
         }
         else
         {
+            // Click on empty space — start panning
+            if (selectedBody)
+            {
+                selectedBody->isHighlighted = false;
+                selectedBody = nullptr;
+            }
+            draggedBody = nullptr;
+            wasSelectedBodyJustClicked = false;
+            selectedBodyHoldFrames = 0;
             isPanning = true;
             panStartMouse = mouseScreen;
             panStartCamera = cameraOffset;
         }
     }
-    
+
+    // ── Update hold counter and enable drag if threshold reached ───
+    if (mouseDownLeft && selectedBody && !draggedBody && !isPanning)
+    {
+        selectedBodyHoldFrames++;
+        if (selectedBodyHoldFrames >= dragThresholdFrames)
+        {
+            // Hold threshold reached — enable dragging
+            draggedBody = selectedBody;
+            staticDragOffset = draggedBody->pos - mouseWorld;
+        }
+    }
+
     if (!pressedLeft)
     {
         mouseDownLeft = false;
         draggedBody = nullptr;
         staticDragOffset = Vec2(0.0f, 0.0f);
         isPanning = false;
+        selectedBodyHoldFrames = 0;
+        wasSelectedBodyJustClicked = false;
     }
 
     // ── Camera panning update ─────────────────────────────────────
@@ -438,7 +478,8 @@ void Engine::Render()
         const float zoom = settings.zoom;
         const float cx = static_cast<float>(winW) * 0.5f;
         const float cy = static_cast<float>(winH) * 0.5f;
-        auto worldToScreen = [&](const math::Vec2 &w) {
+        auto worldToScreen = [&](const math::Vec2 &w)
+        {
             float sx = (w.x - cameraOffset.x - cx) * zoom + cx;
             float sy = ((static_cast<float>(winH) - w.y) - cy + cameraOffset.y) * zoom + cy;
             return math::Vec2(sx, sy);
@@ -453,7 +494,7 @@ void Engine::Render()
             mouseDownRight);
     }
     // Mouse position badge
-    
+
     if (!overUI)
         uiManager.RenderMousePositionOverlay(mouseWorld);
 
@@ -489,44 +530,36 @@ void Engine::AddDefaultObjects()
     using shape::Ball;
     using shape::Box;
 
-    const std::array<float, 4> warmRed{0.070588f, 0.180392f, 0.219608f, 1.0f};
-    const std::array<float, 4> white{1.0f, 1.0f, 1.0f, 1.0f};
+    //  const std::array<float, 4> warmRed{0.070588f, 0.180392f, 0.219608f, 1.0f};
+    // const std::array<float, 4> white{1.0f, 1.0f, 1.0f, 1.0f};
     const std::array<float, 4> skyBlue{0.313726f, 0.627451f, 1.0f, 1.0f};
-    const std::array<float, 4> yellow{1.0f, 0.784314f, 0.078431f, 1.0f};
+    // const std::array<float, 4> yellow{1.0f, 0.784314f, 0.078431f, 1.0f};
 
     world.Add(std::make_unique<Box>(
-        Vec2(700, 200), Vec2(0, 0), Vec2(0, 0),
-        1600, 50, skyBlue, 100, 0, RigidbodyType::Static));
+        Vec2(0, 0), Vec2(0, 0), Vec2(0, 0),
+        20, 1, skyBlue, 100, 0, RigidbodyType::Static));
 
-    world.Add(std::make_unique<Box>(
-        Vec2(700, 300), Vec2(0, 1), Vec2(0, 0),
-        80, 80, white, 1, 0.5f, RigidbodyType::Dynamic));
+    // world.Add(std::make_unique<Box>(
+    //     Vec2(700/50, 300/50), Vec2(0, 1), Vec2(0, 0),
+    //     80, 80, white, 1, 0.5f, RigidbodyType::Dynamic));
 
-    auto slope = std::make_unique<Box>(
-        Vec2(1000, 400), Vec2(0, 0), Vec2(0, 0),
-        500, 40, skyBlue, 100, 0, RigidbodyType::Static);
-    slope->RotateTo(-PI / 6.0f);
-    world.Add(std::move(slope));
+    // auto slope = std::make_unique<Box>(
+    //     Vec2(200, 80), Vec2(0, 0), Vec2(0, 0),
+    //     500, 40, skyBlue, 100, 0, RigidbodyType::Static);
+    // slope->RotateTo(-PI / 6.0f);
+    // world.Add(std::move(slope));
 
-    world.Add(std::make_unique<Box>(
-        Vec2(500, 700), Vec2(5, 1), Vec2(0, 0),
-        200, 200, white, 2000, 1, RigidbodyType::Dynamic));
+    // world.Add(std::make_unique<Box>(
+    //     Vec2(50, 120), Vec2(5, 1), Vec2(0, 0),
+    //     40, 40, white, 2000, 1, RigidbodyType::Dynamic));
 
-    world.Add(std::make_unique<Box>(
-        Vec2(896, 670), Vec2(0, 0), Vec2(0, 0),
-        70, 70, yellow, 15, 0.5f, RigidbodyType::Dynamic));
+    // world.Add(std::make_unique<Ball>(
+    //     Vec2(150, 120), Vec2(0, 0), Vec2(0, 0),
+    //     50, warmRed, 50, 0.5f, RigidbodyType::Dynamic));
 
-    world.Add(std::make_unique<Box>(
-        Vec2(906, 570), Vec2(0, 0), Vec2(0, 0),
-        70, 70, warmRed, 50, 0.5f, RigidbodyType::Dynamic));
-
-    world.Add(std::make_unique<Ball>(
-        Vec2(906, 770), Vec2(0, 0), Vec2(0, 0),
-        50, warmRed, 50, 0.5f, RigidbodyType::Dynamic));
-
-    world.Add(std::make_unique<Ball>(
-        Vec2(500, 700), Vec2(-1, 0), Vec2(0, 0),
-        20, warmRed, 5, 0.2f, RigidbodyType::Dynamic));
+    // world.Add(std::make_unique<Ball>(
+    //     Vec2(250, 120), Vec2(-1, 0), Vec2(0, 0),
+    //     20, yellow, 5, 0.2f, RigidbodyType::Dynamic));
 }
 
 void Engine::ComparisonScene()

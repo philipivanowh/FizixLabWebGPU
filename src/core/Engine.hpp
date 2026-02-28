@@ -76,4 +76,9 @@ private:
 	static bool prevKeyP; // Previous frame state of P key
 	static bool prevKeyO; // Previous frame state of O key
 	static bool prevKeyR; // Previous frame state of R key
+
+	// Drag interaction state: single-click select, hold/double-click drag
+	static int selectedBodyHoldFrames;  // Frames held on currently selected body
+	static int dragThresholdFrames;     // Frames to hold before enabling drag (tunable)
+	static bool wasSelectedBodyJustClicked; // True if selected in previous frame
 };

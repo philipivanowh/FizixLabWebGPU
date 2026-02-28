@@ -13,13 +13,13 @@
 struct SpawnSettings
 {
     shape::ShapeType shapeType = shape::ShapeType::Box;
-    math::Vec2 position{500.0f, 500.0f};
+    math::Vec2 position{0.0f, 5.0f};
     math::Vec2 velocity{0.0f, 0.0f};
-    float boxWidth = 60.0f;
-    float boxHeight = 60.0f;
-    float base = 300.0f;
+    float boxWidth = 1.0f;
+    float boxHeight = 1.0f;
+    float base = 3.0f;
     float angle = 30.0f;
-    float radius = 30.0f;
+    float radius = 1.0f;
     float mass = 10.0f;
     float staticFriction = 1.0f;
     float kineticFriction = 0.7f;
@@ -49,11 +49,11 @@ struct CannonFireSettings
     std::array<float, 4> color = {255.f, 255.f, 255.f, 1.f}; // RGBA 0–255
 
     // Ball-specific
-    float radius   = 20.0f;
+    float radius   = 0.5f;
 
     // Box-specific
-    float boxWidth  = 40.0f;
-    float boxHeight = 40.0f;
+    float boxWidth  = 1.0f;
+    float boxHeight = 1.0f;
 
     void Recompute()
     {
@@ -133,6 +133,10 @@ private:
     bool cannonFirePending = false;
 
     Settings* settings = nullptr;
+
+    // Track position editing state for pause/unpause
+    bool positionBeingEdited = false;
+    bool wasPositionEditedLastFrame = false;
 
     // Window dimensions — set once in RenderMainControls
     float screenW = 1800;

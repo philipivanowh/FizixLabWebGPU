@@ -35,7 +35,7 @@ namespace physics
 						 float RigidbodyMass,
 						 float restitution,
 						 RigidbodyType RigidbodyTypeValue)
-		: pos(position), linearVel(initialLinearVel * SimulationConstants::PIXELS_PER_METER), linearAcc(initialLinearAcc * SimulationConstants::PIXELS_PER_METER), bodyType(RigidbodyTypeValue), restitution(math::Clamp(restitution, 0.0f, 1.0f))
+		: pos(position * SimulationConstants::PIXELS_PER_METER), linearVel(initialLinearVel * SimulationConstants::PIXELS_PER_METER), linearAcc(initialLinearAcc * SimulationConstants::PIXELS_PER_METER), bodyType(RigidbodyTypeValue), restitution(math::Clamp(restitution, 0.0f, 1.0f))
 	{
 		mass = (RigidbodyMass > 0.0f) ? RigidbodyMass : 1.0f;
 		area = 1.0f;

@@ -510,9 +510,11 @@ void Renderer::BeginFrame()
 
 void Renderer::DrawGrid()
 {
-	constexpr float kGridSpacing = 50.0f;
-	constexpr float kMajorSpacing = 200.0f;
-	std::array<float, 4> minorColor{0.1f, 0.5f, 0.6f, 0.05f};
+	// Grid lines snap to real-world metres.
+	// Minor grid = 1 m apart, major grid = 5 m apart.
+	const float kGridSpacing  = SimulationConstants::PIXELS_PER_METER * 1.0f;  // 1 m per cell
+	const float kMajorSpacing = SimulationConstants::PIXELS_PER_METER * 5.0f;  // major line every 5 m
+	std::array<float, 4> minorColor{0.1f, 0.5f, 0.6f, 0.1f};
 	std::array<float, 4> majorColor{0.2f, 0.7f, 0.8f, 0.1f};
 
 	for (float &value : minorColor)
@@ -673,7 +675,6 @@ void Renderer::InitializeBuffers()
 		-100, 0,
 		100, 0,
 		50, 100
-
 	};
 	vertexCount = static_cast<uint32_t>(vertexData.size() / 2);
 
@@ -846,6 +847,10 @@ void Renderer::DrawShape(physics::Rigidbody &body, bool highlight)
 		DrawIncline(*incline);
 		DrawFBD(body);
 	}
+	else if(auto trigger = dynamic_cast<const shape::Trigger *>(&body))
+	{
+		DrawTrigger(*trigger);
+	}
 }
 
 void Renderer::DrawFBD(physics::Rigidbody &body)
@@ -989,6 +994,29 @@ void Renderer::DrawBox(const shape::Box &box)
 	renderPass.setBindGroup(0, uniformBindGroup, 1, &uniformOffset);
 	renderPass.setVertexBuffer(0, vertexBuffer, 0, vertexCount * 2 * sizeof(float));
 	renderPass.draw(vertexCount, 1, 0, 0);
+}
+
+void Renderer::DrawTrigger(const shape::Trigger &trigger)
+{
+	renderPass.setPipeline(pipeline);
+
+	auto DrawPart = [&](const std::vector<float> &verts,
+						const std::array<float, 4> &color)
+	{
+		if (verts.empty())
+			return;
+		EnsureVertexBufferSize(verts.size());
+		queue.writeBuffer(vertexBuffer, 0,
+						  verts.data(), verts.size() * sizeof(float));
+		const uint32_t count = static_cast<uint32_t>(verts.size() / 2);
+		uint32_t off = UpdateUniforms(trigger.pos, color);
+		renderPass.setBindGroup(0, uniformBindGroup, 1, &off);
+		renderPass.setVertexBuffer(0, vertexBuffer, 0, count * 2 * sizeof(float));
+		renderPass.draw(count, 1, 0, 0);
+	};
+
+	DrawPart(trigger.GetOuterBoxVertexLocalPos(), trigger.color);
+	DrawPart(trigger.GetInnerBoxVertexLocalPos(), trigger.color);
 }
 
 void Renderer::DrawIncline(const shape::Incline &incline)

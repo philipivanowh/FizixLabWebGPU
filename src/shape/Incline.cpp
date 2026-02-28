@@ -2,6 +2,7 @@
 #include "collision/AABB.hpp"
 #include "physics/Rigidbody.hpp"
 #include "math/Math.hpp"
+#include "common/settings.hpp"
 
 #include <algorithm>
 #include <cmath>
@@ -19,7 +20,7 @@ namespace shape
 					 const std::array<float, 4> &colorValue,
 					 float staticFrictionValue,
 					 float kineticFrictionValue)
-		: Shape(pos, vel, acc, 1, 0, physics::RigidbodyType::Static), base(base), height(std::tan(angle * math::PI / 180.0f) * base), angle(angle * math::PI / 180.0f), flip(flip), color(colorValue)
+		: Shape(pos, vel, acc, 1, 0, physics::RigidbodyType::Static), base(base* SimulationConstants::PIXELS_PER_METER), height(std::tan(angle * math::PI / 180.0f) * base), angle(angle * math::PI / 180.0f), flip(flip), color(colorValue)
 	{
 
 		staticFriction = staticFrictionValue;

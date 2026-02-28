@@ -23,6 +23,7 @@
 #include "shape/Box.hpp"
 #include "shape/Cannon.hpp"
 #include "shape/Incline.hpp"
+#include "shape/Trigger.hpp"
 #include "physics/Rigidbody.hpp"
 #include "math/Vec2.hpp"
 #include "common/settings.hpp"
@@ -56,6 +57,7 @@ public:
 	void DrawBall(const shape::Ball &ball);
 	void DrawCannon(const shape::Cannon &Cannon);
 	void DrawIncline(const shape::Incline &incline);
+	void DrawTrigger(const shape::Trigger &trigger);
 	void DrawBallLine(const shape::Ball &ball);
 	void DrawFBD(physics::Rigidbody &body);
 	void DrawMeasuringRectangle(math::Vec2 &start, math::Vec2 &size);

@@ -1,6 +1,7 @@
 #include "shape/Ball.hpp"
 #include "collision/AABB.hpp"
 #include "physics/Rigidbody.hpp"
+#include "common/settings.hpp"
 
 #include <algorithm>
 #include <cmath>
@@ -16,7 +17,7 @@ namespace shape
 			   float massValue,
 			   float restitution,
 			   physics::RigidbodyType RigidbodyType)
-		: Shape(pos, vel, acc, massValue, restitution, RigidbodyType), radius(radiusValue), color(colorValue)
+		: Shape(pos, vel, acc, massValue, restitution, RigidbodyType), radius(radiusValue * SimulationConstants::PIXELS_PER_METER), color(colorValue)
 	{
 		
 		GenerateVertices();

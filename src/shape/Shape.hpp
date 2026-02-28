@@ -9,7 +9,8 @@ namespace shape
         Ball,
         Incline,
         Box,
-        Cannon
+        Cannon,
+        Trigger
     };
 
     class Shape : public physics::Rigidbody
