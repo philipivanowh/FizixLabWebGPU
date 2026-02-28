@@ -10,6 +10,7 @@ https://www.youtube.com/watch?v=C9aZ5YHLRF0
 
 Setup
 Install Emscripten
+  https://emscripten.org/docs/getting_started/downloads.html
 
 Building Instruction
 
