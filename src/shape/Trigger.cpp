@@ -32,6 +32,7 @@ namespace shape
             math::Vec2(halfWidth, -halfHeight),
             math::Vec2(halfWidth, halfHeight),
             math::Vec2(-halfWidth, halfHeight),
+
             math::Vec2(-halfWidth * miniScaled, -halfHeight * miniScaled),
             math::Vec2(halfWidth * miniScaled, -halfHeight * miniScaled),
             math::Vec2(halfWidth * miniScaled, halfHeight * miniScaled),
@@ -52,19 +53,29 @@ namespace shape
         return out;
     }
 
-    void Append(std::vector<math::Vec2> &dst, const std::vector<math::Vec2> &src)
-    {
-        dst.insert(dst.end(), src.begin(), src.end());
+
+    std::vector<float> Trigger::GetOuterBoxVertexLocalPos() const{
+        // Return vertices as two triangles to form a complete box
+        // Triangle 1: v0, v1, v2
+        // Triangle 2: v0, v2, v3
+        std::vector<math::Vec2> rotated = GetRotatedVertices();
+        return ToFloats({
+            rotated[0], rotated[1], rotated[2],  // Triangle 1
+            rotated[0], rotated[2], rotated[3]   // Triangle 2
+        });
     }
 
-    std::vector<math::Vec2> Trigger::GetOuterBoxVertexLocalPos() const{
-        return ToFloats({vertices[0], vertices[1], vertices[2], vertices[3]});
+    std::vector<float> Trigger::GetInnerBoxVertexLocalPos() const{
+        // Return vertices as two triangles to form a complete inner box
+        // Triangle 1: v4, v5, v6
+        // Triangle 2: v4, v6, v7
+        std::vector<math::Vec2> rotated = GetRotatedVertices();
+        return ToFloats({
+            rotated[4], rotated[5], rotated[6],  // Triangle 1
+            rotated[4], rotated[6], rotated[7]   // Triangle 2
+        });
     }
-
-    std::vector<math::Vec2> Trigger::GetInnerBoxVertexLocalPos() const{
-        return ToFloats({vertices[4], vertices[5], vertices[6], vertices[7]});
-    }
-    }
+    
  
     std::vector<float> Trigger::GetVertexLocalPos() const
     {

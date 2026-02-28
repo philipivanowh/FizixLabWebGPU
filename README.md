@@ -31,4 +31,4 @@ cmake --build build
 NOT YET
 ```
 
-Then run either `./build-dawn/App`
+Then run either `./build-dawn/App` Or './build/app'

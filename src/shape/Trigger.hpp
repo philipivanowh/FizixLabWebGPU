@@ -28,13 +28,16 @@ namespace shape
         std::vector<float> GetVertexLocalPos() const override;
         std::vector<math::Vec2> GetVertexWorldPos() const override;
 
+        std::vector<float> GetOuterBoxVertexLocalPos() const;
+        std::vector<float> GetInnerBoxVertexLocalPos() const;
+
         float width = 0.0f;
         float height = 0.0f;
         std::array<float, 4> color{0.0f, 0.0f, 0.0f, 1.0f};
         int verticesSize = 0;
 
     private:
-        const float miniScaled = 0.5f; // Slightly smaller to ensure trigger is fully contained within its AABB
+        //const float miniScaled = 0.5f; // Slightly smaller to ensure trigger is fully contained within its AABB
     };
 
 } // namespace physics

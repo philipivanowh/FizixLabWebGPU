@@ -48,7 +48,7 @@ bool Engine::prevKeyO = false;
 bool Engine::prevKeyR = false;
 
 int Engine::selectedBodyHoldFrames = 0;
-int Engine::dragThresholdFrames = 20; // Hold for 5 frames before allowing drag
+int Engine::dragThresholdFrames = 15; // Hold for 5 frames before allowing drag
 bool Engine::wasSelectedBodyJustClicked = false;
 
 // INIT / SHUTDOWN
@@ -105,7 +105,7 @@ void Engine::CheckSpawning()
         world.Add(std::make_unique<shape::Trigger>(
             req.position, req.velocity, Vec2(0, 0),
             req.boxWidth, req.boxHeight,
-            req.color, req.mass, req.restitution, req.bodyType));
+            req.color, req.mass, req.restitution, RigidbodyType::Static));
     }
 
     // Always nudge physics forward after a spawn so the object

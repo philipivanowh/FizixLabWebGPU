@@ -40,7 +40,7 @@ bool Renderer::Initialize(Settings &settings, GLFWscrollfun scrollCallback)
 		return false;
 	}
 
-	 settings.InitFromMonitor();
+	// settings.InitFromMonitor();
 
 	// ── INSERT POINT A: native resolution ───────────────────────────────
 	// Query the primary monitor native video mode so the window matches
@@ -730,6 +730,42 @@ void Renderer::DrawHighlightOutline(physics::Rigidbody &body)
 		renderPass.setVertexBuffer(0, vertexBuffer, 0, vertexCount * 2 * sizeof(float));
 		renderPass.draw(vertexCount, 1, 0, 0);
 	}
+		if (auto trigger = dynamic_cast<const shape::Trigger *>(&body))
+	{
+		// Draw trigger slightly larger
+		renderPass.setPipeline(pipeline);
+
+		// Get vertices and scale them outward
+		std::vector<float> vertices = trigger->GetOuterBoxVertexLocalPos();
+		// Scale vertices outward from center by outline thickness
+		for (size_t i = 0; i < vertices.size(); i += 2)
+		{
+			float x = vertices[i];
+			float y = vertices[i + 1];
+
+			// Calculate distance from center
+			float dist = std::sqrt(x * x + y * y);
+			if (dist > 0.001f)
+			{
+				// Push outward
+				float scale = 1.0f + outlineThickness*2 / dist;
+				vertices[i] = x * scale;
+				vertices[i + 1] = y * scale;
+			}
+		}
+
+		EnsureVertexBufferSize(vertices.size());
+		queue.writeBuffer(vertexBuffer, 0, vertices.data(), vertices.size() * sizeof(float));
+
+		vertexCount = static_cast<uint32_t>(vertices.size() / 2);
+		uint32_t uniformOffset = UpdateUniforms(trigger->pos, highlightColor);
+
+		renderPass.setBindGroup(0, uniformBindGroup, 1, &uniformOffset);
+		renderPass.setVertexBuffer(0, vertexBuffer, 0, vertexCount * 2 * sizeof(float));
+		renderPass.draw(vertexCount, 1, 0, 0);
+	}
+	
+	
 	else if (auto ball = dynamic_cast<const shape::Ball *>(&body))
 	{
 		// Draw ball slightly larger
@@ -998,6 +1034,7 @@ void Renderer::DrawBox(const shape::Box &box)
 
 void Renderer::DrawTrigger(const shape::Trigger &trigger)
 {
+	(void)trigger;
 	renderPass.setPipeline(pipeline);
 
 	auto DrawPart = [&](const std::vector<float> &verts,
@@ -1015,8 +1052,9 @@ void Renderer::DrawTrigger(const shape::Trigger &trigger)
 		renderPass.draw(count, 1, 0, 0);
 	};
 
+	const std::array<float, 4> rectangleColor = {0.7f, 0.7f, 0.0f, 0.1f};
 	DrawPart(trigger.GetOuterBoxVertexLocalPos(), trigger.color);
-	DrawPart(trigger.GetInnerBoxVertexLocalPos(), trigger.color);
+	DrawPart(trigger.GetInnerBoxVertexLocalPos(), rectangleColor);
 }
 
 void Renderer::DrawIncline(const shape::Incline &incline)
