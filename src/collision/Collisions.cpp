@@ -3,6 +3,7 @@
 #include "shape/Ball.hpp"
 #include "shape/Box.hpp"
 #include "shape/Incline.hpp"
+#include "shape/Trigger.hpp"
 #include "math/Math.hpp"
 
 #include <cmath>
@@ -314,6 +315,8 @@ namespace collision
 		const shape::Ball *ballB = dynamic_cast<const shape::Ball *>(&bodyB);
 		const shape::Incline *inclineA = dynamic_cast<const shape::Incline *>(&bodyA);
 		const shape::Incline *inclineB = dynamic_cast<const shape::Incline *>(&bodyB);
+		const shape::Trigger *triggerA = dynamic_cast<const shape::Trigger *>(&bodyA);
+		const shape::Trigger *triggerB = dynamic_cast<const shape::Trigger *>(&bodyB);
 
 		if (boxA)
 		{
@@ -354,6 +357,19 @@ namespace collision
 				}
 				return hit;
 			}
+
+			if (triggerB)
+			{
+				const auto &vertsA = boxA->GetVertexWorldPos();
+				const auto &vertsB = triggerB->GetVertexWorldPos();
+
+				hit = IntersectPolygons(boxA->pos, vertsA, triggerB->pos, vertsB);
+				if (!hit.result)
+				{
+					return hit;
+				}
+				return hit;
+			}
 		}
 
 		if (ballA)
@@ -375,6 +391,13 @@ namespace collision
 			{
 				const auto &vertsB = inclineB->GetVertexWorldPos();
 				hit = IntersectCirclePolygon(ballA->pos, ballA->radius, inclineB->pos, vertsB);
+				return hit;
+			}
+
+			if (triggerB)
+			{
+				const auto &vertsB = triggerB->GetVertexWorldPos();
+				hit = IntersectCirclePolygon(ballA->pos, ballA->radius, triggerB->pos, vertsB);
 				return hit;
 			}
 		}
@@ -412,6 +435,73 @@ namespace collision
 				const auto &vertsB = inclineB->GetVertexWorldPos();
 
 				hit = IntersectPolygons(inclineA->pos, vertsA, inclineB->pos, vertsB);
+				if (!hit.result)
+				{
+					return hit;
+				}
+				return hit;
+			}
+
+			if (triggerB)
+			{
+				const auto &vertsA = inclineA->GetVertexWorldPos();
+				const auto &vertsB = triggerB->GetVertexWorldPos();
+
+				hit = IntersectPolygons(inclineA->pos, vertsA, triggerB->pos, vertsB);
+				if (!hit.result)
+				{
+					return hit;
+				}
+				return hit;
+			}
+		}
+
+		if (triggerA)
+		{
+			if (boxB)
+			{
+				const auto &vertsA = triggerA->GetVertexWorldPos();
+				const auto &vertsB = boxB->GetVertexWorldPos();
+
+				hit = IntersectPolygons(triggerA->pos, vertsA, boxB->pos, vertsB);
+				if (!hit.result)
+				{
+					return hit;
+				}
+				return hit;
+			}
+
+			if (ballB)
+			{
+				const auto &vertsA = triggerA->GetVertexWorldPos();
+				hit = IntersectCirclePolygon(ballB->pos, ballB->radius, triggerA->pos, vertsA);
+				if (!hit.result)
+				{
+					return hit;
+				}
+				hit.normal = hit.normal.Negate();
+				return hit;
+			}
+
+			if (inclineB)
+			{
+				const auto &vertsA = triggerA->GetVertexWorldPos();
+				const auto &vertsB = inclineB->GetVertexWorldPos();
+
+				hit = IntersectPolygons(triggerA->pos, vertsA, inclineB->pos, vertsB);
+				if (!hit.result)
+				{
+					return hit;
+				}
+				return hit;
+			}
+
+			if (triggerB)
+			{
+				const auto &vertsA = triggerA->GetVertexWorldPos();
+				const auto &vertsB = triggerB->GetVertexWorldPos();
+
+				hit = IntersectPolygons(triggerA->pos, vertsA, triggerB->pos, vertsB);
 				if (!hit.result)
 				{
 					return hit;

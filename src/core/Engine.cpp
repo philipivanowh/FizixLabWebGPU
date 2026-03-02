@@ -50,6 +50,7 @@ bool Engine::prevKeyR = false;
 int Engine::selectedBodyHoldFrames = 0;
 int Engine::dragThresholdFrames = 15; // Hold for 5 frames before allowing drag
 bool Engine::wasSelectedBodyJustClicked = false;
+float Engine::simulationTimeMs = 0.0f;
 
 // INIT / SHUTDOWN
 bool Engine::Initialize()
@@ -57,7 +58,8 @@ bool Engine::Initialize()
     if (!renderer.Initialize(settings, Engine::Scroll_Feedback))
         return false;
 
-    uiManager.InitializeImGui(renderer, &settings);
+    uiManager.InitializeImGui(renderer, &settings, &world);
+    world.Initialize(&settings);
     AddDefaultObjects();
     return true;
 }
@@ -105,7 +107,7 @@ void Engine::CheckSpawning()
         world.Add(std::make_unique<shape::Trigger>(
             req.position, req.velocity, Vec2(0, 0),
             req.boxWidth, req.boxHeight,
-            req.color, req.mass, req.restitution, RigidbodyType::Static));
+            req.color, req.mass, req.restitution, RigidbodyType::Static, req.triggerAction));
     }
 
     // Always nudge physics forward after a spawn so the object
@@ -114,6 +116,7 @@ void Engine::CheckSpawning()
 
     // Rewind history is invalid now that body count changed
     recorder.Clear();
+    simulationTimeMs = 0.0f;
     settings.scrubIndex = -1;
 }
 
@@ -218,7 +221,7 @@ void Engine::Update(float deltaMs, int iterations)
             settings.zoom = 1.0f;
             cameraOffset = Vec2(0.0f, 0.0f); // Reset camera position too
         }
-        settings.zoom = math::Clamp(settings.zoom, 0.1f, 4.0f);
+        settings.zoom = math::Clamp(settings.zoom, SimulationConstants::MIN_ZOOM, SimulationConstants::MAX_ZOOM);
     }
 
     renderer.SetZoom(settings.zoom);
@@ -355,8 +358,8 @@ void Engine::Update(float deltaMs, int iterations)
             case DragMode::physicsDrag:
             {
                 const float stiffness = DragConstants::DRAG_STIFNESS;
-                const float damping = 5.0f * std::sqrt(
-                                                 stiffness * math::Clamp(draggedBody->mass, 20.f, 100.f) / 20.f);
+                const float damping = 15.0f * std::sqrt(
+                                                  stiffness * math::Clamp(draggedBody->mass, 20.f, 100.f) / 20.f);
 
                 Vec2 delta = mouseWorld - draggedBody->pos;
                 draggedBody->dragForce =
@@ -395,7 +398,7 @@ void Engine::Update(float deltaMs, int iterations)
         if (settings.recording)
         {
             if (++recordFrameCounter % settings.recordInterval == 0)
-                recorder.Record(world.CaptureSnapshot());
+                recorder.Record(world.CaptureSnapshot(), simulationTimeMs);
         }
 
         float scaledDelta = 0.0f;
@@ -415,7 +418,15 @@ void Engine::Update(float deltaMs, int iterations)
             scaledDelta = deltaMs * settings.timeScale;
         }
 
-        world.Update(scaledDelta, iterations, settings, selectedBody, draggedBody);
+        simulationTimeMs += scaledDelta; // ← accumulate BEFORE recording snapshot
+
+        if (settings.recording)
+        {
+            if (++recordFrameCounter % settings.recordInterval == 0)
+                recorder.Record(world.CaptureSnapshot(), simulationTimeMs); // ← pass time
+        }
+
+        world.Update(scaledDelta, iterations, selectedBody, draggedBody);
         CheckSpawning();
         CheckCannon();
     }
@@ -426,19 +437,32 @@ void Engine::CheckCannon()
     CannonFireSettings fire;
     if (uiManager.ConsumeCannonFireRequest(fire))
     {
+        if (settings.autoRecordOnFire && !settings.recording)
+        {
+            settings.recording = true;
+            Engine::GetRecorder().Clear(); // fresh recording from this moment
+            simulationTimeMs = 0.0f;
+            settings.scrubIndex = -1;
+        }
         math::Vec2 vel{fire.vx, fire.vy};
 
         if (fire.projectileType == CannonFireSettings::ProjectileType::Ball)
         {
-            world.Add(std::make_unique<shape::Ball>(
+            auto ball = std::make_unique<shape::Ball>(
                 fire.cannonPos, vel, Vec2(0, 0),
-                fire.radius, fire.color, fire.mass, fire.restitution, RigidbodyType::Dynamic));
+                fire.radius, fire.color, fire.mass, fire.restitution, RigidbodyType::Dynamic);
+            physics::Rigidbody *ballPtr = ball.get();
+            world.Add(std::move(ball));
+            world.StartTrail(ballPtr, 5.0f); // 5 second trail lifetime
         }
         else if (fire.projectileType == CannonFireSettings::ProjectileType::Box)
         {
-            world.Add(std::make_unique<shape::Box>(
+            auto box = std::make_unique<shape::Box>(
                 fire.cannonPos, vel, Vec2(0, 0),
-                fire.boxWidth, fire.boxHeight, fire.color, fire.mass, fire.restitution, RigidbodyType::Dynamic));
+                fire.boxWidth, fire.boxHeight, fire.color, fire.mass, fire.restitution, RigidbodyType::Dynamic);
+            physics::Rigidbody *boxPtr = box.get();
+            world.Add(std::move(box));
+            world.StartTrail(boxPtr, 5.0f); // 5 second trail lifetime
         }
     }
 }
@@ -449,12 +473,23 @@ void Engine::CheckCannon()
 void Engine::Render()
 {
     renderer.BeginFrame();
+
+    // Update LOD system with current camera info
+    world.SetCameraInfo(cameraOffset, settings.zoom);
+
     world.Draw(renderer);
 
     // ── ImGui ─────────────────────────────────────────────────────
     uiManager.BeginImGuiFrame();
 
     uiManager.RenderMainControls(world.RigidbodyCount(), selectedBody);
+
+    // Check if an object was removed from the inspector
+    physics::Rigidbody *removedObject = uiManager.ConsumeRemovedObject();
+    if (removedObject == selectedBody)
+    {
+        selectedBody = nullptr;
+    }
 
     uiManager.RenderSpawner();
 
@@ -616,5 +651,6 @@ void Engine::ClearBodies()
 {
     world.ClearObjects();
     recorder.Clear();
+    simulationTimeMs = 0.0f;
     settings.scrubIndex = -1;
 }

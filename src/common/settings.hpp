@@ -5,11 +5,14 @@
 namespace SimulationConstants
 {
     // Simulation settings
-    constexpr float TIME_STEP_MS = 16.67f;      // Time step per frame in milliseconds
-    constexpr int MAX_PHYSICS_ITERATIONS = 128; // Maximum physics iterations per frame
-    constexpr int MIN_PHYSICS_ITERATIONS = 1;   // Minimum physics iterations per frame
-    constexpr float PIXELS_PER_METER = 50.0f;  // Conversion factor from meters to pixels
+    constexpr float TIME_STEP_MS = 16.67f;       // Time step per frame in milliseconds
+    constexpr int MAX_PHYSICS_ITERATIONS = 1000; // Maximum physics iterations per frame
+    constexpr int MIN_PHYSICS_ITERATIONS = 200;  // Minimum physics iterations per frame
+    constexpr float PIXELS_PER_METER = 50.0f;    // Conversion factor from meters to pixels
     constexpr float FBD_SCALER_ADJUSTMENT = 0.005;
+
+    constexpr float MAX_ZOOM = 4.0f;
+    constexpr float MIN_ZOOM = 0.2f;
 
 } // namespace constants
 
@@ -27,7 +30,7 @@ namespace PhysicsConstants
 
 namespace DragConstants
 {
-    constexpr float DRAG_STIFNESS = 2000.0f;
+    constexpr float DRAG_STIFNESS = 10000.0f;
 }
 
 namespace VisualizationConstants
@@ -48,7 +51,8 @@ enum class DragMode
     physicsDrag
 };
 
-namespace WindowConstants{
+namespace WindowConstants
+{
     constexpr int defaultWindowWidth = 1500;
     constexpr int defaultWindowHeight = 800;
 }
@@ -56,38 +60,44 @@ namespace WindowConstants{
 class Settings
 {
 public:
-
     int windowWidth = WindowConstants::defaultWindowWidth;
     int windowHeight = WindowConstants::defaultWindowHeight;
     float zoom = 1.0f;
-    GLFWmonitor* monitor = nullptr; 
+    GLFWmonitor *monitor = nullptr;
 
     void InitFromMonitor()
     {
         monitor = glfwGetPrimaryMonitor();
-        const GLFWvidmode* mode = monitor ? glfwGetVideoMode(monitor) : nullptr;
+        const GLFWvidmode *mode = monitor ? glfwGetVideoMode(monitor) : nullptr;
 
         float scale = 1.0f;
-        if(mode)
+        if (mode)
         {
-            if(scale <= 0.0f) scale = 1.0f;
-            if(scale > 1.0f) scale = 1.0f;
+            if (scale <= 0.0f)
+                scale = 1.0f;
+            if (scale > 1.0f)
+                scale = 1.0f;
 
             windowWidth = static_cast<int>(static_cast<float>(mode->width) * scale);
-            
+
             windowHeight = static_cast<int>(static_cast<float>(mode->height) * scale);
         }
     }
-    
+
     //--------Drag-----------
     DragMode dragMode = DragMode::physicsDrag;
 
     // --- Time Control ---
+
+
     float timeScale = 1.0f; // 0 = paused, 1 = normal, 0.1 = slow-mo
     bool paused = false;
-    bool     stepOneFrame = false;
-     bool     rewinding    = false; 
-     bool     recording    = false;
-     int      recordInterval = 1;
-     int scrubIndex = -1;
+    bool stepOneFrame = false;
+    bool rewinding = false;
+    bool recording = false;
+    int recordInterval = 1;
+    int scrubIndex = -1;
+
+    // --- Auto-record ---
+    bool autoRecordOnFire = true;
 };

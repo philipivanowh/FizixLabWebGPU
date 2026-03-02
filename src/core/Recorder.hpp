@@ -21,22 +21,23 @@ class Recorder
 {
 public:
     // ── Configuration ────────────────────────────────────────────
-    static constexpr size_t MAX_ENTRIES    = 10000; // max frames kept in memory
-    static constexpr int    KEYFRAME_EVERY = 1;     // 1 = every frame is a keyframe
-                                                    // N = full snapshot every N frames,
-                                                    //     deltas in between
+    static constexpr size_t MAX_ENTRIES = 10000; // max frames kept in memory
+    static constexpr int KEYFRAME_EVERY = 1;     // 1 = every frame is a keyframe
+                                                 // N = full snapshot every N frames,
+                                                 //     deltas in between
 
     // ── Internal storage ─────────────────────────────────────────
     struct Entry
     {
         WorldSnapshot snapshot;
-        bool          isKeyframe = true;
+        bool isKeyframe = true;
+        float simulationTimeMs = 0.0f;
     };
 
     // ── Record ───────────────────────────────────────────────────
     // Call once per tick (or every recordInterval ticks from Engine).
     // Automatically decides keyframe vs delta based on KEYFRAME_EVERY.
-    void Record(const WorldSnapshot& current)
+    void Record(const WorldSnapshot &current, float simTimeMs)
     {
         // Drop oldest when full
         if (history.size() >= MAX_ENTRIES)
@@ -48,19 +49,29 @@ public:
 
         Entry e;
         e.isKeyframe = forceKeyframe;
-        e.snapshot   = forceKeyframe
-                       ? current
-                       : DeltaFrom(history.back().snapshot, current);
+        e.snapshot = forceKeyframe
+                         ? current
+                         : DeltaFrom(history.back().snapshot, current);
 
+        e.simulationTimeMs = simTimeMs;
         history.push_back(e);
         frameCounter++;
     }
 
+    // ── Query sim time at a recorded frame ────────────────────────
+    float GetFrameTime(size_t index) const
+    {
+        if (index >= history.size())
+            return 0.0f;
+        return history[index].simulationTimeMs;
+    }
+
     // ── Random access (timeline scrubber) ────────────────────────
     // Returns nullptr if index is out of range.
-    const WorldSnapshot* GetFrame(size_t index) const
+    const WorldSnapshot *GetFrame(size_t index) const
     {
-        if (index >= history.size()) return nullptr;
+        if (index >= history.size())
+            return nullptr;
         return &history[index].snapshot;
     }
 
@@ -78,16 +89,17 @@ public:
     // ── Sequential rewind (hold-button) ──────────────────────────
     // Pops the most recent frame into `out`.
     // Returns false when history is exhausted.
-    bool Rewind(WorldSnapshot& out)
+    bool Rewind(WorldSnapshot &out)
     {
-        if (history.empty()) return false;
+        if (history.empty())
+            return false;
         out = history.back().snapshot;
         history.pop_back();
         return true;
     }
 
     // ── Queries ───────────────────────────────────────────────────
-    bool   HasHistory()  const { return !history.empty(); }
+    bool HasHistory() const { return !history.empty(); }
     size_t HistorySize() const { return history.size(); }
 
     void Clear()
@@ -100,8 +112,8 @@ private:
     // ── Delta encoding ────────────────────────────────────────────
     // For non-keyframes: bodies that barely moved reuse the previous
     // frame's data, saving memory and copy cost for static objects.
-    WorldSnapshot DeltaFrom(const WorldSnapshot& prev,
-                            const WorldSnapshot& curr)
+    WorldSnapshot DeltaFrom(const WorldSnapshot &prev,
+                            const WorldSnapshot &curr)
     {
         WorldSnapshot delta;
         delta.bodies.resize(curr.bodies.size());
@@ -113,12 +125,12 @@ private:
 
             // Threshold: only store new data if the body actually moved
             delta.bodies[i] = (posDiff > 0.01f)
-                              ? curr.bodies[i]
-                              : prev.bodies[i];
+                                  ? curr.bodies[i]
+                                  : prev.bodies[i];
         }
         return delta;
     }
 
     std::deque<Entry> history;
-    int               frameCounter = 0;
+    int frameCounter = 0;
 };

@@ -25,6 +25,7 @@ public:
 	std::vector<math::Vec2> GetRotatedVertices() const;
 	std::vector<float> GetVertexLocalPos() const override;
 	std::vector<math::Vec2> GetVertexWorldPos() const override;
+	std::array<float, 4> GetColor() const override { return color; }
 
 	float width = 0.0f;
 	float height = 0.0f;

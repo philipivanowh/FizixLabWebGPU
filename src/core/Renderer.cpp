@@ -1034,7 +1034,6 @@ void Renderer::DrawBox(const shape::Box &box)
 
 void Renderer::DrawTrigger(const shape::Trigger &trigger)
 {
-	(void)trigger;
 	renderPass.setPipeline(pipeline);
 
 	auto DrawPart = [&](const std::vector<float> &verts,
@@ -1051,10 +1050,19 @@ void Renderer::DrawTrigger(const shape::Trigger &trigger)
 		renderPass.setVertexBuffer(0, vertexBuffer, 0, count * 2 * sizeof(float));
 		renderPass.draw(count, 1, 0, 0);
 	};
+	
 
-	const std::array<float, 4> rectangleColor = {0.7f, 0.7f, 0.0f, 0.1f};
-	DrawPart(trigger.GetOuterBoxVertexLocalPos(), trigger.color);
-	DrawPart(trigger.GetInnerBoxVertexLocalPos(), rectangleColor);
+	const std::array<float, 4>  originalColor = {0.6f, 0.3f, 0.8f, 0.4f};  // Purple
+	const std::array<float, 4>  collisionColor = {1.0f, 0.9f, 0.2f, 0.9f}; // Bright yellow (triggered)
+	// Use collision color if colliding, otherwise use original color
+	const std::array<float, 4> outerColor = trigger.isColliding 
+		? collisionColor 
+		: originalColor;
+	
+	const std::array<float, 4> innerColor = {0.1f, 0.5f, 0.1f, 0.3f};
+
+	DrawPart(trigger.GetOuterBoxVertexLocalPos(), outerColor);
+	DrawPart(trigger.GetInnerBoxVertexLocalPos(), innerColor);
 }
 
 void Renderer::DrawIncline(const shape::Incline &incline)
@@ -1172,6 +1180,99 @@ void Renderer::DrawBallLine(const shape::Ball &ball)
 	renderPass.draw(2, 1, 0, 0);
 
 	renderPass.setPipeline(pipeline);
+}
+
+void Renderer::DrawTrailPoint(const math::Vec2 &position, float radius, const std::array<float, 4> &color)
+{
+	// Draw a simple dot (small square) for the trail point
+	renderPass.setPipeline(pipeline);
+
+	// Create a simple square centered at origin
+	std::vector<float> vertices = {
+		-radius, -radius,
+		 radius, -radius,
+		 radius,  radius,
+		 
+		 radius,  radius,
+		-radius,  radius,
+		-radius, -radius
+	};
+
+	EnsureVertexBufferSize(vertices.size());
+	queue.writeBuffer(vertexBuffer, 0, vertices.data(), vertices.size() * sizeof(float));
+
+	vertexCount = static_cast<uint32_t>(vertices.size() / 2);
+	
+	// Ensure color has proper alpha
+	std::array<float, 4> drawColor = color;
+	if (drawColor[3] < 0.01f) drawColor[3] = 0.1f;  // Minimum alpha to be visible
+	
+	uint32_t uniformOffset = UpdateUniforms(position, drawColor);
+
+	if (!uniformBindGroup)
+	{
+		return;
+	}
+	renderPass.setBindGroup(0, uniformBindGroup, 1, &uniformOffset);
+	renderPass.setVertexBuffer(0, vertexBuffer, 0, vertices.size() * sizeof(float));
+	renderPass.draw(vertexCount, 1, 0, 0);
+}
+
+void Renderer::DrawTrailPointsBatched(const std::vector<std::tuple<math::Vec2, float, std::array<float, 4>>> &trailPoints)
+{
+	if (trailPoints.empty())
+	{
+		return;
+	}
+
+	renderPass.setPipeline(pipeline);
+
+	// Build a single vertex buffer for all trail points
+	std::vector<float> allVertices;
+	allVertices.reserve(trailPoints.size() * 12);  // 6 vertices per square * 2 floats per vertex
+
+	// Calculate total vertices needed
+	for (size_t i = 0; i < trailPoints.size(); ++i)
+	{
+		const math::Vec2 &position = std::get<0>(trailPoints[i]);
+		float radius = std::get<1>(trailPoints[i]);
+		//const std::array<float, 4> &color = std::get<2>(trailPoints[i]);
+
+		// Create square vertices centered at origin
+		std::vector<float> squareVerts = {
+			-radius, -radius,
+			 radius, -radius,
+			 radius,  radius,
+			 
+			 radius,  radius,
+			-radius,  radius,
+			-radius, -radius
+		};
+
+		// Add to batch with position offset
+		for (size_t j = 0; j < squareVerts.size(); j += 2)
+		{
+			allVertices.push_back(squareVerts[j] + position.x);
+			allVertices.push_back(squareVerts[j + 1] + position.y);
+		}
+	}
+
+	// Upload all vertices at once
+	EnsureVertexBufferSize(allVertices.size());
+	queue.writeBuffer(vertexBuffer, 0, allVertices.data(), allVertices.size() * sizeof(float));
+
+	// Create a combined color buffer if needed, for now use white
+	std::array<float, 4> batchColor{1.0f, 1.0f, 1.0f, 0.7f};
+	uint32_t uniformOffset = UpdateUniforms(math::Vec2(0.0f, 0.0f), batchColor);
+
+	if (!uniformBindGroup)
+	{
+		return;
+	}
+
+	renderPass.setBindGroup(0, uniformBindGroup, 1, &uniformOffset);
+	renderPass.setVertexBuffer(0, vertexBuffer, 0, allVertices.size() * sizeof(float));
+	renderPass.draw(static_cast<uint32_t>(allVertices.size() / 2), 1, 0, 0);
 }
 
 void Renderer::DrawTestTriangle()

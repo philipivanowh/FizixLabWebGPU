@@ -82,15 +82,14 @@ namespace physics
 			{
 				iterations = 1;
 			}
-			const float dtSeconds = (deltaMs / 1000.0f) / static_cast<float>(iterations);
+			const double dtSeconds = static_cast<double>(deltaMs) / (1000.0 * static_cast<double>(iterations));
 
 			ClearForces();
-			UpdateForces(deltaMs);
+			UpdateForces(dtSeconds);
 			linearAcc = netForce / mass;
-			linearVel = linearVel + (linearAcc * dtSeconds) * 0.5;
-			pos = pos + (linearVel * dtSeconds);
-			linearVel = linearVel + (linearAcc * dtSeconds) * 0.5;
-			rotation = std::fmod((rotation + angularVel * dtSeconds), 360.0f);
+			linearVel = linearVel + (linearAcc * static_cast<float>(dtSeconds));
+			pos       = pos + (linearVel * static_cast<float>(dtSeconds));
+			rotation  = std::fmod((rotation + angularVel * static_cast<float>(dtSeconds)), 360.0f);
 
 			netForce = math::Vec2();
 			dragForce = math::Vec2();
@@ -238,9 +237,6 @@ namespace physics
 
 	void Rigidbody::UpdateGravity()
 	{
-		// const float strength = PhysicsConstants::GRAVITY * SimulationConstants::PIXELS_PER_METER;
-		// const math::Vec2 gravityForce(0.0f, -mass * strength);
-		// ApplyForce(gravityForce, ForceType::Gravitational);
 	}
 
 	void Rigidbody::UpdateForces(float deltaMs)

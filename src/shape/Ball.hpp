@@ -27,6 +27,7 @@ public:
 	float ComputeInertia() const override;
 	collision::AABB GetAABB() const override;
 	collision::AABB GetLocalAABB() const override;
+	std::array<float, 4> GetColor() const override { return color; }
 
 	float radius = 0.0f;
 	std::array<float, 4> color{0.0f, 0.0f, 0.0f, 1.0f};

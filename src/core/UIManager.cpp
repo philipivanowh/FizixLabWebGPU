@@ -275,8 +275,9 @@ void UIManager::ApplyNeonTheme() // name unchanged so Engine.cpp compiles
 // ================================================================
 //  LIFECYCLE
 // ================================================================
-void UIManager::InitializeImGui(Renderer &renderer, Settings *settings)
+void UIManager::InitializeImGui(Renderer &renderer, Settings *settings, World *world)
 {
+    this->world = world;
     this->settings = settings;
     screenW = settings->windowWidth;
     screenH = settings->windowHeight;
@@ -424,7 +425,10 @@ void UIManager::RenderTopTimelineBar()
         {
             settings->recording = !settings->recording;
             if (!settings->recording)
+            {
                 Engine::GetRecorder().Clear();
+                Engine::ResetSimTime();
+            }
             settings->scrubIndex = -1;
         }
         ImGui::PopStyleColor(5);
@@ -541,8 +545,16 @@ void UIManager::RenderTopTimelineBar()
     }
     else
     {
-        scrubChanged = ImGui::SliderInt("##tl", &sliderVal, 0, maxFrame,
-                                        settings->scrubIndex >= 0 ? "Frame %d" : "LIVE");
+        if (settings->scrubIndex >= 0 || histSize > 0)
+        {
+            float frameTimeMs = Engine::GetRecorder().GetFrameTime((size_t)sliderVal);
+            char timeFmt[64];
+            // %%d becomes %d after ImGui processes it — time is pre-filled
+            snprintf(timeFmt, sizeof(timeFmt),
+                     settings->scrubIndex >= 0 ? "Frame %%d  |  t = %.3fs" : "LIVE  |  t = %.3fs",
+                     frameTimeMs / 1000.0f);
+            scrubChanged = ImGui::SliderInt("##tl", &sliderVal, 0, maxFrame, timeFmt);
+        }
     }
     ImGui::PopStyleColor(3);
 
@@ -635,6 +647,13 @@ void UIManager::RenderSimPanel(std::size_t bodyCount)
     ImGui::SliderInt("##ri", &settings->recordInterval, 1, 10);
     ImGui::PopStyleColor(2);
 
+    ImGui::Spacing();
+    ImGui::TextColored(Col::InkMid, "Auto-Record");
+    ImGui::SameLine(0, 8);
+    ImGui::Checkbox("##autoRec", &settings->autoRecordOnFire);
+    ImGui::SameLine(0, 6);
+    ImGui::TextColored(Col::InkFaint, "on cannon fire");
+
     const float fps2 = fps > 0 ? fps : 60.0f;
     const float rewSecs = (Engine::GetRecorder().HistorySize() * settings->recordInterval) / fps2;
 
@@ -656,6 +675,7 @@ void UIManager::RenderSimPanel(std::size_t bodyCount)
     ImGui::TextColored(qualCol, "— %s", qualStr);
 
     ImGui::Spacing();
+
     SectionHead("SCENE");
 
     ImGui::PushStyleColor(ImGuiCol_Button, Col::RedSoft);
@@ -716,6 +736,13 @@ void UIManager::RenderInspectorPanel(physics::Rigidbody *body)
     else if (auto *incline = dynamic_cast<shape::Incline *>(body))
     {
         RenderInclineInspector(incline);
+        ImGui::End();
+        ImGui::PopStyleColor(2);
+        return;
+    }
+    else if (auto *trigger = dynamic_cast<shape::Trigger *>(body))
+    {
+        RenderTriggerInspector(trigger);
         ImGui::End();
         ImGui::PopStyleColor(2);
         return;
@@ -844,6 +871,23 @@ void UIManager::RenderInspectorPanel(physics::Rigidbody *body)
     AnimBar(frac, bw, 8.0f, Col::ToU32(Col::Green), Col::ToU32(Col::Red));
     ImGui::TextColored(Col::InkMid, "%.1f px/s", speed);
 
+    ImGui::Spacing();
+
+    // ── Remove Button ──────────────────────────────────────────────
+    ImGui::PushStyleColor(ImGuiCol_Button, Col::A(Col::Red, 0.3f));
+    ImGui::PushStyleColor(ImGuiCol_ButtonHovered, Col::A(Col::Red, 0.5f));
+    ImGui::PushStyleColor(ImGuiCol_ButtonActive, Col::A(Col::Red, 0.7f));
+    ImGui::PushStyleColor(ImGuiCol_Text, Col::Red);
+    ImGui::PushStyleColor(ImGuiCol_Border, Col::A(Col::Red, 0.6f));
+
+    if (ImGui::Button("Remove Body", {-1, 0}))
+    {
+        removedObjectPointer = body;
+        world->RemoveObject(body);
+    }
+
+    ImGui::PopStyleColor(5);
+
     ImGui::End();
     ImGui::PopStyleColor(2);
 }
@@ -883,7 +927,7 @@ void UIManager::RenderCannonInspector(shape::Cannon *cannon)
         settings->paused = false;
     }
     wasPositionEditedLastFrame = positionBeingEdited;
-    
+
     cannon->pos = posInMeters * SimulationConstants::PIXELS_PER_METER;
 
     ImGui::Spacing();
@@ -922,10 +966,20 @@ void UIManager::RenderCannonInspector(shape::Cannon *cannon)
     ImGui::PushStyleColor(ImGuiCol_SliderGrab, Col::Blue);
     ImGui::PushStyleColor(ImGuiCol_SliderGrabActive, Col::BlueHov);
     ImGui::SetNextItemWidth(-1);
-    ImGui::SliderFloat("##cangle",
-                       &cannon->barrelAngleDegrees,
-                       0.0f, 360.0f, "%.1f deg");
+    // DragFloat allows both dragging AND text input with 0.01f precision
+    ImGui::DragFloat("##cangle",
+                     &cannon->barrelAngleDegrees,
+                     0.01f,  // Speed when dragging
+                     0.0f,   // Min value
+                     360.0f, // Max value
+                     "%.2f deg");
     ImGui::PopStyleColor(2);
+
+    // Clamp to 0-360 range
+    if (cannon->barrelAngleDegrees < 0.0f)
+        cannon->barrelAngleDegrees += 360.0f;
+    if (cannon->barrelAngleDegrees >= 360.0f)
+        cannon->barrelAngleDegrees = std::fmod(cannon->barrelAngleDegrees, 360.0f);
 
     cannonFireSettings.angleDegrees = cannon->barrelAngleDegrees;
 
@@ -959,17 +1013,17 @@ void UIManager::RenderCannonInspector(shape::Cannon *cannon)
     ImGui::SetNextItemWidth(-1);
     ImGui::DragFloat("##cspeed",
                      &cannonFireSettings.speed,
-                     1.0f, 1.0f, 500.0f, "%.0f vel/s");
+                     0.01f, 1.0f, 100.0f, "%.02f m/s");
 
     cannonFireSettings.Recompute();
 
     ImGui::Spacing();
 
-    // Vx / Vy card
+    // Vx / Vy card with detailed calculation info
     {
         const float cw = ImGui::GetContentRegionAvail().x;
         const float lineH = ImGui::GetTextLineHeightWithSpacing();
-        const float cardH = lineH * 2.0f + 10.0f;
+        const float cardH = lineH * 4.5f + 12.0f;
         ImVec2 cMin = ImGui::GetCursorScreenPos();
         ImVec2 cMax = {cMin.x + cw, cMin.y + cardH};
         ImGui::GetWindowDrawList()->AddRectFilled(
@@ -981,17 +1035,26 @@ void UIManager::RenderCannonInspector(shape::Cannon *cannon)
     ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, {6.0f, 2.0f});
     ImGui::Dummy({4.0f, 4.0f});
 
-    ImGui::TextColored(Col::InkFaint, "  Vx");
-    ImGui::SameLine(42.0f);
-    ImGui::TextColored(Col::Green, "%+.1f", cannonFireSettings.vx);
-    ImGui::SameLine(0, 4);
-    ImGui::TextColored(Col::InkFaint, "m/s");
+    // Header
+    ImGui::TextColored(Col::InkMid, "  VELOCITY DECOMPOSITION");
 
-    ImGui::TextColored(Col::InkFaint, "  Vy");
+    // Vx calculation
+    ImGui::TextColored(Col::InkFaint, "  Vx ");
     ImGui::SameLine(42.0f);
-    ImGui::TextColored(Col::Amber, "%+.1f", cannonFireSettings.vy);
+    ImGui::TextColored(Col::Green, "%+.2f", cannonFireSettings.vx);
     ImGui::SameLine(0, 4);
     ImGui::TextColored(Col::InkFaint, "m/s");
+    ImGui::SameLine(0, 10);
+    ImGui::TextColored(Col::InkFaint, "(speed × cos(%.1f°))", cannonFireSettings.angleDegrees);
+
+    // Vy calculation
+    ImGui::TextColored(Col::InkFaint, "  Vy ");
+    ImGui::SameLine(42.0f);
+    ImGui::TextColored(Col::Amber, "%+.2f", cannonFireSettings.vy);
+    ImGui::SameLine(0, 4);
+    ImGui::TextColored(Col::InkFaint, "m/s");
+    ImGui::SameLine(0, 10);
+    ImGui::TextColored(Col::InkFaint, "(speed × sin(%.1f°))", cannonFireSettings.angleDegrees);
 
     ImGui::PopStyleVar();
 
@@ -1061,19 +1124,58 @@ void UIManager::RenderCannonInspector(shape::Cannon *cannon)
     ImGui::Spacing();
     ImGui::Spacing();
 
+    ImGui::Spacing();
+
+    // ── Auto-record toggle ────────────────────────────────────
+    SectionHead("ON FIRE");
+
+    {
+        const bool autoRec = settings->autoRecordOnFire;
+        const float t2 = static_cast<float>(ImGui::GetTime());
+
+        // When enabled, the border breathes green like the pulsing REC dot
+        float borderA = autoRec
+                            ? (0.45f + 0.35f * Col::Smooth(0.5f + 0.5f * sinf(t2 * 2.5f)))
+                            : 0.0f;
+
+        ImGui::PushStyleColor(ImGuiCol_Button,
+                              autoRec ? Col::GreenSoft : Col::WidgetBg);
+        ImGui::PushStyleColor(ImGuiCol_ButtonHovered,
+                              autoRec ? Col::A(Col::Green, 0.22f) : Col::HoverBg);
+        ImGui::PushStyleColor(ImGuiCol_ButtonActive,
+                              autoRec ? Col::A(Col::Green, 0.35f) : Col::ActiveBg);
+        ImGui::PushStyleColor(ImGuiCol_Text,
+                              autoRec ? Col::Green : Col::InkMid);
+        ImGui::PushStyleColor(ImGuiCol_Border,
+                              autoRec ? Col::A(Col::Green, borderA) : Col::Border);
+
+        const char *label = autoRec ? "  AUTO-RECORD  ON  " : "  AUTO-RECORD  OFF  ";
+        if (ImGui::Button(label, {-1, 0}))
+            settings->autoRecordOnFire = !settings->autoRecordOnFire;
+
+        ImGui::PopStyleColor(5);
+    }
+
+    // Small hint line so students know what it does
+    ImGui::TextColored(Col::InkFaint, "  Starts recording automatically when fired.");
+
+    ImGui::Spacing();
+    ImGui::Spacing();
+
     // ── FIRE button ───────────────────────────────────────────────
     {
-        const float rad = cannon->barrelAngleDegrees * 3.14159265f / 180.0f;
+       // const float rad = cannon->barrelAngleDegrees * 3.14159265f / 180.0f;
         // Both terms must be in metres:
         //   cannon->pos is internal pixels  → divide by PPM
         //   barrelLength is a pixel-space visual size → divide by PPM
-        const float barrelLengthM = cannon->barrelLength / SimulationConstants::PIXELS_PER_METER;
+        //const float barrelLengthM = cannon->barrelLength / SimulationConstants::PIXELS_PER_METER;
         cannonFireSettings.cannonPos = {
-            cannon->pos.x / SimulationConstants::PIXELS_PER_METER + barrelLengthM * std::cos(rad),
-            cannon->pos.y / SimulationConstants::PIXELS_PER_METER + barrelLengthM * std::sin(rad)};
+            cannon->pos.x / SimulationConstants::PIXELS_PER_METER,
+            cannon->pos.y / SimulationConstants::PIXELS_PER_METER};
     }
 
     const float t = static_cast<float>(ImGui::GetTime());
+
     const float beat = Col::Smooth(0.5f + 0.5f * sinf(t * 3.5f));
     ImGui::PushStyleColor(ImGuiCol_Button,
                           Col::A(Col::Amber, 0.15f + 0.07f * beat));
@@ -1085,6 +1187,22 @@ void UIManager::RenderCannonInspector(shape::Cannon *cannon)
 
     if (ImGui::Button("  FIRE  ", {-1, 0}))
         cannonFirePending = true;
+
+    ImGui::PopStyleColor(5);
+
+    ImGui::Spacing();
+    // ── Remove Button ──────────────────────────────────────────────
+    ImGui::PushStyleColor(ImGuiCol_Button, Col::A(Col::Red, 0.3f));
+    ImGui::PushStyleColor(ImGuiCol_ButtonHovered, Col::A(Col::Red, 0.5f));
+    ImGui::PushStyleColor(ImGuiCol_ButtonActive, Col::A(Col::Red, 0.7f));
+    ImGui::PushStyleColor(ImGuiCol_Text, Col::Red);
+    ImGui::PushStyleColor(ImGuiCol_Border, Col::A(Col::Red, 0.6f));
+
+    if (ImGui::Button("Remove Body", {-1, 0}))
+    {
+        removedObjectPointer = cannon;
+        world->RemoveObject(cannon);
+    }
 
     ImGui::PopStyleColor(5);
     ImGui::Spacing();
@@ -1217,6 +1335,177 @@ void UIManager::RenderInclineInspector(shape::Incline *incline)
         ImGui::TextColored(ImVec4(1.0f, 0.3f, 0.3f, 1.0f), "⚠ Kinetic must be ≤ static!");
     }
 
+    ImGui::Spacing();
+
+    // ── Remove Button ──────────────────────────────────────────────
+    ImGui::PushStyleColor(ImGuiCol_Button, Col::A(Col::Red, 0.3f));
+    ImGui::PushStyleColor(ImGuiCol_ButtonHovered, Col::A(Col::Red, 0.5f));
+    ImGui::PushStyleColor(ImGuiCol_ButtonActive, Col::A(Col::Red, 0.7f));
+    ImGui::PushStyleColor(ImGuiCol_Text, Col::Red);
+    ImGui::PushStyleColor(ImGuiCol_Border, Col::A(Col::Red, 0.6f));
+
+    if (ImGui::Button("Remove Body", {-1, 0}))
+    {
+        removedObjectPointer = incline;
+        world->RemoveObject(incline);
+    }
+
+    ImGui::PopStyleColor(5);
+
+    ImGui::Spacing();
+}
+
+void UIManager::RenderTriggerInspector(shape::Trigger *trigger)
+{
+    SectionHead("TRIGGER");
+
+    ImGui::TextColored(Col::InkFaint, "  Position");
+    ImGui::SameLine(92.0f);
+    ImGui::TextColored(Col::Ink, "(%.2f,  %.2f)", trigger->pos.x / SimulationConstants::PIXELS_PER_METER, trigger->pos.y / SimulationConstants::PIXELS_PER_METER);
+    math::Vec2 posInMeters = trigger->pos / SimulationConstants::PIXELS_PER_METER;
+    ImGui::DragFloat2("##pos", &posInMeters.x, 0.01f);
+
+    // Write back in pixels and pause while editing
+    trigger->pos = posInMeters * SimulationConstants::PIXELS_PER_METER;
+    positionBeingEdited = ImGui::IsItemActive();
+    if (positionBeingEdited && !wasPositionEditedLastFrame)
+    {
+        settings->paused = true;
+    }
+    else if (!positionBeingEdited && wasPositionEditedLastFrame)
+    {
+        settings->paused = false;
+    }
+    wasPositionEditedLastFrame = positionBeingEdited;
+    trigger->pos = posInMeters * SimulationConstants::PIXELS_PER_METER;
+
+    ImGui::Spacing();
+
+    // ── Dimensions Section ─────────────────────────────────────────
+    SectionHead("DIMENSIONS");
+
+    ImGui::TextColored(Col::InkMid, "Width");
+    ImGui::SameLine(92.0f);
+    float widthMeters = trigger->width / SimulationConstants::PIXELS_PER_METER;
+    ImGui::TextColored(Col::Ink, "%.2f m", widthMeters);
+
+    ImGui::PushStyleColor(ImGuiCol_SliderGrab, Col::Blue);
+    ImGui::PushStyleColor(ImGuiCol_SliderGrabActive, Col::BlueHov);
+    ImGui::SetNextItemWidth(-1);
+
+    if (ImGui::SliderFloat("##width", &widthMeters, 10.0f / SimulationConstants::PIXELS_PER_METER, 500.0f / SimulationConstants::PIXELS_PER_METER, "%.2f m"))
+    {
+        trigger->width = widthMeters * SimulationConstants::PIXELS_PER_METER;
+    }
+    ImGui::PopStyleColor(2);
+
+    ImGui::TextColored(Col::InkMid, "Height");
+    ImGui::SameLine(92.0f);
+    float heightMeters = trigger->height / SimulationConstants::PIXELS_PER_METER;
+    ImGui::TextColored(Col::Ink, "%.2f m", heightMeters);
+
+    ImGui::PushStyleColor(ImGuiCol_SliderGrab, Col::Blue);
+    ImGui::PushStyleColor(ImGuiCol_SliderGrabActive, Col::BlueHov);
+    ImGui::SetNextItemWidth(-1);
+
+    if (ImGui::SliderFloat("##height", &heightMeters, 10.0f / SimulationConstants::PIXELS_PER_METER, 500.0f / SimulationConstants::PIXELS_PER_METER, "%.2f m"))
+    {
+        trigger->height = heightMeters * SimulationConstants::PIXELS_PER_METER;
+    }
+    ImGui::PopStyleColor(2);
+
+    ImGui::Spacing();
+
+    // ───────────────── Color Section ──────────────────────────────────────────────
+    SectionHead("COLORS");
+
+    ImGui::TextColored(Col::InkMid, "Idle Color");
+    ImGui::SameLine(92.0f);
+    ImGui::ColorEdit4("##idleColor", trigger->originalColor.data(),
+                      ImGuiColorEditFlags_NoInputs | ImGuiColorEditFlags_NoLabel);
+
+    ImGui::TextColored(Col::InkMid, "Trigger Color");
+    ImGui::SameLine(92.0f);
+    ImGui::ColorEdit4("##triggerColor", trigger->collisionColor.data(),
+                      ImGuiColorEditFlags_NoInputs | ImGuiColorEditFlags_NoLabel);
+
+    ImGui::Spacing();
+
+    // ── Action Section ────────────────────────────────────────────
+    SectionHead("TRIGGER ACTION");
+
+    ImGui::TextColored(Col::InkMid, "On Trigger");
+    ImGui::SameLine(92.0f);
+    ImGui::TextColored(Col::Blue, "%s",
+                       trigger->action == shape::TriggerAction::DoNothing ? "Do Nothing" : "Pause Simulation");
+
+    // Action buttons
+    const float halfW = (ImGui::GetContentRegionAvail().x -
+                         ImGui::GetStyle().ItemSpacing.x) *
+                        0.5f;
+
+    // Do Nothing button
+    const bool isDoNothing = (trigger->action == shape::TriggerAction::DoNothing);
+    ImGui::PushStyleColor(ImGuiCol_Button,
+                          isDoNothing ? Col::BlueSoft : Col::WidgetBg);
+    ImGui::PushStyleColor(ImGuiCol_ButtonHovered, Col::HoverBg);
+    ImGui::PushStyleColor(ImGuiCol_ButtonActive, Col::ActiveBg);
+    ImGui::PushStyleColor(ImGuiCol_Text,
+                          isDoNothing ? Col::Blue : Col::InkMid);
+    ImGui::PushStyleColor(ImGuiCol_Border,
+                          isDoNothing ? Col::A(Col::Blue, 0.65f) : Col::Border);
+    if (ImGui::Button("Do Nothing##action", {halfW, 0}))
+        trigger->action = shape::TriggerAction::DoNothing;
+    ImGui::PopStyleColor(5);
+
+    ImGui::SameLine();
+
+    // Pause Simulation button
+    const bool isPause = (trigger->action == shape::TriggerAction::PauseSimulation);
+    ImGui::PushStyleColor(ImGuiCol_Button,
+                          isPause ? Col::BlueSoft : Col::WidgetBg);
+    ImGui::PushStyleColor(ImGuiCol_ButtonHovered, Col::HoverBg);
+    ImGui::PushStyleColor(ImGuiCol_ButtonActive, Col::ActiveBg);
+    ImGui::PushStyleColor(ImGuiCol_Text,
+                          isPause ? Col::Blue : Col::InkMid);
+    ImGui::PushStyleColor(ImGuiCol_Border,
+                          isPause ? Col::A(Col::Blue, 0.65f) : Col::Border);
+    if (ImGui::Button("Pause Sim##action", {halfW, 0}))
+        trigger->action = shape::TriggerAction::PauseSimulation;
+    ImGui::PopStyleColor(5);
+
+    ImGui::Spacing();
+
+    // ── Status Section ────────────────────────────────────────────
+    SectionHead("STATUS");
+
+    ImGui::TextColored(Col::InkMid, "Collision State");
+    ImGui::SameLine(92.0f);
+    if (trigger->isColliding)
+    {
+        ImGui::TextColored(Col::Red, "TRIGGERED!");
+    }
+    else
+    {
+        ImGui::TextColored(Col::InkFaint, "Idle");
+    }
+
+    ImGui::Spacing();
+
+    // ── Remove Button ──────────────────────────────────────────────
+    ImGui::PushStyleColor(ImGuiCol_Button, Col::A(Col::Red, 0.3f));
+    ImGui::PushStyleColor(ImGuiCol_ButtonHovered, Col::A(Col::Red, 0.5f));
+    ImGui::PushStyleColor(ImGuiCol_ButtonActive, Col::A(Col::Red, 0.7f));
+    ImGui::PushStyleColor(ImGuiCol_Text, Col::Red);
+    ImGui::PushStyleColor(ImGuiCol_Border, Col::A(Col::Red, 0.6f));
+
+    if (ImGui::Button("Remove Body", {-1, 0}))
+    {
+        removedObjectPointer = trigger;
+        world->RemoveObject(trigger);
+    }
+
+    ImGui::PopStyleColor(5);
     ImGui::Spacing();
 }
 
@@ -1352,45 +1641,107 @@ void UIManager::RenderSpawnSizeControls()
 
     if (spawnSettings.shapeType == shape::ShapeType::Box)
     {
+        // Initialize boxWidth/boxHeight only once (not every frame)
+        static bool boxInitialized = false;
+        if (!boxInitialized)
+        {
+            spawnSettings.boxWidth = 1.0f;
+            spawnSettings.boxHeight = 1.0f;
+            boxInitialized = true;
+        }
+
         ImGui::TextColored(Col::InkMid, "Width");
         ImGui::SetNextItemWidth(-1);
-        ImGui::DragFloat("##bw", &spawnSettings.boxWidth, 1.0f, 1.0f, 500.0f);
+        ImGui::DragFloat("##bw", &spawnSettings.boxWidth, 0.1f, 1.0f, 500.0f);
         ImGui::TextColored(Col::InkMid, "Height");
         ImGui::SetNextItemWidth(-1);
-        ImGui::DragFloat("##bh", &spawnSettings.boxHeight, 1.0f, 1.0f, 500.0f);
+        ImGui::DragFloat("##bh", &spawnSettings.boxHeight, 0.1f, 1.0f, 500.0f);
     }
     else if (spawnSettings.shapeType == shape::ShapeType::Ball)
     {
         ImGui::TextColored(Col::InkMid, "Radius");
         ImGui::SetNextItemWidth(-1);
-        ImGui::DragFloat("##rad", &spawnSettings.radius, 1.0f, 1.0f, 250.0f);
+        ImGui::DragFloat("##rad", &spawnSettings.radius, 0.1f, 1.0f, 250.0f);
     }
     else if (spawnSettings.shapeType == shape::ShapeType::Incline)
     {
         ImGui::TextColored(Col::InkMid, "Base");
         ImGui::SetNextItemWidth(-1);
-        ImGui::DragFloat("##base", &spawnSettings.base, 1.0f, 1.0f, 1000.0f);
+        ImGui::DragFloat("##base", &spawnSettings.base, 0.1f, 1.0f, 1000.0f);
         ImGui::TextColored(Col::InkMid, "Angle (deg)");
         ImGui::SetNextItemWidth(-1);
-        ImGui::DragFloat("##ang", &spawnSettings.angle, 1.0f, 0.0f, 89.0f);
+        ImGui::DragFloat("##ang", &spawnSettings.angle, 0.1f, 0.0f, 89.0f);
         ImGui::Checkbox("Flip", &spawnSettings.flip);
     }
     else if (spawnSettings.shapeType == shape::ShapeType::Cannon)
     {
         ImGui::TextColored(Col::InkMid, "Angle (deg)");
         ImGui::SetNextItemWidth(-1);
-        ImGui::DragFloat("##cang", &spawnSettings.angle, 1.0f, 0.0f, 89.0f);
+        ImGui::DragFloat("##cang", &spawnSettings.angle, 0.1f, 0.0f, 89.0f);
     }
     else if (spawnSettings.shapeType == shape::ShapeType::Trigger)
     {
+        // Initialize boxWidth/boxHeight only once (not every frame)
+        static bool triggerInitialized = false;
+        if (!triggerInitialized)
+        {
+            spawnSettings.boxWidth = 2.0f;
+            spawnSettings.boxHeight = 2.0f;
+            triggerInitialized = true;
+        }
+
         ImGui::TextColored(Col::InkMid, "Width");
         ImGui::SetNextItemWidth(-1);
-        ImGui::DragFloat("##bw", &spawnSettings.boxWidth, 1.0f, 1.0f, 500.0f);
+        ImGui::DragFloat("##bw", &spawnSettings.boxWidth, 0.1f, 1.0f, 500.0f);
         ImGui::TextColored(Col::InkMid, "Height");
         ImGui::SetNextItemWidth(-1);
-        ImGui::DragFloat("##bh", &spawnSettings.boxHeight, 1.0f, 1.0f, 500.0f);
+        ImGui::DragFloat("##bh", &spawnSettings.boxHeight, 0.1f, 1.0f, 500.0f);
+
+        // ── Action Section ────────────────────────────────────────────
+        SectionHead("TRIGGER ACTION");
+
+        ImGui::TextColored(Col::InkMid, "On Trigger");
+        ImGui::SameLine(92.0f);
+        ImGui::TextColored(Col::Blue, "%s",
+                           spawnSettings.triggerAction == shape::TriggerAction::DoNothing ? "Do Nothing" : "Pause Simulation");
+
+        // Action buttons
+        const float halfW = (ImGui::GetContentRegionAvail().x -
+                             ImGui::GetStyle().ItemSpacing.x) *
+                            0.5f;
+
+        // Do Nothing button
+        const bool isDoNothing = (spawnSettings.triggerAction == shape::TriggerAction::DoNothing);
+        ImGui::PushStyleColor(ImGuiCol_Button,
+                              isDoNothing ? Col::BlueSoft : Col::WidgetBg);
+        ImGui::PushStyleColor(ImGuiCol_ButtonHovered, Col::HoverBg);
+        ImGui::PushStyleColor(ImGuiCol_ButtonActive, Col::ActiveBg);
+        ImGui::PushStyleColor(ImGuiCol_Text,
+                              isDoNothing ? Col::Blue : Col::InkMid);
+        ImGui::PushStyleColor(ImGuiCol_Border,
+                              isDoNothing ? Col::A(Col::Blue, 0.65f) : Col::Border);
+        if (ImGui::Button("Do Nothing##action", {halfW, 0}))
+            spawnSettings.triggerAction = shape::TriggerAction::DoNothing;
+        ImGui::PopStyleColor(5);
+
+        ImGui::SameLine();
+
+        // Pause Simulation button
+        const bool isPause = (spawnSettings.triggerAction == shape::TriggerAction::PauseSimulation);
+        ImGui::PushStyleColor(ImGuiCol_Button,
+                              isPause ? Col::BlueSoft : Col::WidgetBg);
+        ImGui::PushStyleColor(ImGuiCol_ButtonHovered, Col::HoverBg);
+        ImGui::PushStyleColor(ImGuiCol_ButtonActive, Col::ActiveBg);
+        ImGui::PushStyleColor(ImGuiCol_Text,
+                              isPause ? Col::Blue : Col::InkMid);
+        ImGui::PushStyleColor(ImGuiCol_Border,
+                              isPause ? Col::A(Col::Blue, 0.65f) : Col::Border);
+        if (ImGui::Button("Pause Sim##action", {halfW, 0}))
+            spawnSettings.triggerAction = shape::TriggerAction::PauseSimulation;
+        ImGui::PopStyleColor(5);
+
+        ImGui::Spacing();
     }
-    
 }
 
 void UIManager::RenderSpawnActions()

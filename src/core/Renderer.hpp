@@ -61,10 +61,10 @@ public:
 	void DrawBallLine(const shape::Ball &ball);
 	void DrawFBD(physics::Rigidbody &body);
 	void DrawMeasuringRectangle(math::Vec2 &start, math::Vec2 &size);
+	void DrawTrailPoint(const math::Vec2 &position, float radius, const std::array<float, 4> &color);
+	void DrawTrailPointsBatched(const std::vector<std::tuple<math::Vec2, float, std::array<float, 4>>> &trailPoints);
 	void DrawTestTriangle();
 	void DrawTest2Triangle();
-
-	//void RenderText(TextRenderer textRenderer, std::string& text, float x, float y, float scale, const std::array<float, 3>& color);
 
 	GLFWwindow *GetWindow() const { return window; }
 	Device GetDevice() const { return device; }

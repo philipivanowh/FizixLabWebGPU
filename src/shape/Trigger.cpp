@@ -18,15 +18,15 @@ namespace shape
                      const std::array<float, 4> &colorValue,
                      float massValue,
                      float restitution,
-                     physics::RigidbodyType RigidbodyTypeValue)
-        : Shape(pos, vel, acc, massValue, restitution, RigidbodyTypeValue), width(widthValue * SimulationConstants::PIXELS_PER_METER), height(heightValue * SimulationConstants::PIXELS_PER_METER), color(colorValue)
+                     physics::RigidbodyType RigidbodyTypeValue,
+                     TriggerAction actionValue)
+        : Shape(pos, vel, acc, massValue, restitution, RigidbodyTypeValue), width(widthValue * SimulationConstants::PIXELS_PER_METER), height(heightValue * SimulationConstants::PIXELS_PER_METER), color(colorValue), originalColor(colorValue), action(actionValue)
     {
         verticesSize = 12; // 4 for outer box + 4 for inner box (mini-scaled) = 8 total vertices, but since we are using two triangles per face, we need to multiply by 3/2
         UpdateMassProperties();
 
         float halfWidth = width / 2.0f;
         float halfHeight = height / 2.0f;
-        float miniScaled = 0.5f; // Slightly smaller to ensure trigger is fully contained within its AABB
         vertices = {
             math::Vec2(-halfWidth, -halfHeight),
             math::Vec2(halfWidth, -halfHeight),

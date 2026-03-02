@@ -1,0 +1,176 @@
+#pragma once
+
+#include <cmath>
+#include <stdexcept>
+
+namespace math
+{
+	// Template-based Vec2 supporting both float and double precision
+	template<typename T>
+	class Vec2T
+	{
+	public:
+		T x = T(0);
+		T y = T(0);
+
+		constexpr Vec2T() = default;
+		constexpr Vec2T(T xValue, T yValue) : x(xValue), y(yValue) {}
+
+		// Convert from another type
+		template<typename U>
+		explicit constexpr Vec2T(const Vec2T<U> &other) : x(T(other.x)), y(T(other.y)) {}
+
+		constexpr Vec2T Clone() const
+		{
+			return Vec2T(x, y);
+		}
+
+		Vec2T Add(const Vec2T &other) const
+		{
+			return Vec2T(x + other.x, y + other.y);
+		}
+
+		Vec2T operator+(const Vec2T &other) const
+		{
+			return Vec2T(x + other.x, y + other.y);
+		}
+
+		Vec2T &operator+=(const Vec2T &other)
+		{
+			x += other.x;
+			y += other.y;
+			return *this;
+		}
+
+		Vec2T operator-(const Vec2T &other) const
+		{
+			return Vec2T(x - other.x, y - other.y);
+		}
+
+		Vec2T &operator-=(const Vec2T &other)
+		{
+			x -= other.x;
+			y -= other.y;
+			return *this;
+		}
+
+		Vec2T operator*(T factor) const
+		{
+			return Vec2T(x * factor, y * factor);
+		}
+
+		Vec2T &operator*=(const Vec2T &other)
+		{
+			x *= other.x;
+			y *= other.y;
+			return *this;
+		}
+
+		Vec2T operator/(T factor) const
+		{
+			if (factor == T(0))
+			{
+				throw std::runtime_error("Cannot divide by zero");
+			}
+			return Vec2T(x / factor, y / factor);
+		}
+
+		Vec2T &operator/=(const Vec2T &other)
+		{
+			x /= other.x;
+			y /= other.y;
+			return *this;
+		}
+
+		Vec2T Subtract(const Vec2T &other) const
+		{
+			return Vec2T(x - other.x, y - other.y);
+		}
+
+		constexpr Vec2T Multiply(T factor) const
+		{
+			return Vec2T(x * factor, y * factor);
+		}
+
+		Vec2T Divide(T factor) const
+		{
+			if (factor == T(0))
+			{
+				throw std::runtime_error("Cannot divide by zero");
+			}
+			return Vec2T(x / factor, y / factor);
+		}
+
+		constexpr Vec2T Negate() const
+		{
+			return Vec2T(-x, -y);
+		}
+
+		T Length() const
+		{
+			return std::sqrt(x * x + y * y);
+		}
+
+		T GetRadian() const
+		{
+			return std::atan2(y, x);
+		}
+
+		constexpr T LengthSquared() const
+		{
+			return x * x + y * y;
+		}
+
+		Vec2T Normalize() const
+		{
+			T len = Length();
+			if (len == T(0))
+			{
+				return Vec2T(T(0), T(0));
+			}
+			return Vec2T(x / len, y / len);
+		}
+
+		Vec2T ClampLength(T max)
+		{
+			if (Length() > max)
+				return Normalize() * max;
+			else
+				return Vec2T(x, y);
+		}
+
+		constexpr bool Equals(const Vec2T &other) const
+		{
+			return x == other.x && y == other.y;
+		}
+
+		static constexpr T Dot(const Vec2T &a, const Vec2T &b)
+		{
+			return a.x * b.x + a.y * b.y;
+		}
+
+		static constexpr T Cross(const Vec2T &a, const Vec2T &b)
+		{
+			return a.x * b.y - a.y * b.x;
+		}
+
+		static T Distance(const Vec2T &a, const Vec2T &b)
+		{
+			T dx = a.x - b.x;
+			T dy = a.y - b.y;
+			return std::sqrt(dx * dx + dy * dy);
+		}
+
+		static constexpr T DistanceSquared(const Vec2T &a, const Vec2T &b)
+		{
+			T dx = a.x - b.x;
+			T dy = a.y - b.y;
+			return dx * dx + dy * dy;
+		}
+	};
+
+	// Type aliases for common precisions
+	using Vec2 = Vec2T<float>;
+	using Vec2d = Vec2T<double>;
+
+} // namespace math

@@ -1,6 +1,7 @@
 #pragma once
 #include "physics/Rigidbody.hpp"
 #include <vector>
+#include <array>
 
 namespace shape
 {
@@ -27,6 +28,7 @@ namespace shape
         virtual collision::AABB GetAABB() const;
         virtual collision::AABB GetLocalAABB() const;
         virtual std::vector<float> GetVertexLocalPos() const;
+        virtual std::array<float, 4> GetColor() const { return {1.0f, 1.0f, 1.0f, 1.0f}; }  // Default white
 
         mutable std::vector<math::Vec2> vertices;
         mutable collision::AABB aabb;

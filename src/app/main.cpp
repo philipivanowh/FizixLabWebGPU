@@ -30,11 +30,11 @@ int main()
 
         const double nowMs = emscripten_get_now();
         const float deltaMs =
-            static_cast<float>(nowMs - state->lastTimeMs) * 0.5f;
+            static_cast<float>(nowMs - state->lastTimeMs);
 
         state->lastTimeMs = nowMs;
 
-        Engine::RunFrame(deltaMs, 10);
+        Engine::RunFrame(deltaMs, 1000);
 
         // ----------------------------------------------------
         // 🔴 CALL TOOLTIP HERE *ONLY IF YOU HAVE dx, dy*
@@ -55,14 +55,8 @@ int main()
         const std::chrono::duration<float, std::milli> delta = now - lastTime;
         lastTime = now;
 
-        Engine::RunFrame(delta.count() * 0.5f, 10);
-
-        // ----------------------------------------------------
-        // 🔴 CALL TOOLTIP HERE *ONLY IF YOU HAVE dx, dy*
-        // Example:
-        // if (dragging)
-        //     DrawDxDyTooltipAtMouseCorner(dx, dy);
-        // ----------------------------------------------------
+        Engine::RunFrame(delta.count(), 1000);
+        
     }
 
 #endif

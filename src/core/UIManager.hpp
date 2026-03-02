@@ -13,6 +13,7 @@
 struct SpawnSettings
 {
     shape::ShapeType shapeType = shape::ShapeType::Box;
+    shape::TriggerAction triggerAction = shape::TriggerAction::DoNothing; // Only relevant if shapeType == Trigger
     math::Vec2 position{0.0f, 5.0f};
     math::Vec2 velocity{0.0f, 0.0f};
     float boxWidth = 1.0f;
@@ -49,7 +50,7 @@ struct CannonFireSettings
     std::array<float, 4> color = {255.f, 255.f, 255.f, 1.f}; // RGBA 0–255
 
     // Ball-specific
-    float radius   = 0.5f;
+    float radius   = 1.0f;
 
     // Box-specific
     float boxWidth  = 1.0f;
@@ -66,7 +67,7 @@ struct CannonFireSettings
 class UIManager
 {
 public:
-    void InitializeImGui(Renderer &renderer, Settings* settings);
+    void InitializeImGui(Renderer &renderer, Settings* settings, World* world);
     void TerminateImGui();
     void BeginImGuiFrame();
     void EndImGuiFrame(Renderer &renderer);
@@ -93,6 +94,15 @@ public:
     // cannon inspector.  Call once per frame; resets the pending flag.
     bool ConsumeCannonFireRequest(CannonFireSettings &out);
 
+    // Returns the pointer to a removed object if one was just removed, nullptr otherwise
+    // Call once per frame; resets the pointer.
+    physics::Rigidbody* ConsumeRemovedObject()
+    {
+        physics::Rigidbody* temp = removedObjectPointer;
+        removedObjectPointer = nullptr;
+        return temp;
+    }
+
 private:
     // ── Theme ────────────────────────────────────────────────────
     void ApplyNeonTheme();
@@ -108,6 +118,9 @@ private:
 
     // -- Incline inspector (shown when selectedBody is an Incline) ────
     void RenderInclineInspector(shape::Incline *incline);
+
+    // -- Trigger inspector (shown when selectedBody is a Trigger) ----
+    void RenderTriggerInspector(shape::Trigger *trigger);
 
     // ── Spawner sub-sections ─────────────────────────────────────
     void RenderSpawnBasics();
@@ -127,6 +140,7 @@ private:
 
     SpawnSettings spawnSettings;
     bool spawnRequestPending = false;
+    World* world = nullptr;
 
     
     CannonFireSettings cannonFireSettings;
@@ -137,6 +151,9 @@ private:
     // Track position editing state for pause/unpause
     bool positionBeingEdited = false;
     bool wasPositionEditedLastFrame = false;
+
+    // Track if an object was removed from the inspector
+    physics::Rigidbody* removedObjectPointer = nullptr;
 
     // Window dimensions — set once in RenderMainControls
     float screenW = 1800;

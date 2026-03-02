@@ -37,6 +37,8 @@ public:
 	static void CheckCannon();
 	static void ClearBodies();
 
+	static void ResetSimTime() { simulationTimeMs = 0.0f; }
+
 	static void Scroll_Feedback(GLFWwindow *window, double xoffset, double yoffset);
 
 	static Recorder &GetRecorder() { return recorder; }
@@ -81,4 +83,6 @@ private:
 	static int selectedBodyHoldFrames;  // Frames held on currently selected body
 	static int dragThresholdFrames;     // Frames to hold before enabling drag (tunable)
 	static bool wasSelectedBodyJustClicked; // True if selected in previous frame
+
+	static float simulationTimeMs;
 };
