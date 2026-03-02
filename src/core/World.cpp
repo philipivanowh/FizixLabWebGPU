@@ -2,6 +2,7 @@
 
 #include "core/Renderer.hpp"
 #include "shape/Trigger.hpp"
+#include "shape/Thruster.hpp"
 #include "collision/Collisions.hpp"
 #include "common/settings.hpp"
 
@@ -47,16 +48,6 @@ int World::ClampIterations(int value) const
 	return value;
 }
 
-// ─── FIX 1: Adaptive Iteration Boost ─────────────────────────────────────────
-// Computes the minimum number of sub-steps required so that no dynamic body
-// travels more than a fraction of its own size in a single step.
-// This prevents fast projectiles from tunnelling through surfaces entirely,
-// which is the root cause of landing position overshoot.
-//
-// The CFL (Courant–Friedrichs–Lewy) safety factor controls how aggressive the
-// boost is:  1.0 = body moves exactly one body-width per step (borderline),
-//            0.5 = body moves at most half a body-width per step (recommended).
-// ─────────────────────────────────────────────────────────────────────────────
 int World::ComputeAdaptiveIterations(float deltaMs, int requestedIterations) const
 {
 	constexpr float CFL_SAFETY_FACTOR = 0.5f; // body must cross at most 50% of its size per step
@@ -75,7 +66,7 @@ int World::ComputeAdaptiveIterations(float deltaMs, int requestedIterations) con
 
 		// Estimate body size from its axis-aligned bounding box diagonal half-length
 		const collision::AABB aabb = obj->GetAABB();
-		const float width  = aabb.max.x - aabb.min.x;
+		const float width = aabb.max.x - aabb.min.x;
 		const float height = aabb.max.y - aabb.min.y;
 		const float bodySize = std::sqrt(width * width + height * height) * 0.5f;
 
@@ -95,24 +86,9 @@ int World::ComputeAdaptiveIterations(float deltaMs, int requestedIterations) con
 	return ClampIterations(minNeeded);
 }
 
-// ─── FIX 2: Swept Contact Correction ─────────────────────────────────────────
-// After the collision solver resolves penetration it places the body ON the
-// surface, but because it detected the collision a full timestep late the
-// reported landing position is wherever the body ended up AFTER overshooting.
-//
-// This function walks back along the swept path (prevPos → integratedPos) using
-// a binary search to find the earliest position that does NOT overlap any static
-// body — i.e., the exact moment of first contact. The body is then placed there.
-//
-// Only fires when:
-//   • The body is Dynamic.
-//   • The body actually moved a non-trivial distance this step.
-//   • The solver actually applied a positional correction (i.e., a collision
-//     was resolved), detected by comparing the pre- and post-solver positions.
-// ─────────────────────────────────────────────────────────────────────────────
 void World::SweptContactCorrection(physics::Rigidbody &body,
-								   const math::Vec2  &prevPos,
-								   const math::Vec2  &integratedPos)
+								   const math::Vec2 &prevPos,
+								   const math::Vec2 &integratedPos)
 {
 	if (body.bodyType != physics::RigidbodyType::Dynamic)
 		return;
@@ -139,10 +115,10 @@ void World::SweptContactCorrection(physics::Rigidbody &body,
 	//
 	// We want the largest t where the body is still NOT overlapping any static
 	// body.  That gives us the surface-contact position.
-	constexpr int   BINARY_STEPS      = 10;  // 10 steps → position error < 0.1% of dispLen
+	constexpr int BINARY_STEPS = 10;		  // 10 steps → position error < 0.1% of dispLen
 	constexpr float CONVERGENCE_DELTA = 0.5f; // stop early if bracket width < 0.5 px
 
-	float tLow  = 0.0f;
+	float tLow = 0.0f;
 	float tHigh = 1.0f;
 
 	for (int step = 0; step < BINARY_STEPS; ++step)
@@ -156,7 +132,7 @@ void World::SweptContactCorrection(physics::Rigidbody &body,
 		body.pos = {
 			prevPos.x + displacement.x * tMid,
 			prevPos.y + displacement.y * tMid};
-		body.aabbUpdateRequired     = true;
+		body.aabbUpdateRequired = true;
 		body.transformUpdateRequired = true;
 
 		// Check against every STATIC body only (static surfaces are what cause
@@ -182,14 +158,14 @@ void World::SweptContactCorrection(physics::Rigidbody &body,
 		if (overlapsStatic)
 			tHigh = tMid; // Contact point is earlier — search lower half
 		else
-			tLow  = tMid; // Still clear — search upper half
+			tLow = tMid; // Still clear — search upper half
 	}
 
 	// tLow is the last confirmed non-overlapping position → exact contact surface
 	body.pos = {
 		prevPos.x + displacement.x * tLow,
 		prevPos.y + displacement.y * tLow};
-	body.aabbUpdateRequired     = true;
+	body.aabbUpdateRequired = true;
 	body.transformUpdateRequired = true;
 
 	// Zero out velocity component into the surface so the body doesn't jitter.
@@ -197,7 +173,7 @@ void World::SweptContactCorrection(physics::Rigidbody &body,
 	if (correctionMag > 1e-4f)
 	{
 		const math::Vec2 surfaceNormal = solverCorrection * (1.0f / correctionMag);
-		const float      velIntoSurface = math::Vec2::Dot(body.linearVel, surfaceNormal);
+		const float velIntoSurface = math::Vec2::Dot(body.linearVel, surfaceNormal);
 
 		// Only cancel the into-surface component; keep tangential velocity intact
 		if (velIntoSurface < 0.0f)
@@ -286,11 +262,7 @@ math::Vec2 World::SnapToNearestDynamicObject(const math::Vec2 &position, float s
 
 void World::Update(float deltaMs, int iterations, physics::Rigidbody *&selectedBody, physics::Rigidbody *&draggedBody)
 {
-	// ── FIX 1: Adaptive iteration boost ───────────────────────────────────────
-	// Replace the static iteration count with a velocity-aware minimum so that
-	// fast projectiles are automatically sub-stepped enough to avoid tunnelling.
-	// ComputeAdaptiveIterations() raises the count only when needed; it never
-	// lowers it below whatever the user has configured.
+
 	iterations = ComputeAdaptiveIterations(deltaMs, iterations);
 
 	for (const auto &object : objects)
@@ -298,11 +270,6 @@ void World::Update(float deltaMs, int iterations, physics::Rigidbody *&selectedB
 		object->BeginFrameForces();
 	}
 
-	// ── FIX 2: Per-sub-step position recording for swept CCD ──────────────────
-	// prevPositions[i] holds the world position of objects[i] BEFORE it was
-	// integrated in the current sub-step.  After the collision solver runs we
-	// compare against this to detect which bodies were actually moved by the
-	// solver (i.e., had a collision resolved) and run the sweep on them.
 	std::vector<math::Vec2> prevPositions(objects.size());
 
 	for (int currIteration = 0; currIteration < iterations; currIteration++)
@@ -318,11 +285,6 @@ void World::Update(float deltaMs, int iterations, physics::Rigidbody *&selectedB
 			object->Update(deltaMs, iterations);
 		}
 
-		// ── FIX 2 (continued): track integrated positions, then resolve ────────
-		// integratedPositions captures where each body ended up after integration
-		// but BEFORE the solver corrects it.  The difference between a body's
-		// final position and its integratedPosition tells us how far the solver
-		// pushed it — which we use to confirm a collision actually occurred.
 		std::vector<math::Vec2> integratedPositions(objects.size());
 		for (size_t i = 0; i < objects.size(); ++i)
 		{
@@ -336,15 +298,11 @@ void World::Update(float deltaMs, int iterations, physics::Rigidbody *&selectedB
 			physics::Rigidbody &bodyB = *objects[pair.second];
 			if (dynamic_cast<shape::Trigger *>(&bodyA) || dynamic_cast<shape::Trigger *>(&bodyB))
 				continue; // Skip trigger pairs
+			if (dynamic_cast<shape::Thruster *>(&bodyA) || dynamic_cast<shape::Thruster *>(&bodyB))
+				continue;
 
 			collisionSolver.ResolveIfColliding(bodyA, bodyB);
 
-			// ── FIX 2: Swept contact correction ───────────────────────────────
-			// After the solver runs, each body that had a collision resolved is
-			// now sitting ON the surface, but it got there by overshooting and
-			// being pushed back — so the landing position is approximate.
-			// SweptContactCorrection binary-searches for where the body FIRST
-			// touched the surface and places it there precisely.
 			SweptContactCorrection(bodyA,
 								   prevPositions[pair.first],
 								   integratedPositions[pair.first]);
@@ -373,7 +331,7 @@ void World::Draw(Renderer &renderer) const
 {
 	// Draw trails first so they appear behind objects
 	DrawTrails(renderer);
-	
+
 	for (const auto &object : objects)
 	{
 		renderer.DrawShape(*object, object->isHighlighted);
@@ -442,7 +400,7 @@ void World::UpdateTriggerCollisions()
 		if (auto trigger = dynamic_cast<shape::Trigger *>(objects[i].get()))
 		{
 			bool currentlyColliding = false;
-			
+
 			for (size_t j = 0; j < objects.size(); ++j)
 			{
 				if (i != j) // Don't test trigger against itself
@@ -470,7 +428,7 @@ void World::UpdateTriggerCollisions()
 					}
 				}
 			}
-			
+
 			// Update the state for next frame
 			trigger->wasCollidingLastFrame = currentlyColliding;
 		}
@@ -501,8 +459,8 @@ void World::StartTrail(physics::Rigidbody *projectile, float lifetime)
 void World::UpdateTrails(float deltaMs)
 {
 	float deltaSeconds = deltaMs / 1000.0f;
-	const size_t MAX_POINTS_PER_TRAIL = 300;  // Reduced from 500 for better performance
-	const size_t MAX_TOTAL_TRAIL_POINTS = 5000;  // Global cap on all trail points
+	const size_t MAX_POINTS_PER_TRAIL = 300;	// Reduced from 500 for better performance
+	const size_t MAX_TOTAL_TRAIL_POINTS = 5000; // Global cap on all trail points
 
 	// Calculate total points to enforce global limit
 	size_t totalPoints = 0;
@@ -515,7 +473,7 @@ void World::UpdateTrails(float deltaMs)
 	for (auto it = trails.begin(); it != trails.end();)
 	{
 		ProjectileTrail &trail = *it;
-		
+
 		// Validate that projectile pointer still points to a valid object
 		bool projectileStillValid = false;
 		if (trail.projectile && trail.isActive)
@@ -538,15 +496,10 @@ void World::UpdateTrails(float deltaMs)
 
 		trail.lastPointTime += deltaSeconds;
 
-		// Add new point only if:
-		// 1. Spacing time has elapsed
-		// 2. Projectile is still valid
-		// 3. Trail hasn't exceeded max points
-		// 4. Global point count hasn't exceeded max
-		if (trail.lastPointTime >= trail.pointSpacing && 
-		    projectileStillValid && 
-		    trail.points.size() < MAX_POINTS_PER_TRAIL &&
-		    totalPoints < MAX_TOTAL_TRAIL_POINTS)
+		if (trail.lastPointTime >= trail.pointSpacing &&
+			projectileStillValid &&
+			trail.points.size() < MAX_POINTS_PER_TRAIL &&
+			totalPoints < MAX_TOTAL_TRAIL_POINTS)
 		{
 			TrailPoint point;
 			point.position = trail.projectile->pos;
@@ -569,13 +522,13 @@ void World::UpdateTrails(float deltaMs)
 		// Remove expired trail points
 		trail.points.erase(
 			std::remove_if(trail.points.begin(), trail.points.end(),
-				[](const TrailPoint &p) { return p.age >= p.lifetime; }),
-			trail.points.end()
-		);
+						   [](const TrailPoint &p)
+						   { return p.age >= p.lifetime; }),
+			trail.points.end());
 
 		// Remove trail entirely if:
-		// 1. Projectile is gone AND
-		// 2. All trail points have faded
+		//   • It is inactive AND
+		//   • It has no points left
 		if (!trail.isActive && trail.points.empty())
 		{
 			it = trails.erase(it);
@@ -596,7 +549,7 @@ void World::DrawTrails(Renderer &renderer) const
 		{
 			// Calculate LOD multiplier based on distance from camera
 			float lodMultiplier = CalculateLODMultiplier(point.position);
-			
+
 			// Skip points if LOD culls them (random sampling at distance)
 			if (lodMultiplier < 1.0f && (rand() % 100) > (lodMultiplier * 100))
 			{
@@ -605,10 +558,10 @@ void World::DrawTrails(Renderer &renderer) const
 
 			// Calculate fade factor (0 at age=0, 1 at age=lifetime)
 			float fadeRatio = point.age / point.lifetime;
-			
+
 			// Make color fade to transparent
 			std::array<float, 4> fadeColor = point.color;
-			fadeColor[3] *= (1.0f - fadeRatio);  // Fade alpha
+			fadeColor[3] *= (1.0f - fadeRatio); // Fade alpha
 
 			// Draw individual point with correct color and fade
 			renderer.DrawTrailPoint(point.position, point.radius, fadeColor);
@@ -621,34 +574,36 @@ float World::CalculateLODMultiplier(const math::Vec2 &trailPosition) const
 	// Calculate distance from camera to trail point
 	math::Vec2 delta = trailPosition - cameraPos;
 	float distanceSq = delta.x * delta.x + delta.y * delta.y;
-	
+
 	// LOD tiers based on distance and zoom level
 	// Base distance scales with zoom to keep visibility consistent at all zoom levels
+
 	// At 0.1x zoom (zoomed out): full detail up to 2000 units
 	// At 1.0x zoom (normal):     full detail up to 4000 units
 	// At 4.0x zoom (zoomed in):  full detail up to 16000 units
+
 	// This ensures trails remain visible when zoomed out but still get culled when very far
 	float baseLodDistance = 4000.0f * cameraZoom;
 	float lodDistanceSq = baseLodDistance * baseLodDistance;
-	
+
 	if (distanceSq < lodDistanceSq)
 	{
-		return 1.0f;  // Full detail (show all points)
+		return 1.0f; // Full detail (show all points)
 	}
 	else if (distanceSq < lodDistanceSq * 4.0f)
 	{
-		return 0.8f;  
+		return 0.8f;
 	}
 	else if (distanceSq < lodDistanceSq * 16.0f)
 	{
-		return 0.65f; 
+		return 0.65f;
 	}
 	else if (distanceSq < lodDistanceSq * 32.0f)
 	{
-		return 0.5f;  
+		return 0.5f;
 	}
 	else
 	{
-		return 0.0f;  // Cull entirely (very far away)
+		return 0.0f; // Cull entirely (very far away)
 	}
 }

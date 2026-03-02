@@ -30,7 +30,7 @@ namespace PhysicsConstants
 
 namespace DragConstants
 {
-    constexpr float DRAG_STIFNESS = 10000.0f;
+    constexpr float DRAG_STIFNESS = 20000.0f;
 }
 
 namespace VisualizationConstants

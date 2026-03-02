@@ -3,6 +3,7 @@
 #include "core/Renderer.hpp"
 #include "math/Vec2.hpp"
 #include "shape/Shape.hpp"
+#include "shape/Thruster.hpp"
 #include "physics/Rigidbody.hpp"
 #include "common/settings.hpp"
 #include "core/Engine.hpp"
@@ -20,10 +21,11 @@ struct SpawnSettings
     float boxHeight = 1.0f;
     float base = 3.0f;
     float angle = 30.0f;
-    float radius = 1.0f;
+    float radius = 0.5f;
     float mass = 10.0f;
     float staticFriction = 1.0f;
     float kineticFriction = 0.7f;
+    float thrusterForce = 5.0f;
     bool flip = true;
     std::array<float, 4> color = {255.0f, 255.0f, 255.0f, 1.0f};
     float restitution = 0.4f;
@@ -50,7 +52,7 @@ struct CannonFireSettings
     std::array<float, 4> color = {255.f, 255.f, 255.f, 1.f}; // RGBA 0–255
 
     // Ball-specific
-    float radius   = 1.0f;
+    float radius   = 0.5f;
 
     // Box-specific
     float boxWidth  = 1.0f;
@@ -122,10 +124,14 @@ private:
     // -- Trigger inspector (shown when selectedBody is a Trigger) ----
     void RenderTriggerInspector(shape::Trigger *trigger);
 
+    // -- Thruster inspector (shown when selectedBody is a Thruster) ----
+    void RenderThrusterInspector(shape::Thruster *thruster);
+
     // ── Spawner sub-sections ─────────────────────────────────────
     void RenderSpawnBasics();
     void RenderSpawnPhysicsControls();
     void RenderSpawnSizeControls();
+    void RenderSpawnSpecificControls();
     void RenderSpawnActions();
 
     // ── Neon helpers ─────────────────────────────────────────────

@@ -11,6 +11,7 @@
 #include <cstddef>
 #include <memory>
 #include <vector>
+#include <array>
 
 class Renderer;
 
@@ -48,6 +49,7 @@ public:
 
 	size_t RigidbodyCount() const;
 	void ClearObjects();
+	const std::vector<std::unique_ptr<physics::Rigidbody>>& GetObjects() const { return objects; }
 
 	// Trail management
 	void StartTrail(physics::Rigidbody *projectile, float lifetime = 2.0f);

@@ -56,4 +56,14 @@ namespace math
         return NearlyEqual(a.x, b.x, epsilon) && NearlyEqual(a.y, b.y, epsilon);
     }
 
+    inline float DegToRad(float degrees)
+    {
+        return degrees * (PI / 180.0f);
+    }
+
+    inline float RadToDeg(float radians)
+    {
+        return radians * (180.0f / PI);
+    }
+
 }

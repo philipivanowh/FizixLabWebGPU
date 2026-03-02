@@ -8,6 +8,7 @@
 
 namespace physics
 {
+	
 	enum RigidbodyType
 	{
 		Static,
@@ -20,7 +21,7 @@ namespace physics
 		Frictional,
 		Gravitational,
 		Tension,
-		Apply
+		Applied
 	};
 
 	struct ForceInfo
@@ -54,11 +55,14 @@ namespace physics
 		void Rotate(float amountRadians);
 		void AddDisplayForce(const math::Vec2 &forceAmount, const ForceType type);
 		void AddForceGenerator(std::unique_ptr<ForceGenerator> generator);
+		void RemoveForceGenerator(ForceGenerator *generatorToRemove);
 		void UpdateForces(float deltaMs);
 		void BeginFrameForces();
 		void AccumulateNormalImpulse(const math::Vec2 &normalImpulse);
 		void AccumulateFrictionImpulse(const math::Vec2 &frictionImpulse);
 		void FinalizeForces(float deltaMs);
+		void ApplyForce(const math::Vec2 &force);
+		void ApplyTorque(float torque);          
 		math::Vec2 GetNormalForce() const;
 		math::Vec2 GetFrictionForce() const;
 		const std::vector<ForceInfo> &GetForcesForDisplay() const;
@@ -77,6 +81,7 @@ namespace physics
 		float angularAcc = 0.0f;
 		float restitution = 0.5f;
 		math::Vec2 netForce = math::Vec2();
+		float netTorque = 0.0f;
 		std::vector<ForceInfo> forces;
 		float area = 1.0f;
 		float inertia = 0.0f;

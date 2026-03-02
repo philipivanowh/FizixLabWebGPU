@@ -11,6 +11,7 @@ namespace shape
         Incline,
         Box,
         Cannon,
+        Thruster,
         Trigger
     };
 

@@ -9,18 +9,6 @@
 #include <algorithm>
 #include <iterator>
 
-// ================================================================
-//  COLOUR PALETTE  —  Alan Becker "Animation vs ___" whiteboard
-//
-//  The entire look is: a bright, clean notebook page with bold
-//  primary-colour marker strokes.  Think whiteboard, not terminal.
-//
-//  Rule of thumb for every colour decision:
-//    • Backgrounds: warm off-whites / very light greys
-//    • Text:        near-black ink, never pure white on bright bg
-//    • Accents:     exactly one saturated hue per semantic role
-//    • No glow      — contrast comes from clarity, not bloom
-// ================================================================
 namespace Col
 {
     // ── Backgrounds ──────────────────────────────────────────────
@@ -1164,11 +1152,11 @@ void UIManager::RenderCannonInspector(shape::Cannon *cannon)
 
     // ── FIRE button ───────────────────────────────────────────────
     {
-       // const float rad = cannon->barrelAngleDegrees * 3.14159265f / 180.0f;
+        // const float rad = cannon->barrelAngleDegrees * 3.14159265f / 180.0f;
         // Both terms must be in metres:
         //   cannon->pos is internal pixels  → divide by PPM
         //   barrelLength is a pixel-space visual size → divide by PPM
-        //const float barrelLengthM = cannon->barrelLength / SimulationConstants::PIXELS_PER_METER;
+        // const float barrelLengthM = cannon->barrelLength / SimulationConstants::PIXELS_PER_METER;
         cannonFireSettings.cannonPos = {
             cannon->pos.x / SimulationConstants::PIXELS_PER_METER,
             cannon->pos.y / SimulationConstants::PIXELS_PER_METER};
@@ -1509,6 +1497,396 @@ void UIManager::RenderTriggerInspector(shape::Trigger *trigger)
     ImGui::Spacing();
 }
 
+// ================================================================
+//  THRUSTER INSPECTOR
+//  Full replacement for RenderThrusterInspector().
+// ================================================================
+void UIManager::RenderThrusterInspector(shape::Thruster *thruster)
+{
+    const float t = static_cast<float>(ImGui::GetTime());
+    auto *dl = ImGui::GetWindowDrawList();
+    const float cw = ImGui::GetContentRegionAvail().x;
+
+    // ── Header with live status badge ────────────────────────────
+    SectionHead("THRUSTER");
+
+    // Attachment status badge — right-aligned
+    {
+        const bool attached = thruster->IsAttached();
+        ImVec4 badgeCol = attached ? Col::Green : Col::InkFaint;
+        const char *label = attached ? "● ATTACHED" : "○ FLOATING";
+        const float lw = ImGui::CalcTextSize(label).x;
+        ImGui::SameLine(cw - lw - 4.0f);
+        ImGui::TextColored(badgeCol, "%s", label);
+    }
+
+    // ── Position (read-only while attached, editable when floating) ──
+    {
+        math::Vec2 posM = thruster->pos / SimulationConstants::PIXELS_PER_METER;
+        if (thruster->IsAttached())
+        {
+            // Read-only — position is driven by the attachment
+            KVRow("Position", Col::ToU32(Col::InkFaint),
+                  "(%.2f, %.2f) m", posM.x, posM.y);
+        }
+        else
+        {
+            ImGui::TextColored(Col::InkMid, "Position");
+            ImGui::SetNextItemWidth(-1);
+            ImGui::DragFloat2("##pos", &posM.x, 0.01f);
+            thruster->pos = posM * SimulationConstants::PIXELS_PER_METER;
+            positionBeingEdited = ImGui::IsItemActive();
+            if (positionBeingEdited && !wasPositionEditedLastFrame)
+                settings->paused = true;
+            else if (!positionBeingEdited && wasPositionEditedLastFrame)
+                settings->paused = false;
+            wasPositionEditedLastFrame = positionBeingEdited;
+        }
+    }
+
+    ImGui::Spacing();
+
+    // ── Interactive compass dial ──────────────────────────────────
+    SectionHead("DIRECTION");
+
+    constexpr float R = 52.0f;
+    const float dialX = (cw - R * 2.0f) * 0.5f; // centred in panel
+    ImVec2 dialCentre = ImGui::GetCursorScreenPos();
+    dialCentre.x += dialX + R;
+    dialCentre.y += R + 4.0f;
+
+    float currentAngle = thruster->GetAngleDegrees();
+
+    // ── Dial background ───────────────────────────────────────────
+    // Outer ring glow (pulses amber when firing)
+    if (thruster->isActiveThisFrame)
+    {
+        const float glow = 0.12f + 0.08f * std::sin(t * 14.0f);
+        dl->AddCircleFilled(dialCentre, R + 5.0f,
+                            Col::ToU32(Col::A(Col::Amber, glow)), 64);
+    }
+    dl->AddCircleFilled(dialCentre, R,
+                        Col::ToU32(Col::WidgetBg), 64);
+    dl->AddCircle(dialCentre, R,
+                  Col::ToU32(thruster->isActiveThisFrame
+                                 ? Col::A(Col::Amber, 0.6f)
+                                 : Col::Border),
+                  64, 1.4f);
+
+    // Degree ring — thin marks every 30°
+    for (int i = 0; i < 12; i++)
+    {
+        const float a = i * math::PI / 6.0f;
+        const bool card = (i % 3 == 0);
+        const float inner = card ? R - 7.0f : R - 4.0f;
+        dl->AddLine(
+            {dialCentre.x + inner * std::cos(a), dialCentre.y - inner * std::sin(a)},
+            {dialCentre.x + R * std::cos(a), dialCentre.y - R * std::sin(a)},
+            Col::ToU32(card ? Col::A(Col::InkFaint, 0.5f)
+                            : Col::A(Col::Border, 0.6f)),
+            card ? 1.2f : 0.7f);
+    }
+
+    // Cardinal labels
+    const char *cards[] = {"E", "N", "W", "S"};
+    for (int i = 0; i < 4; i++)
+    {
+        const float a = i * math::PI * 0.5f;
+        const float lx = dialCentre.x + (R + 11.0f) * std::cos(a) - 3.5f;
+        const float ly = dialCentre.y - (R + 11.0f) * std::sin(a) - 5.5f;
+        dl->AddText({lx, ly}, Col::ToU32(Col::InkFaint), cards[i]);
+    }
+
+    // Body-relative indicator ring (dashed, only when bodyRelative=true)
+ if (thruster->bodyRelative && thruster->IsAttached())
+{
+    constexpr int DASHES = 20;
+    for (int i = 0; i < DASHES; i++)
+    {
+        const float a0 = (i * 2.0f)        / DASHES * math::PI * 2.0f;
+        const float a1 = (i * 2.0f + 1.0f) / DASHES * math::PI * 2.0f;
+        dl->PathArcTo(dialCentre, R - 2.0f, a0, a1, 6);
+        dl->PathStroke(Col::ToU32(Col::A(Col::Blue, 0.25f)),
+                       ImDrawFlags_None, 1.5f);
+    }
+}
+
+    // ── Thrust arrow ──────────────────────────────────────────────
+    {
+        const float rad = currentAngle * math::PI / 180.0f;
+        const float armLen = R - 8.0f;
+
+        const ImVec2 tip{dialCentre.x + armLen * std::cos(rad),
+                         dialCentre.y - armLen * std::sin(rad)};
+
+        // Animated glow when firing
+        if (thruster->isActiveThisFrame)
+        {
+            const float gA = 0.20f + 0.15f * std::sin(t * 12.0f);
+            dl->AddLine(dialCentre, tip,
+                        Col::ToU32(Col::A(Col::Amber, gA)), 9.0f);
+        }
+
+        // Shaft
+        dl->AddLine(dialCentre, tip,
+                    Col::ToU32(thruster->isActiveThisFrame ? Col::Amber : Col::Blue),
+                    2.4f);
+
+        // Arrowhead
+        const float perp = rad + math::PI * 0.5f;
+        const float hs = 6.0f;
+        ImVec2 hl{tip.x - 10.0f * std::cos(rad) + hs * std::cos(perp),
+                  tip.y + 10.0f * std::sin(rad) - hs * std::sin(perp)};
+        ImVec2 hr{tip.x - 10.0f * std::cos(rad) - hs * std::cos(perp),
+                  tip.y + 10.0f * std::sin(rad) + hs * std::sin(perp)};
+        dl->AddTriangleFilled(tip, hl, hr,
+                              Col::ToU32(thruster->isActiveThisFrame ? Col::Amber : Col::Blue));
+
+        // Centre pivot dot
+        dl->AddCircleFilled(dialCentre, 4.0f,
+                            Col::ToU32(Col::A(
+                                thruster->isActiveThisFrame ? Col::Amber : Col::Blue, 0.7f)));
+    }
+
+    // ── Invisible button over dial for drag interaction ───────────
+    ImGui::SetCursorScreenPos({dialCentre.x - R, dialCentre.y - R});
+    ImGui::InvisibleButton("##dialInspector", {R * 2.0f, R * 2.0f});
+
+    if (ImGui::IsItemActive())
+    {
+        ImVec2 mouse = ImGui::GetIO().MousePos;
+        float dx = mouse.x - dialCentre.x;
+        float dy = dialCentre.y - mouse.y;
+        if (dx != 0.0f || dy != 0.0f)
+            currentAngle = std::fmod(
+                std::atan2(dy, dx) * 180.0f / math::PI + 360.0f, 360.0f);
+
+        // Write back immediately so the DragFloat below reads the
+        // dial-updated value and the shape updates this same frame
+        thruster->SetAngleDegrees(currentAngle);
+    }
+
+    // Advance cursor past the dial
+    ImGui::SetCursorScreenPos(
+        {ImGui::GetCursorScreenPos().x,
+         dialCentre.y + R + 8.0f});
+
+    // Numeric drag (below the dial, full width) — modifies currentAngle
+    // directly; SetAngleDegrees at the end covers this path too.
+    ImGui::SetNextItemWidth(-1);
+    ImGui::PushStyleColor(ImGuiCol_SliderGrab,
+                          thruster->isActiveThisFrame ? Col::Amber : Col::Blue);
+    ImGui::DragFloat("##angle", &currentAngle,
+                     0.5f, 0.0f, 360.0f, "%.1fÂ°");
+    ImGui::PopStyleColor();
+
+    // Final write-back covers the DragFloat path (and is a no-op if the
+    // dial already wrote back above)
+    thruster->SetAngleDegrees(currentAngle);
+
+    ImGui::Spacing();
+
+    // ── Force magnitude + Fx/Fy decomposition card ───────────────
+    SectionHead("FORCE");
+
+    float currentForce = thruster->magnitude;
+
+    // Power meter bar
+    {
+        const float maxF = 5000.0f;
+        const float frac = math::Clamp(currentForce / maxF, 0.0f, 1.0f);
+        ImVec2 barP = ImGui::GetCursorScreenPos();
+        const float barH = 6.0f;
+
+        dl->AddRectFilled(barP, {barP.x + cw, barP.y + barH},
+                          Col::ToU32(Col::WidgetBg), 3.0f);
+        if (frac > 0.001f)
+        {
+            // Animated shimmer when active
+            const float shim = thruster->isActiveThisFrame
+                                   ? (0.92f + 0.08f * std::sin(t * 10.0f))
+                                   : 1.0f;
+            ImU32 fillCol = frac < 0.5f
+                                ? Col::LerpU32(Col::ToU32(Col::Green),
+                                               Col::ToU32(Col::Amber), frac * 2.0f)
+                                : Col::LerpU32(Col::ToU32(Col::Amber),
+                                               Col::ToU32(Col::Red), (frac - 0.5f) * 2.0f);
+            ImVec4 fc = ImGui::ColorConvertU32ToFloat4(fillCol);
+            fc.w *= shim;
+            dl->AddRectFilled(barP,
+                              {barP.x + cw * frac, barP.y + barH},
+                              ImGui::ColorConvertFloat4ToU32(fc), 3.0f);
+        }
+        ImGui::Dummy({cw, barH + 2.0f});
+    }
+
+    ImGui::SetNextItemWidth(-1);
+    ImGui::DragFloat("##force", &currentForce,
+                     5.0f, 0.0f, 5000.0f, "%.0f N");
+    thruster->magnitude = math::Clamp(currentForce, 0.0f, 5000.0f);
+
+    // Fx / Fy decomposition card
+    {
+        const float rad = math::DegToRad(thruster->GetAngleDegrees());
+        const float fx = thruster->magnitude * std::cos(rad);
+        const float fy = thruster->magnitude * std::sin(rad);
+
+        const float lineH = ImGui::GetTextLineHeightWithSpacing();
+        const float cardH = lineH * 2.5f + 10.0f;
+        ImVec2 cMin = ImGui::GetCursorScreenPos();
+        ImVec2 cMax = {cMin.x + cw, cMin.y + cardH};
+
+        dl->AddRectFilled(cMin, cMax,
+                          Col::ToU32(Col::WidgetBg), 5.0f);
+        dl->AddRect(cMin, cMax,
+                    Col::ToU32(thruster->isActiveThisFrame
+                                   ? Col::A(Col::Amber, 0.4f)
+                                   : Col::Border),
+                    5.0f, 0, 1.0f);
+
+        ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, {4.0f, 1.0f});
+        ImGui::Dummy({0.0f, 4.0f});
+
+        ImGui::TextColored(Col::InkMid, "  FORCE COMPONENTS");
+        ImGui::TextColored(Col::InkFaint, "  Fx");
+        ImGui::SameLine(38.0f);
+        ImGui::TextColored(Col::Green, "%+.1f N", fx);
+        ImGui::SameLine(0, 14);
+        ImGui::TextColored(Col::InkFaint, "  Fy");
+        ImGui::SameLine(0, 6);
+        ImGui::TextColored(Col::Amber, "%+.1f N", fy);
+
+        ImGui::PopStyleVar();
+        ImGui::Dummy({0.0f, 4.0f});
+    }
+
+    ImGui::Spacing();
+
+    // ── Reference frame toggle ────────────────────────────────────
+    SectionHead("REFERENCE FRAME");
+
+    {
+        auto FrameButton = [&](const char *label, bool active)
+        {
+            const float hw = (cw - ImGui::GetStyle().ItemSpacing.x) * 0.5f;
+            ImGui::PushStyleColor(ImGuiCol_Button,
+                                  active ? Col::BlueSoft : Col::WidgetBg);
+            ImGui::PushStyleColor(ImGuiCol_ButtonHovered, Col::HoverBg);
+            ImGui::PushStyleColor(ImGuiCol_ButtonActive, Col::ActiveBg);
+            ImGui::PushStyleColor(ImGuiCol_Text,
+                                  active ? Col::Blue : Col::InkMid);
+            ImGui::PushStyleColor(ImGuiCol_Border,
+                                  active ? Col::A(Col::Blue, 0.65f) : Col::Border);
+            bool clicked = ImGui::Button(label, {hw, 0});
+            ImGui::PopStyleColor(5);
+            return clicked;
+        };
+
+        if (FrameButton("  Body-Relative  ", thruster->bodyRelative))
+            thruster->bodyRelative = true;
+        ImGui::SameLine();
+        if (FrameButton("  World-Fixed  ", !thruster->bodyRelative))
+            thruster->bodyRelative = false;
+
+        ImGui::TextColored(Col::InkFaint,
+                           thruster->bodyRelative
+                               ? "  Angle rotates with the attached body."
+                               : "  Angle is fixed in world space.");
+    }
+
+    ImGui::Spacing();
+
+    // ── Firing mode ───────────────────────────────────────────────
+    SectionHead("FIRING MODE");
+
+    {
+        auto ModeButton = [&](const char *label, bool active)
+        {
+            const float hw = (cw - ImGui::GetStyle().ItemSpacing.x) * 0.5f;
+            ImGui::PushStyleColor(ImGuiCol_Button,
+                                  active ? Col::GreenSoft : Col::WidgetBg);
+            ImGui::PushStyleColor(ImGuiCol_ButtonHovered, Col::HoverBg);
+            ImGui::PushStyleColor(ImGuiCol_ButtonActive, Col::ActiveBg);
+            ImGui::PushStyleColor(ImGuiCol_Text,
+                                  active ? Col::Green : Col::InkMid);
+            ImGui::PushStyleColor(ImGuiCol_Border,
+                                  active ? Col::A(Col::Green, 0.55f) : Col::Border);
+            bool clicked = ImGui::Button(label, {hw, 0});
+            ImGui::PopStyleColor(5);
+            return clicked;
+        };
+
+        if (ModeButton("  Always On  ", !thruster->keyHold))
+            thruster->keyHold = false;
+        ImGui::SameLine();
+        if (ModeButton("  Key Hold  ", thruster->keyHold))
+            thruster->keyHold = true;
+
+        if (thruster->keyHold)
+        {
+            // Key binding display
+            ImGui::Spacing();
+            const char *keyName = glfwGetKeyName(thruster->fireKey, 0);
+            char keyBuf[32];
+            if (keyName)
+                snprintf(keyBuf, sizeof(keyBuf), "[ %s ]", keyName);
+            else
+                snprintf(keyBuf, sizeof(keyBuf), "[ key %d ]", thruster->fireKey);
+
+            // Pulsing key badge
+            const float pulse = 0.75f + 0.25f * Col::Smooth(
+                                                    0.5f + 0.5f * sinf(t * 2.0f));
+            ImGui::TextColored(Col::InkMid, "  Key");
+            ImGui::SameLine(48.0f);
+            ImGui::TextColored(Col::A(Col::Green, pulse), "%s", keyBuf);
+        }
+    }
+
+    ImGui::Spacing();
+
+    // ── Enable / disable master toggle ───────────────────────────
+    {
+        const bool en = thruster->enabled;
+        const float borderA = en
+                                  ? (0.45f + 0.35f * Col::Smooth(0.5f + 0.5f * sinf(t * 4.0f)))
+                                  : 0.0f;
+
+        ImGui::PushStyleColor(ImGuiCol_Button,
+                              en ? Col::GreenSoft : Col::WidgetBg);
+        ImGui::PushStyleColor(ImGuiCol_ButtonHovered,
+                              en ? Col::A(Col::Green, 0.22f) : Col::HoverBg);
+        ImGui::PushStyleColor(ImGuiCol_ButtonActive,
+                              en ? Col::A(Col::Green, 0.35f) : Col::ActiveBg);
+        ImGui::PushStyleColor(ImGuiCol_Text,
+                              en ? Col::Green : Col::InkMid);
+        ImGui::PushStyleColor(ImGuiCol_Border,
+                              en ? Col::A(Col::Green, borderA) : Col::Border);
+
+        if (ImGui::Button(en ? "  THRUSTER  ON  " : "  THRUSTER  OFF  ", {-1, 0}))
+            thruster->enabled = !thruster->enabled;
+
+        ImGui::PopStyleColor(5);
+    }
+
+    ImGui::Spacing();
+
+    // ── Remove button ─────────────────────────────────────────────
+    ImGui::PushStyleColor(ImGuiCol_Button, Col::A(Col::Red, 0.3f));
+    ImGui::PushStyleColor(ImGuiCol_ButtonHovered, Col::A(Col::Red, 0.5f));
+    ImGui::PushStyleColor(ImGuiCol_ButtonActive, Col::A(Col::Red, 0.7f));
+    ImGui::PushStyleColor(ImGuiCol_Text, Col::Red);
+    ImGui::PushStyleColor(ImGuiCol_Border, Col::A(Col::Red, 0.6f));
+
+    if (ImGui::Button("Remove Thruster", {-1, 0}))
+    {
+        removedObjectPointer = thruster;
+        world->RemoveObject(thruster);
+    }
+
+    ImGui::PopStyleColor(5);
+    ImGui::Spacing();
+}
+
 bool UIManager::ConsumeCannonFireRequest(CannonFireSettings &out)
 {
     if (!cannonFirePending)
@@ -1545,15 +1923,15 @@ void UIManager::RenderSpawnerPanel()
     ImGui::Spacing();
     RenderSpawnSizeControls();
     ImGui::Spacing();
+    RenderSpawnSpecificControls();
+    ImGui::Spacing();
     RenderSpawnActions();
 
     ImGui::End();
     ImGui::PopStyleColor(2);
 }
 
-// ================================================================
-//  SPAWNER SUB-SECTIONS
-// ================================================================
+//--------------------------SPAWNER SUB-SECTIONS---------------------------
 namespace
 {
     ImVec4 ToImGuiColor(const std::array<float, 4> &c)
@@ -1571,7 +1949,7 @@ void UIManager::RenderSpawnBasics()
 {
     SectionHead("SHAPE & PLACEMENT");
 
-    const char *shapes[] = {"Ball", "Incline", "Box", "Cannon", "Trigger"};
+    const char *shapes[] = {"Ball", "Incline", "Box", "Cannon", "Thruster", "Trigger"};
     int si = (int)spawnSettings.shapeType;
     ImGui::SetNextItemWidth(-1);
     ImGui::Combo("##shape", &si, shapes, std::size(shapes));
@@ -1582,9 +1960,13 @@ void UIManager::RenderSpawnBasics()
     ImGui::SetNextItemWidth(-1);
     ImGui::DragFloat2("##pos", &spawnSettings.position.x, 1.0f);
 
-    ImGui::TextColored(Col::InkMid, "Velocity");
-    ImGui::SetNextItemWidth(-1);
-    ImGui::DragFloat2("##vel", &spawnSettings.velocity.x, 0.1f);
+    if (spawnSettings.shapeType == shape::ShapeType::Box ||
+        spawnSettings.shapeType == shape::ShapeType::Ball)
+    {
+        ImGui::TextColored(Col::InkMid, "Velocity");
+        ImGui::SetNextItemWidth(-1);
+        ImGui::DragFloat2("##vel", &spawnSettings.velocity.x, 0.1f);
+    }
 }
 
 void UIManager::RenderSpawnPhysicsControls()
@@ -1668,6 +2050,13 @@ void UIManager::RenderSpawnSizeControls()
         ImGui::TextColored(Col::InkMid, "Base");
         ImGui::SetNextItemWidth(-1);
         ImGui::DragFloat("##base", &spawnSettings.base, 0.1f, 1.0f, 1000.0f);
+    }
+}
+
+void UIManager::RenderSpawnSpecificControls()
+{
+    if (spawnSettings.shapeType == shape::ShapeType::Incline)
+    {
         ImGui::TextColored(Col::InkMid, "Angle (deg)");
         ImGui::SetNextItemWidth(-1);
         ImGui::DragFloat("##ang", &spawnSettings.angle, 0.1f, 0.0f, 89.0f);
@@ -1679,7 +2068,173 @@ void UIManager::RenderSpawnSizeControls()
         ImGui::SetNextItemWidth(-1);
         ImGui::DragFloat("##cang", &spawnSettings.angle, 0.1f, 0.0f, 89.0f);
     }
-    else if (spawnSettings.shapeType == shape::ShapeType::Trigger)
+    else if (spawnSettings.shapeType == shape::ShapeType::Thruster)
+    {
+        //const float t = static_cast<float>(ImGui::GetTime());
+        auto *dl = ImGui::GetWindowDrawList();
+        const float cw = ImGui::GetContentRegionAvail().x;
+
+        // ── Compact compass dial ──────────────────────────────────────
+        SectionHead("THRUST DIRECTION");
+
+        constexpr float R = 42.0f; // dial radius (px)
+        constexpr float CENTRE_OFFSET_X = 52.0f;
+        ImVec2 dialCentre = ImGui::GetCursorScreenPos();
+        dialCentre.x += CENTRE_OFFSET_X;
+        dialCentre.y += R + 4.0f;
+
+        // ── Draw the dial background ──────────────────────────────────
+        dl->AddCircleFilled(dialCentre, R,
+                            Col::ToU32(Col::WidgetBg), 64);
+        dl->AddCircle(dialCentre, R,
+                      Col::ToU32(Col::Border), 64, 1.2f);
+
+        // Cardinal tick marks at 0/90/180/270
+        for (int i = 0; i < 4; i++)
+        {
+            const float a = i * math::PI * 0.5f;
+            const float ix = dialCentre.x + (R - 4.0f) * std::cos(a);
+            const float iy = dialCentre.y - (R - 4.0f) * std::sin(a);
+            const float ox = dialCentre.x + R * std::cos(a);
+            const float oy = dialCentre.y - R * std::sin(a);
+            dl->AddLine({ix, iy}, {ox, oy},
+                        Col::ToU32(Col::A(Col::InkFaint, 0.5f)), 1.2f);
+        }
+
+        // 45° minor ticks (8 total, every 45°)
+        for (int i = 0; i < 8; i++)
+        {
+            const float a = i * math::PI * 0.25f;
+            const float ix = dialCentre.x + (R - 3.0f) * std::cos(a);
+            const float iy = dialCentre.y - (R - 3.0f) * std::sin(a);
+            const float ox = dialCentre.x + R * std::cos(a);
+            const float oy = dialCentre.y - R * std::sin(a);
+            dl->AddLine({ix, iy}, {ox, oy},
+                        Col::ToU32(Col::A(Col::Border, 0.7f)), 0.8f);
+        }
+
+        // Cardinal labels — E/N/W/S using math convention (0°=right)
+        const char *cardinals[] = {"E", "N", "W", "S"};
+        for (int i = 0; i < 4; i++)
+        {
+            const float a = i * math::PI * 0.5f;
+            const float lx = dialCentre.x + (R + 10.0f) * std::cos(a) - 3.5f;
+            const float ly = dialCentre.y - (R + 10.0f) * std::sin(a) - 5.0f;
+            dl->AddText({lx, ly},
+                        Col::ToU32(Col::InkFaint), cardinals[i]);
+        }
+
+        // ── Draggable interaction zone ────────────────────────────────
+        // Place an InvisibleButton over the dial so ImGui tracks hover/click.
+        ImGui::SetCursorScreenPos({dialCentre.x - R, dialCentre.y - R});
+        ImGui::InvisibleButton("##dialSpawner", {R * 2.0f, R * 2.0f});
+
+        if (ImGui::IsItemActive())
+        {
+            // Drag inside the circle → update angle
+            ImVec2 mouse = ImGui::GetIO().MousePos;
+            float dx = mouse.x - dialCentre.x;
+            float dy = dialCentre.y - mouse.y; // flip Y so up = +Y
+            if (dx != 0.0f || dy != 0.0f)
+                spawnSettings.angle = std::fmod(
+                    std::atan2(dy, dx) * 180.0f / math::PI + 360.0f, 360.0f);
+        }
+
+        // ── Draw the thrust arrow ─────────────────────────────────────
+        {
+            const float rad = spawnSettings.angle * math::PI / 180.0f;
+            const float armLen = R - 6.0f;
+            const ImVec2 tip{dialCentre.x + armLen * std::cos(rad),
+                             dialCentre.y - armLen * std::sin(rad)};
+
+            // Glow halo
+            dl->AddLine(dialCentre, tip,
+                        Col::ToU32(Col::A(Col::Amber, 0.18f)), 7.0f);
+            // Shaft
+            dl->AddLine(dialCentre, tip,
+                        Col::ToU32(Col::Amber), 2.2f);
+            // Arrowhead
+            const float perpRad = rad + math::PI * 0.5f;
+            const float hs = 5.0f;
+            ImVec2 head_l{tip.x - 8.0f * std::cos(rad) + hs * std::cos(perpRad),
+                          tip.y + 8.0f * std::sin(rad) - hs * std::sin(perpRad)};
+            ImVec2 head_r{tip.x - 8.0f * std::cos(rad) - hs * std::cos(perpRad),
+                          tip.y + 8.0f * std::sin(rad) + hs * std::sin(perpRad)};
+            dl->AddTriangleFilled(tip, head_l, head_r,
+                                  Col::ToU32(Col::Amber));
+
+            // Centre dot
+            dl->AddCircleFilled(dialCentre, 3.2f,
+                                Col::ToU32(Col::A(Col::Amber, 0.7f)));
+        }
+
+        // Advance cursor past the dial
+        ImGui::SetCursorScreenPos(
+            {ImGui::GetCursorScreenPos().x,
+             dialCentre.y + R + 8.0f});
+
+        // Numeric drag alongside dial
+        ImGui::SameLine(CENTRE_OFFSET_X + R * 2.0f + 10.0f);
+        ImGui::SetNextItemWidth(cw - CENTRE_OFFSET_X - R * 2.0f - 12.0f);
+        ImGui::PushStyleColor(ImGuiCol_SliderGrab, Col::Amber);
+        ImGui::DragFloat("##spawnerAngle", &spawnSettings.angle,
+                         0.5f, 0.0f, 360.0f, "%.0f°");
+        ImGui::PopStyleColor();
+
+        ImGui::Spacing();
+
+        // ── Force magnitude ───────────────────────────────────────────
+        SectionHead("FORCE");
+
+        const float maxForce = 5000.0f;
+        const float forceFrac = math::Clamp(spawnSettings.thrusterForce / maxForce, 0.0f, 1.0f);
+
+        // Thin coloured bar above the slider as a visual power meter
+        {
+            ImVec2 barStart = ImGui::GetCursorScreenPos();
+            const float barH = 4.0f;
+            // Track
+            dl->AddRectFilled(barStart,
+                              {barStart.x + cw, barStart.y + barH},
+                              Col::ToU32(Col::WidgetBg), 2.0f);
+            // Fill — green → amber → red based on fraction
+            if (forceFrac > 0.001f)
+            {
+                ImU32 fillCol = forceFrac < 0.5f
+                                    ? Col::LerpU32(Col::ToU32(Col::Green),
+                                                   Col::ToU32(Col::Amber),
+                                                   forceFrac * 2.0f)
+                                    : Col::LerpU32(Col::ToU32(Col::Amber),
+                                                   Col::ToU32(Col::Red),
+                                                   (forceFrac - 0.5f) * 2.0f);
+                dl->AddRectFilled(barStart,
+                                  {barStart.x + cw * forceFrac, barStart.y + barH},
+                                  fillCol, 2.0f);
+            }
+            ImGui::Dummy({cw, barH + 2.0f});
+        }
+
+        ImGui::SetNextItemWidth(-1);
+        ImGui::DragFloat("##spawnerForce", &spawnSettings.thrusterForce,
+                         5.0f, 0.0f, maxForce, "%.0f N");
+        spawnSettings.thrusterForce = math::Clamp(spawnSettings.thrusterForce, 0.0f, maxForce);
+
+        // Fx / Fy decomposition hint
+        {
+            const float rad = spawnSettings.angle * math::PI / 180.0f;
+            const float fx = spawnSettings.thrusterForce * std::cos(rad);
+            const float fy = spawnSettings.thrusterForce * std::sin(rad);
+            ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, {4.0f, 1.0f});
+            ImGui::TextColored(Col::InkFaint, "  Fx  ");
+            ImGui::SameLine(36.0f);
+            ImGui::TextColored(Col::Green, "%+.0f N", fx);
+            ImGui::TextColored(Col::InkFaint, "  Fy  ");
+            ImGui::SameLine(36.0f);
+            ImGui::TextColored(Col::Amber, "%+.0f N  ", fy);
+            ImGui::PopStyleVar();
+        }
+    }
+    if (spawnSettings.shapeType == shape::ShapeType::Trigger)
     {
         // Initialize boxWidth/boxHeight only once (not every frame)
         static bool triggerInitialized = false;

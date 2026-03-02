@@ -37,6 +37,8 @@ public:
 	static void CheckCannon();
 	static void ClearBodies();
 
+	void AddThrusterToBody(physics::Rigidbody *target, math::Vec2 localOffset, float angleDegrees, float magnitude);
+
 	static void ResetSimTime() { simulationTimeMs = 0.0f; }
 
 	static void Scroll_Feedback(GLFWwindow *window, double xoffset, double yoffset);
@@ -80,9 +82,13 @@ private:
 	static bool prevKeyR; // Previous frame state of R key
 
 	// Drag interaction state: single-click select, hold/double-click drag
-	static int selectedBodyHoldFrames;  // Frames held on currently selected body
-	static int dragThresholdFrames;     // Frames to hold before enabling drag (tunable)
+	static int selectedBodyHoldFrames;		// Frames held on currently selected body
+	static int dragThresholdFrames;			// Frames to hold before enabling drag (tunable)
 	static bool wasSelectedBodyJustClicked; // True if selected in previous frame
 
 	static float simulationTimeMs;
+
+	// Thruster
+	static shape::Thruster *draggingThruster;	   // thruster currently being dragged
+	static physics::Rigidbody *thrusterSnapTarget; // body it will attach to on release
 };

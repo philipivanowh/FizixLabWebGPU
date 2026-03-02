@@ -13,6 +13,10 @@
 #include <string>
 #include <vector>
 
+/*
+This file implements the Renderer class, which is responsible for all rendering operations in the engine. It initializes the WebGPU device and swap chain, sets up
+render pipelines, and provides methods for drawing shapes, the grid, and other visual elements. The Renderer also handles window creation and input callbacks related to rendering.
+*/
 using namespace wgpu;
 
 namespace
@@ -40,7 +44,11 @@ bool Renderer::Initialize(Settings &settings, GLFWscrollfun scrollCallback)
 		return false;
 	}
 
-	// settings.InitFromMonitor();
+#ifdef __APPLE__
+
+#else
+	settings.InitFromMonitor();
+#endif
 
 	// ── INSERT POINT A: native resolution ───────────────────────────────
 	// Query the primary monitor native video mode so the window matches
@@ -50,7 +58,7 @@ bool Renderer::Initialize(Settings &settings, GLFWscrollfun scrollCallback)
 	glfwWindowHint(GLFW_RESIZABLE, GLFW_FALSE);
 
 	// On macOS, request a full Retina (HiDPI) framebuffer.
-	//settings.InitFromMonitor();
+	// settings.InitFromMonitor();
 	windowWidth = settings.windowWidth;
 	windowHeight = settings.windowHeight;
 	framebufferWidth = settings.windowWidth;
@@ -109,7 +117,7 @@ bool Renderer::Initialize(Settings &settings, GLFWscrollfun scrollCallback)
 			std::cout << " (" << message << ")";
 		std::cout << std::endl;
 	};
-	// Before adapter.requestDevice(deviceDesc)
+
 	RequiredLimits requiredLimits = GetRequiredLimits(adapter);
 	uniformAlignment = requiredLimits.limits.minUniformBufferOffsetAlignment;
 	deviceDesc.requiredLimits = &requiredLimits;
@@ -132,13 +140,7 @@ bool Renderer::Initialize(Settings &settings, GLFWscrollfun scrollCallback)
 	config.width = framebufferWidth;
 	config.height = framebufferHeight;
 	config.usage = TextureUsage::RenderAttachment;
-	// ── INSERT POINT B: surface format — prefer linear, detect sRGB ────
-	// Windows/Linux: first format is usually BGRA8Unorm (linear). ✓
-	// macOS/Metal  : first format is BGRA8UnormSrgb — the GPU will
-	//                gamma-encode shader output automatically.
-	// We scan the capability list for the linear variant first.
-	// If unavailable we set surfaceIsSrgb so UpdateUniforms() can
-	// pre-correct colours before upload.
+
 	SurfaceCapabilities surfaceCapabilities;
 	surface.getCapabilities(adapter, &surfaceCapabilities);
 
@@ -192,14 +194,7 @@ void Renderer::Terminate()
 	uniformBindGroupLayout.release();
 	pipelineLayout.release();
 	linePipeline.release();
-	// Text Pipeline
 	pipeline.release();
-	textSampler.release();
-	textVertexBuffer.release();
-	textPipelineLayout.release();
-	textBindGroupLayout.release();
-	textPipeline.release();
-	textShaderModule.release();
 	surface.unconfigure();
 
 	// WebGPU
@@ -489,12 +484,14 @@ void Renderer::BeginFrame()
 	renderPassColorAttachment.resolveTarget = nullptr;
 	renderPassColorAttachment.loadOp = LoadOp::Clear;
 	renderPassColorAttachment.storeOp = StoreOp::Store;
+
 	// 0-1 color (normalize if values are 0-255, then apply macOS-only brightness bump + sRGB pre-correction)
 	WGPUColor clearColor = backgroundColor;
 	renderPassColorAttachment.clearValue = clearColor;
+
 #ifndef WEBGPU_BACKEND_WGPU
 	renderPassColorAttachment.depthSlice = WGPU_DEPTH_SLICE_UNDEFINED;
-#endif // NOT WEBGPU_BACKEND_WGPU
+#endif
 
 	renderPassDesc.colorAttachmentCount = 1;
 	renderPassDesc.colorAttachments = &renderPassColorAttachment;
@@ -512,19 +509,10 @@ void Renderer::DrawGrid()
 {
 	// Grid lines snap to real-world metres.
 	// Minor grid = 1 m apart, major grid = 5 m apart.
-	const float kGridSpacing  = SimulationConstants::PIXELS_PER_METER * 1.0f;  // 1 m per cell
-	const float kMajorSpacing = SimulationConstants::PIXELS_PER_METER * 5.0f;  // major line every 5 m
+	const float kGridSpacing = SimulationConstants::PIXELS_PER_METER * 1.0f;  // 1 m per cell
+	const float kMajorSpacing = SimulationConstants::PIXELS_PER_METER * 5.0f; // major line every 5 m
 	std::array<float, 4> minorColor{0.1f, 0.5f, 0.6f, 0.1f};
-	std::array<float, 4> majorColor{0.2f, 0.7f, 0.8f, 0.1f};
-
-	for (float &value : minorColor)
-	{
-		value *= 1.5f;
-	}
-	for (float &value : majorColor)
-	{
-		value *= 1.5f;
-	}
+	std::array<float, 4> majorColor{0.4f, 0.65f, 0.8f, 0.3f};
 
 	std::vector<float> minorVertices;
 	std::vector<float> majorVertices;
@@ -540,10 +528,14 @@ void Renderer::DrawGrid()
 	const float startY = std::floor((cameraOffset.y - visibleWorldHeight * 0.5f - padding) / kGridSpacing) * kGridSpacing;
 	const float endY = std::ceil((cameraOffset.y + visibleWorldHeight * 0.5f + padding) / kGridSpacing) * kGridSpacing;
 
+	const float threshold = kGridSpacing * 0.25f; // 25% of a cell — robust to float drift
+
 	// Vertical lines
 	for (float x = startX; x <= endX; x += kGridSpacing)
 	{
-		const bool isMajor = std::fabs(std::fmod(x, kMajorSpacing)) < 0.5f;
+
+		const float rem = std::fabs(std::fmod(x, kMajorSpacing));
+		const bool isMajor = rem < threshold || (kMajorSpacing - rem) < threshold;
 		auto &vertices = isMajor ? majorVertices : minorVertices;
 		vertices.push_back(x);
 		vertices.push_back(startY);
@@ -554,7 +546,8 @@ void Renderer::DrawGrid()
 	// Horizontal lines
 	for (float y = startY; y <= endY; y += kGridSpacing)
 	{
-		const bool isMajor = std::fabs(std::fmod(y, kMajorSpacing)) < 0.5f;
+		const float rem = std::fabs(std::fmod(y, kMajorSpacing));
+		const bool isMajor = rem < threshold || (kMajorSpacing - rem) < threshold;
 		auto &vertices = isMajor ? majorVertices : minorVertices;
 		vertices.push_back(startX);
 		vertices.push_back(y);
@@ -596,8 +589,30 @@ void Renderer::DrawGrid()
 		drawLines(destructionLine, destructionColor);
 	}
 
+	std::array<float, 4> originColor{0.5f, 0.8f, 0.9f, 0.8f}; // Bright blue
+	if (0 >= startY && 0 <= endY)
+	{
+		std::array<float, 4> originColor{0.5f, 0.8f, 0.9f, 0.8f};
+		std::vector<float> originLineY = {
+			startX, 0,
+			endX, 0};
+
+		drawLines(originLineY, originColor);
+	}
+
+	if (0 >= startX && 0 <= endX)
+	{
+
+		std::vector<float> originLineX = {
+			0, startY,
+			0, endY};
+
+		drawLines(originLineX, originColor);
+	}
+
 	renderPass.setPipeline(pipeline);
 }
+
 void Renderer::EndFrame()
 {
 
@@ -674,8 +689,7 @@ void Renderer::InitializeBuffers()
 		// Define a first triangle:
 		-100, 0,
 		100, 0,
-		50, 100
-	};
+		50, 100};
 	vertexCount = static_cast<uint32_t>(vertexData.size() / 2);
 
 	// Create vertex buffer
@@ -730,7 +744,7 @@ void Renderer::DrawHighlightOutline(physics::Rigidbody &body)
 		renderPass.setVertexBuffer(0, vertexBuffer, 0, vertexCount * 2 * sizeof(float));
 		renderPass.draw(vertexCount, 1, 0, 0);
 	}
-		if (auto trigger = dynamic_cast<const shape::Trigger *>(&body))
+	if (auto trigger = dynamic_cast<const shape::Trigger *>(&body))
 	{
 		// Draw trigger slightly larger
 		renderPass.setPipeline(pipeline);
@@ -748,7 +762,7 @@ void Renderer::DrawHighlightOutline(physics::Rigidbody &body)
 			if (dist > 0.001f)
 			{
 				// Push outward
-				float scale = 1.0f + outlineThickness*2 / dist;
+				float scale = 1.0f + outlineThickness * 2 / dist;
 				vertices[i] = x * scale;
 				vertices[i + 1] = y * scale;
 			}
@@ -764,8 +778,7 @@ void Renderer::DrawHighlightOutline(physics::Rigidbody &body)
 		renderPass.setVertexBuffer(0, vertexBuffer, 0, vertexCount * 2 * sizeof(float));
 		renderPass.draw(vertexCount, 1, 0, 0);
 	}
-	
-	
+
 	else if (auto ball = dynamic_cast<const shape::Ball *>(&body))
 	{
 		// Draw ball slightly larger
@@ -854,7 +867,43 @@ void Renderer::DrawHighlightOutline(physics::Rigidbody &body)
 		renderPass.setVertexBuffer(0, vertexBuffer, 0, circleVerts.size() * sizeof(float));
 		renderPass.draw(static_cast<uint32_t>(circleVerts.size() / 2), 1, 0, 0);
 	}
+	
+	else if (auto thruster = dynamic_cast<const shape::Thruster *>(&body))
+	{
+		renderPass.setPipeline(pipeline);
+
+		// Get the already-rotated triangle soup from the thruster
+		std::vector<float> vertices = thruster->GetVertexLocalPos();
+
+		// Push every vertex outward from the local origin by outlineThickness.
+		// The thruster is centred at (0,0) in local space, so the origin IS
+		// the natural push-out centre — same approach as Box.
+		for (size_t i = 0; i < vertices.size(); i += 2)
+		{
+			const float x = vertices[i];
+			const float y = vertices[i + 1];
+			const float dist = std::sqrt(x * x + y * y);
+			if (dist > 0.001f)
+			{
+				const float scale = 1.0f + outlineThickness*1.1 / dist;
+				vertices[i] = x * scale;
+				vertices[i + 1] = y * scale;
+			}
+		}
+
+		EnsureVertexBufferSize(vertices.size());
+		queue.writeBuffer(vertexBuffer, 0,
+						  vertices.data(), vertices.size() * sizeof(float));
+
+		vertexCount = static_cast<uint32_t>(vertices.size() / 2);
+		uint32_t uniformOffset = UpdateUniforms(thruster->pos, highlightColor);
+
+		renderPass.setBindGroup(0, uniformBindGroup, 1, &uniformOffset);
+		renderPass.setVertexBuffer(0, vertexBuffer, 0, vertexCount * 2 * sizeof(float));
+		renderPass.draw(vertexCount, 1, 0, 0);
+	}
 }
+
 void Renderer::DrawShape(physics::Rigidbody &body, bool highlight)
 {
 	if (highlight)
@@ -883,9 +932,15 @@ void Renderer::DrawShape(physics::Rigidbody &body, bool highlight)
 		DrawIncline(*incline);
 		DrawFBD(body);
 	}
-	else if(auto trigger = dynamic_cast<const shape::Trigger *>(&body))
+	else if (auto trigger = dynamic_cast<const shape::Trigger *>(&body))
 	{
 		DrawTrigger(*trigger);
+	}
+	else if (auto thruster = dynamic_cast<shape::Thruster *>(&body))
+	{
+		DrawThruster(*thruster);
+		// Draw FBD on the attached body, not the thruster itself
+		return;
 	}
 }
 
@@ -918,7 +973,8 @@ void Renderer::DrawFBD(physics::Rigidbody &body)
 			return {0.2f, 0.6f, 0.3f, 0.4f};
 		case physics::ForceType::Tension:
 			return {0.9f, 0.9f, 0.2f, 0.4f};
-		case physics::ForceType::Apply:
+		case physics::ForceType::Applied:
+			return {0.95f, 0.60f, 0.15f, 0.85f};
 		default:
 			return {0.5f, 0.3f, 0.5f, 0.4f};
 		}
@@ -1050,15 +1106,14 @@ void Renderer::DrawTrigger(const shape::Trigger &trigger)
 		renderPass.setVertexBuffer(0, vertexBuffer, 0, count * 2 * sizeof(float));
 		renderPass.draw(count, 1, 0, 0);
 	};
-	
 
-	const std::array<float, 4>  originalColor = {0.6f, 0.3f, 0.8f, 0.4f};  // Purple
-	const std::array<float, 4>  collisionColor = {1.0f, 0.9f, 0.2f, 0.9f}; // Bright yellow (triggered)
+	const std::array<float, 4> originalColor = {0.6f, 0.3f, 0.8f, 0.4f};  // Purple
+	const std::array<float, 4> collisionColor = {1.0f, 0.9f, 0.2f, 0.9f}; // Bright yellow (triggered)
 	// Use collision color if colliding, otherwise use original color
-	const std::array<float, 4> outerColor = trigger.isColliding 
-		? collisionColor 
-		: originalColor;
-	
+	const std::array<float, 4> outerColor = trigger.isColliding
+												? collisionColor
+												: originalColor;
+
 	const std::array<float, 4> innerColor = {0.1f, 0.5f, 0.1f, 0.3f};
 
 	DrawPart(trigger.GetOuterBoxVertexLocalPos(), outerColor);
@@ -1164,6 +1219,123 @@ void Renderer::DrawCannon(const shape::Cannon &cannon)
 	DrawPart(cannon.GetBoreVertexLocalPos(), cannon.boreColor);
 }
 
+void Renderer::DrawThruster(const shape::Thruster &thruster)
+{
+	if (!uniformBindGroup)
+		return;
+
+	renderPass.setPipeline(pipeline);
+
+	auto DrawPart = [&](const std::vector<float> &verts,
+						const std::array<float, 4> &color)
+	{
+		if (verts.empty())
+			return;
+		EnsureVertexBufferSize(verts.size());
+		queue.writeBuffer(vertexBuffer, 0, verts.data(), verts.size() * sizeof(float));
+		const uint32_t count = static_cast<uint32_t>(verts.size() / 2);
+		uint32_t off = UpdateUniforms(thruster.pos, color);
+		renderPass.setBindGroup(0, uniformBindGroup, 1, &off);
+		renderPass.setVertexBuffer(0, vertexBuffer, 0, count * 2 * sizeof(float));
+		renderPass.draw(count, 1, 0, 0);
+	};
+
+	// ── Body (bracket + nozzle bell) ─────────────────────────────
+	DrawPart(thruster.GetVertexLocalPos(), thruster.bodyColor);
+
+	// ── Mounting bracket highlight edge ──────────────────────────
+	// Thin bright strip across the top of the bracket to show the
+	// attachment face clearly.
+	{
+		// bracket top corners in local space, rotated like the body
+		const float c = std::cos(thruster.rotation);
+		const float s = std::sin(thruster.rotation);
+		auto rot = [&](float x, float y) -> std::pair<float, float>
+		{
+			return {x * c - y * s, x * s + y * c};
+		};
+
+		constexpr float HW = shape::Thruster::W * 0.50f;
+		constexpr float TOP = shape::Thruster::H * 0.50f;
+		constexpr float BBOT = TOP - shape::Thruster::H * 0.20f;
+
+		auto [x0, y0] = rot(-HW, TOP);
+		auto [x1, y1] = rot(+HW, TOP);
+		auto [x2, y2] = rot(+HW, BBOT);
+		auto [x3, y3] = rot(-HW, BBOT);
+
+		const std::vector<float> edgeVerts = {
+			x0, y0, x1, y1, x2, y2,
+			x0, y0, x2, y2, x3, y3};
+
+		const std::array<float, 4> edgeColor{
+			thruster.bodyColor[0] * 1.6f,
+			thruster.bodyColor[1] * 1.6f,
+			thruster.bodyColor[2] * 1.6f,
+			0.55f};
+		DrawPart(edgeVerts, edgeColor);
+	}
+
+	// ── Flame (only when actively firing) ────────────────────────
+	if (thruster.isActiveThisFrame)
+	{
+		const double t = glfwGetTime();
+		// Fast flicker on the length, slow sway on the tip X
+		const float flicker = 0.80f + 0.20f * static_cast<float>(
+												  std::sin(t * 18.0));
+		const float sway = static_cast<float>(std::sin(t * 7.0)) * 2.5f;
+
+		const float c = std::cos(thruster.rotation);
+		const float s = std::sin(thruster.rotation);
+		auto rot = [&](float x, float y) -> std::pair<float, float>
+		{
+			return {x * c - y * s, x * s + y * c};
+		};
+
+		// Base of flame = bell exit (bottom of nozzle in local space)
+		constexpr float BHW = shape::Thruster::W * 0.50f; // bell exit half-width
+		constexpr float BASE_Y = -(shape::Thruster::H * 0.50f);
+		const float OUTER_LEN = 38.0f * flicker;
+		const float INNER_LEN = 22.0f * flicker;
+
+		// Outer flame — wide, amber, low alpha
+		{
+			auto [bx0, by0] = rot(-BHW, BASE_Y);
+			auto [bx1, by1] = rot(+BHW, BASE_Y);
+			auto [tx, ty] = rot(sway, BASE_Y - OUTER_LEN);
+
+			const std::vector<float> verts = {
+				bx0, by0, bx1, by1, tx, ty};
+			const std::array<float, 4> col{0.95f, 0.55f, 0.10f, 0.45f};
+			DrawPart(verts, col);
+		}
+
+		// Mid flame — medium width, yellow-white, medium alpha
+		{
+			auto [bx0, by0] = rot(-BHW * 0.55f, BASE_Y);
+			auto [bx1, by1] = rot(+BHW * 0.55f, BASE_Y);
+			auto [tx, ty] = rot(sway * 0.5f, BASE_Y - INNER_LEN);
+
+			const std::vector<float> verts = {
+				bx0, by0, bx1, by1, tx, ty};
+			const std::array<float, 4> col{1.00f, 0.88f, 0.40f, 0.65f};
+			DrawPart(verts, col);
+		}
+
+		// Core flame — narrow, near-white, high alpha
+		{
+			auto [bx0, by0] = rot(-BHW * 0.18f, BASE_Y);
+			auto [bx1, by1] = rot(+BHW * 0.18f, BASE_Y);
+			auto [tx, ty] = rot(sway * 0.2f, BASE_Y - INNER_LEN * 0.55f);
+
+			const std::vector<float> verts = {
+				bx0, by0, bx1, by1, tx, ty};
+			const std::array<float, 4> col{1.00f, 0.98f, 0.85f, 0.90f};
+			DrawPart(verts, col);
+		}
+	}
+}
+
 void Renderer::DrawBallLine(const shape::Ball &ball)
 {
 	const float radiusLineX = ball.radius * std::cos(ball.rotation);
@@ -1190,23 +1362,23 @@ void Renderer::DrawTrailPoint(const math::Vec2 &position, float radius, const st
 	// Create a simple square centered at origin
 	std::vector<float> vertices = {
 		-radius, -radius,
-		 radius, -radius,
-		 radius,  radius,
-		 
-		 radius,  radius,
-		-radius,  radius,
-		-radius, -radius
-	};
+		radius, -radius,
+		radius, radius,
+
+		radius, radius,
+		-radius, radius,
+		-radius, -radius};
 
 	EnsureVertexBufferSize(vertices.size());
 	queue.writeBuffer(vertexBuffer, 0, vertices.data(), vertices.size() * sizeof(float));
 
 	vertexCount = static_cast<uint32_t>(vertices.size() / 2);
-	
+
 	// Ensure color has proper alpha
 	std::array<float, 4> drawColor = color;
-	if (drawColor[3] < 0.01f) drawColor[3] = 0.1f;  // Minimum alpha to be visible
-	
+	if (drawColor[3] < 0.01f)
+		drawColor[3] = 0.1f; // Minimum alpha to be visible
+
 	uint32_t uniformOffset = UpdateUniforms(position, drawColor);
 
 	if (!uniformBindGroup)
@@ -1229,25 +1401,24 @@ void Renderer::DrawTrailPointsBatched(const std::vector<std::tuple<math::Vec2, f
 
 	// Build a single vertex buffer for all trail points
 	std::vector<float> allVertices;
-	allVertices.reserve(trailPoints.size() * 12);  // 6 vertices per square * 2 floats per vertex
+	allVertices.reserve(trailPoints.size() * 12); // 6 vertices per square * 2 floats per vertex
 
 	// Calculate total vertices needed
 	for (size_t i = 0; i < trailPoints.size(); ++i)
 	{
 		const math::Vec2 &position = std::get<0>(trailPoints[i]);
 		float radius = std::get<1>(trailPoints[i]);
-		//const std::array<float, 4> &color = std::get<2>(trailPoints[i]);
+		// const std::array<float, 4> &color = std::get<2>(trailPoints[i]);
 
 		// Create square vertices centered at origin
 		std::vector<float> squareVerts = {
 			-radius, -radius,
-			 radius, -radius,
-			 radius,  radius,
-			 
-			 radius,  radius,
-			-radius,  radius,
-			-radius, -radius
-		};
+			radius, -radius,
+			radius, radius,
+
+			radius, radius,
+			-radius, radius,
+			-radius, -radius};
 
 		// Add to batch with position offset
 		for (size_t j = 0; j < squareVerts.size(); j += 2)
@@ -1330,14 +1501,6 @@ uint32_t Renderer::UpdateUniforms(const math::Vec2 &position, const std::array<f
 	float b = color[2] * rgbScale;
 	const float a = (color[3] > 1.0f) ? (color[3] * (1.0f / 255.0f)) : color[3];
 
-	// ── INSERT POINT C: linear → sRGB pre-correction (macOS only) ───────
-	// When surfaceIsSrgb is true the GPU automatically gamma-encodes every
-	// value the fragment shader writes.  Our colours are linear floats, so
-	// without this they get gamma-encoded twice and appear washed-out.
-	// Pre-applying the inverse sRGB transfer function here means the GPU
-	// pass produces the correct original linear value on screen.
-	//
-	// Windows/Linux: surfaceIsSrgb == false → this block is skipped entirely.
 #ifdef __APPLE__
 	if (surfaceIsSrgb)
 	{
