@@ -735,6 +735,13 @@ void UIManager::RenderInspectorPanel(physics::Rigidbody *body)
         ImGui::PopStyleColor(2);
         return;
     }
+    else if(auto *thruster = dynamic_cast<shape::Thruster *>(body))
+    {
+        RenderThrusterInspector(thruster);
+        ImGui::End();
+        ImGui::PopStyleColor(2);
+        return;
+    }
 
     // Type badge — animated blue underline appears on Dynamic
     const bool isStatic = body->bodyType == physics::RigidbodyType::Static;
@@ -1555,7 +1562,7 @@ void UIManager::RenderThrusterInspector(shape::Thruster *thruster)
     dialCentre.x += dialX + R;
     dialCentre.y += R + 4.0f;
 
-    float currentAngle = thruster->GetAngleDegrees();
+    float currentAngle = thruster->GetAngleDegrees(); // +90° to make 0° point rightwards
 
     // ── Dial background ───────────────────────────────────────────
     // Outer ring glow (pulses amber when firing)
@@ -1613,7 +1620,7 @@ void UIManager::RenderThrusterInspector(shape::Thruster *thruster)
 
     // ── Thrust arrow ──────────────────────────────────────────────
     {
-        const float rad = currentAngle * math::PI / 180.0f;
+        const float rad = math::DegToRad(currentAngle);
         const float armLen = R - 8.0f;
 
         const ImVec2 tip{dialCentre.x + armLen * std::cos(rad),
@@ -1650,7 +1657,7 @@ void UIManager::RenderThrusterInspector(shape::Thruster *thruster)
 
     // ── Invisible button over dial for drag interaction ───────────
     ImGui::SetCursorScreenPos({dialCentre.x - R, dialCentre.y - R});
-    ImGui::InvisibleButton("##dialInspector", {R * 2.0f, R * 2.0f});
+    ImGui::InvisibleButton("##dialInspector ", {R * 2.0f, R * 2.0f});
 
     if (ImGui::IsItemActive())
     {
@@ -1727,7 +1734,7 @@ void UIManager::RenderThrusterInspector(shape::Thruster *thruster)
 
     // Fx / Fy decomposition card
     {
-        const float rad = math::DegToRad(thruster->GetAngleDegrees());
+        const float rad = math::DegToRad(thruster->rotation);
         const float fx = thruster->magnitude * std::cos(rad);
         const float fy = thruster->magnitude * std::sin(rad);
 
@@ -2142,7 +2149,7 @@ void UIManager::RenderSpawnSpecificControls()
 
         // ── Draw the thrust arrow ─────────────────────────────────────
         {
-            const float rad = spawnSettings.angle * math::PI / 180.0f;
+            const float rad = math::DegToRad(spawnSettings.angle);
             const float armLen = R - 6.0f;
             const ImVec2 tip{dialCentre.x + armLen * std::cos(rad),
                              dialCentre.y - armLen * std::sin(rad)};
@@ -2186,8 +2193,8 @@ void UIManager::RenderSpawnSpecificControls()
         // ── Force magnitude ───────────────────────────────────────────
         SectionHead("FORCE");
 
-        const float maxForce = 5000.0f;
-        const float forceFrac = math::Clamp(spawnSettings.thrusterForce / maxForce, 0.0f, 1.0f);
+   
+        const float forceFrac = math::Clamp(spawnSettings.thrusterForce / MAX_THRUSTER_FORCE, 0.0f, 1.0f);
 
         // Thin coloured bar above the slider as a visual power meter
         {
@@ -2216,12 +2223,12 @@ void UIManager::RenderSpawnSpecificControls()
 
         ImGui::SetNextItemWidth(-1);
         ImGui::DragFloat("##spawnerForce", &spawnSettings.thrusterForce,
-                         5.0f, 0.0f, maxForce, "%.0f N");
-        spawnSettings.thrusterForce = math::Clamp(spawnSettings.thrusterForce, 0.0f, maxForce);
+                         5.0f, 0.0f, MAX_THRUSTER_FORCE, "%.0f N");
+        spawnSettings.thrusterForce = math::Clamp(spawnSettings.thrusterForce, 0.0f, MAX_THRUSTER_FORCE);
 
         // Fx / Fy decomposition hint
         {
-            const float rad = spawnSettings.angle * math::PI / 180.0f;
+            const float rad = math::DegToRad(spawnSettings.angle);
             const float fx = spawnSettings.thrusterForce * std::cos(rad);
             const float fy = spawnSettings.thrusterForce * std::sin(rad);
             ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, {4.0f, 1.0f});

@@ -99,15 +99,13 @@ namespace shape
                 1.0f,
                 0.0f,
                 physics::RigidbodyType::Static),
-          angleDegrees(angleDegs),
           magnitude(magnitudeN),
           bodyRelative(bodyRelativeMode),
           keyHold(keyHoldMode),
           fireKey(fireKey_)
     {
-        ShapeType = ShapeType::Thruster;
-
-        rotation = (angleDegs - 90.0f) * math::PI / 180.0f;
+        angleDegrees = angleDegs;
+        rotation = math::DegToRad(angleDegrees-90.0f);
 
         vertices = {
             // Mounting bracket
@@ -169,7 +167,7 @@ namespace shape
         if (attachedBody)
             SyncToAttachedBody(); // recomputes rotation from body + angleDegrees
         else
-            rotation = (angleDegrees - 90.0f) * math::PI / 180.0f;
+            rotation = math::DegToRad(angleDegrees-angleOffsetDegrees);
     }
 
     float Thruster::GetAngleDegrees() const
@@ -179,6 +177,8 @@ namespace shape
 
     void Thruster::SyncToAttachedBody()
     {
+        //rotation = math::DegToRad(angleDegrees-angleOffsetDegrees);
+
         if (!attachedBody)
             return;
 
@@ -189,18 +189,19 @@ namespace shape
         pos.y = attachedBody->pos.y + mountLocalOffset.x * s + mountLocalOffset.y * c;
 
         if (bodyRelative)
-            rotation = attachedBody->rotation + mountLocalAngle + (angleDegrees - 90.0f) * math::PI / 180.0f;
+            rotation = attachedBody->rotation + mountLocalAngle + math::DegToRad(angleDegrees);
         else
-            rotation = mountLocalAngle + (angleDegrees - 90.0f) * math::PI / 180.0f;
+            rotation = mountLocalAngle + math::DegToRad(angleDegrees);
     }
+    
 
     // ================================================================
     //  GEOMETRY
     // ================================================================
     std::vector<math::Vec2> Thruster::GetRotatedVertices() const
     {
-        const float c = std::cos(angleDegrees);
-        const float s = std::sin(angleDegrees);
+        const float c = std::cos(rotation);
+        const float s = std::sin(rotation);
         std::vector<math::Vec2> out;
         out.reserve(vertices.size());
         for (const auto &v : vertices)

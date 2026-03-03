@@ -60,9 +60,7 @@ namespace physics
 		void BeginFrameForces();
 		void AccumulateNormalImpulse(const math::Vec2 &normalImpulse);
 		void AccumulateFrictionImpulse(const math::Vec2 &frictionImpulse);
-		void FinalizeForces(float deltaMs);
-		void ApplyForce(const math::Vec2 &force);
-		void ApplyTorque(float torque);          
+		void FinalizeForces(float deltaMs);    
 		math::Vec2 GetNormalForce() const;
 		math::Vec2 GetFrictionForce() const;
 		const std::vector<ForceInfo> &GetForcesForDisplay() const;

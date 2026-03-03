@@ -99,6 +99,7 @@ namespace shape
 
 		// ── Configuration ────────────────────────────────────────────
 		float angleDegrees;			// user-facing angle in degrees (0=right, 90=up)
+		float angleOffsetDegrees = 90.0f; // visual-only angle offset for flame rendering (degrees)
 		float magnitude = 500.0f;	// Newtons
 		bool enabled = false;		// master on/off
 		bool bodyRelative = true;	// angle relative to attached body?

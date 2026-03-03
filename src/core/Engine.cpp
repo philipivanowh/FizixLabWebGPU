@@ -125,8 +125,8 @@ void Engine::CheckSpawning()
         // Spawn a free-floating thruster at cursor — user then drags it onto a body
         world.Add(std::make_unique<shape::Thruster>(
             req.position,
-            90.0f,  // default angle: thrust upward
-            500.0f, // default magnitude
+            req.angle,  // default angle: thrust upward
+            req.thrusterForce, // default magnitude
             true,   // body-relative
             false,  // always-on
             GLFW_KEY_SPACE));

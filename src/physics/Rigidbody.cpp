@@ -1,7 +1,6 @@
-#include "physics/Rigidbody.hpp"
+#include "physics/Rigidbody.hpp" // Required for std::clamp
 #include "common/settings.hpp"
 
-#include <algorithm>
 #include <cmath>
 #include <cstdint>
 
@@ -25,6 +24,7 @@ namespace physics
 	public:
 		void Apply(Rigidbody &body, float) override
 		{
+
 			body.netForce += body.dragForce;
 		}
 	};
@@ -35,19 +35,18 @@ namespace physics
 						 float RigidbodyMass,
 						 float restitution,
 						 RigidbodyType RigidbodyTypeValue)
-		: pos(position * SimulationConstants::PIXELS_PER_METER),
-		  linearVel(initialLinearVel * SimulationConstants::PIXELS_PER_METER),
-		  linearAcc(initialLinearAcc * SimulationConstants::PIXELS_PER_METER),
-		  bodyType(RigidbodyTypeValue),
-		  restitution(math::Clamp(restitution, 0.0f, 1.0f))
+		: pos(position * SimulationConstants::PIXELS_PER_METER), linearVel(initialLinearVel * SimulationConstants::PIXELS_PER_METER), linearAcc(initialLinearAcc * SimulationConstants::PIXELS_PER_METER), bodyType(RigidbodyTypeValue), restitution(math::Clamp(restitution, 0.0f, 1.0f))
 	{
 		mass = (RigidbodyMass > 0.0f) ? RigidbodyMass : 1.0f;
 		area = 1.0f;
 		if (bodyType != RigidbodyType::Static)
+		{
 			invMass = 1.0f / mass;
+		}
 		else
+		{
 			invMass = 0.0f;
-
+		}
 		AddForceGenerator(std::make_unique<GravityForceGenerator>());
 		AddForceGenerator(std::make_unique<DragForceGenerator>());
 	}
@@ -56,9 +55,13 @@ namespace physics
 	{
 		inertia = ComputeInertia();
 		if (bodyType == RigidbodyType::Static || inertia == 0.0f)
+		{
 			invInertia = 0.0f;
+		}
 		else
+		{
 			invInertia = 1.0f / inertia;
+		}
 	}
 
 	float Rigidbody::ComputeInertia() const
@@ -69,34 +72,44 @@ namespace physics
 	void Rigidbody::Update(float deltaMs, int iterations)
 	{
 		if (bodyType == RigidbodyType::Static)
+		{
+			transformUpdateRequired = true;
+			aabbUpdateRequired = true;
 			return;
+		}
 
 		if (bodyType == RigidbodyType::Dynamic)
 		{
 			if (iterations <= 0)
+			{
 				iterations = 1;
-
-			const double dtSeconds = static_cast<double>(deltaMs) /
-									 (1000.0 * static_cast<double>(iterations));
+			}
+			const double dtSeconds = static_cast<double>(deltaMs) / (1000.0 * static_cast<double>(iterations));
 
 			ClearForces();
 			UpdateForces(dtSeconds);
-
 			linearAcc = netForce / mass;
 			linearVel = linearVel + (linearAcc * static_cast<float>(dtSeconds));
-			pos = pos + (linearVel * static_cast<float>(dtSeconds));
-
-			angularVel += netTorque * invInertia * static_cast<float>(dtSeconds);
-			rotation = std::fmod(
-				rotation + angularVel * static_cast<float>(dtSeconds), 360.0f);
+			pos       = pos + (linearVel * static_cast<float>(dtSeconds));
+			rotation  = std::fmod((rotation + angularVel * static_cast<float>(dtSeconds)), 360.0f);
 
 			netForce = math::Vec2();
-			netTorque = 0.0f;
 			dragForce = math::Vec2();
-
 			transformUpdateRequired = true;
 			aabbUpdateRequired = true;
 		}
+	}
+
+		void Rigidbody::RemoveForceGenerator(ForceGenerator *generatorToRemove)
+	{
+		forceGenerators.erase(
+			std::remove_if(forceGenerators.begin(),
+						   forceGenerators.end(),
+						   [generatorToRemove](const std::unique_ptr<ForceGenerator> &g)
+						   {
+							   return g.get() == generatorToRemove;
+						   }),
+			forceGenerators.end());
 	}
 
 	void Rigidbody::Translate(const math::Vec2 &amount)
@@ -127,21 +140,6 @@ namespace physics
 		aabbUpdateRequired = true;
 	}
 
-	void Rigidbody::ApplyForce(const math::Vec2 &force)
-	{
-		if (bodyType == RigidbodyType::Static)
-			return;
-		netForce += force;
-		AddDisplayForce(force, ForceType::Applied);
-	}
-
-	void Rigidbody::ApplyTorque(float torque)
-	{
-		if (bodyType == RigidbodyType::Static)
-			return;
-		netTorque += torque;
-	}
-
 	void Rigidbody::AddDisplayForce(const math::Vec2 &forceAmount, const ForceType type)
 	{
 		forces.push_back(ForceInfo{forceAmount, type});
@@ -152,30 +150,16 @@ namespace physics
 		forceGenerators.push_back(std::move(generator));
 	}
 
-	// Remove a previously registered generator by raw pointer identity.
-	// Thruster stores the raw ptr before moving ownership here, then uses
-	// it to find and erase on Detach() — no shared_ptr, no circular include.
-	void Rigidbody::RemoveForceGenerator(ForceGenerator *generatorToRemove)
-	{
-		forceGenerators.erase(
-			std::remove_if(forceGenerators.begin(),
-						   forceGenerators.end(),
-						   [generatorToRemove](const std::unique_ptr<ForceGenerator> &g)
-						   {
-							   return g.get() == generatorToRemove;
-						   }),
-			forceGenerators.end());
-	}
-
 	void Rigidbody::BeginFrameForces()
 	{
 		ClearForces();
+		// Normal
 		normalImpulseAccum = math::Vec2();
 		normalForce = math::Vec2();
+		// Friction
 		frictionImpulseAccum = math::Vec2();
 		frictionForce = math::Vec2();
 		netForce = math::Vec2();
-		netTorque = 0.0f;
 	}
 
 	void Rigidbody::AccumulateNormalImpulse(const math::Vec2 &normalImpulse)
@@ -206,9 +190,10 @@ namespace physics
 		smoothedNormalForce = smoothedNormalForce * (1.0f - alpha) + normalForce * alpha;
 		smoothedFrictionForce = smoothedFrictionForce * (1.0f - alpha) + frictionForce * alpha;
 
-		// ── Direction-flip suppression ────────────────────────────────
-		// When the solver oscillates on a stationary body, friction flips
-		// ~180° every frame. A real friction force never does that.
+		// ── Direction-flip suppression ────────────────────────────────────────────
+		// When the solver oscillates on a stationary body, friction flips ~180°
+		// every frame. A real friction force never does that — if the direction
+		// dot product is negative the body is at rest and we're seeing solver noise.
 		const float frictionLen = smoothedFrictionForce.Length();
 		if (frictionLen > 1e-1f)
 		{
@@ -216,10 +201,11 @@ namespace physics
 
 			const bool directionFlipped =
 				math::Vec2::Dot(currentDir, prevSmoothedFrictionDir) < 0.0f &&
-				prevSmoothedFrictionDir.Length() > 0.5f;
+				prevSmoothedFrictionDir.Length() > 0.5f; // guard for first frame
 
 			if (directionFlipped)
 			{
+				// Oscillating — body is still, zero out display and reset smoother
 				smoothedFrictionForce = math::Vec2();
 				prevSmoothedFrictionDir = math::Vec2();
 			}
@@ -230,9 +216,10 @@ namespace physics
 		}
 		else
 		{
+			// Force too small — reset so next frame starts fresh
 			prevSmoothedFrictionDir = math::Vec2();
 		}
-		// ─────────────────────────────────────────────────────────────
+		// ─────────────────────────────────────────────────────────────────────────
 
 		if (!math::NearlyEqualVec(smoothedNormalForce, math::Vec2(0.0f, 0.0f)))
 			AddDisplayForce(smoothedNormalForce, ForceType::Normal);
@@ -242,8 +229,15 @@ namespace physics
 			AddDisplayForce(smoothedFrictionForce, ForceType::Frictional);
 	}
 
-	math::Vec2 Rigidbody::GetNormalForce() const { return normalForce; }
-	math::Vec2 Rigidbody::GetFrictionForce() const { return frictionForce; }
+	math::Vec2 Rigidbody::GetNormalForce() const
+	{
+		return normalForce;
+	}
+
+	math::Vec2 Rigidbody::GetFrictionForce() const
+	{
+		return frictionForce;
+	}
 
 	const std::vector<ForceInfo> &Rigidbody::GetForcesForDisplay() const
 	{
@@ -255,12 +249,16 @@ namespace physics
 		forces.clear();
 	}
 
-	void Rigidbody::UpdateGravity() {}
+	void Rigidbody::UpdateGravity()
+	{
+	}
 
 	void Rigidbody::UpdateForces(float deltaMs)
 	{
 		for (const auto &generator : forceGenerators)
+		{
 			generator->Apply(*this, deltaMs);
+		}
 	}
 
 } // namespace physics

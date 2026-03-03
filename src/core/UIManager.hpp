@@ -105,6 +105,10 @@ public:
         return temp;
     }
 
+
+    //Thruster Settings
+    const float MAX_THRUSTER_FORCE = 10000.0f;
+
 private:
     // ── Theme ────────────────────────────────────────────────────
     void ApplyNeonTheme();
@@ -164,4 +168,5 @@ private:
     // Window dimensions — set once in RenderMainControls
     float screenW = 1800;
     float screenH = 1000;
+
 };
