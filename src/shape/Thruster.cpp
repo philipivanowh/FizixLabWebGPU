@@ -177,8 +177,6 @@ namespace shape
 
     void Thruster::SyncToAttachedBody()
     {
-        //rotation = math::DegToRad(angleDegrees-angleOffsetDegrees);
-
         if (!attachedBody)
             return;
 
@@ -189,9 +187,9 @@ namespace shape
         pos.y = attachedBody->pos.y + mountLocalOffset.x * s + mountLocalOffset.y * c;
 
         if (bodyRelative)
-            rotation = attachedBody->rotation + mountLocalAngle + math::DegToRad(angleDegrees);
+            rotation = attachedBody->rotation + math::DegToRad(angleDegrees) - math::DegToRad(angleOffsetDegrees);
         else
-            rotation = mountLocalAngle + math::DegToRad(angleDegrees);
+            rotation = math::DegToRad(angleDegrees) - math::DegToRad(angleOffsetDegrees);
     }
     
 

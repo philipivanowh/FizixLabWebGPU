@@ -62,7 +62,14 @@ namespace shape
 				 bool keyHoldMode,
 				 int fireKey = GLFW_KEY_SPACE);
 
-		~Thruster() override = default;
+		~Thruster() override
+	{
+    // Always unregister the generator from the attached body before
+    // this object's memory is freed. Without this, the body's
+    // forceGenerators list holds a ThrustForceGenerator with a
+    // dangling const Thruster& reference → heap corruption.
+    Detach();
+	}
 
 		// ── Shape interface ──────────────────────────────────────────
 		float ComputeInertia() const override;
@@ -86,6 +93,7 @@ namespace shape
 
 		bool IsAttached() const { return attachedBody != nullptr; }
 		physics::Rigidbody *GetAttachedBody() const { return attachedBody; }
+		
 
 		// ── Force application ────────────────────────────────────────
 		// Applies force (and torque from off-centre mount) to attachedBody.
@@ -98,6 +106,7 @@ namespace shape
 		void SetForceMagnitude(float magnitudeN) { magnitude = magnitudeN; }
 
 		// ── Configuration ────────────────────────────────────────────
+		
 		float angleDegrees;			// user-facing angle in degrees (0=right, 90=up)
 		float angleOffsetDegrees = 90.0f; // visual-only angle offset for flame rendering (degrees)
 		float magnitude = 500.0f;	// Newtons

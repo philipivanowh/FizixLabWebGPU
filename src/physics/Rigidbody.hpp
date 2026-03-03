@@ -90,6 +90,9 @@ namespace physics
 		float staticFriction = 0.0f;
 		float kineticFriction = 0.1f;
 
+		//Removal
+		float removalTimer = 0.0f;
+
 		// Normal
 		math::Vec2 normalImpulseAccum = math::Vec2();
 		math::Vec2 normalForce = math::Vec2();

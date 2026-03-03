@@ -885,7 +885,7 @@ void Renderer::DrawHighlightOutline(physics::Rigidbody &body)
 			const float dist = std::sqrt(x * x + y * y);
 			if (dist > 0.001f)
 			{
-				const float scale = 1.0f + outlineThickness*1.1 / dist;
+				const float scale = 1.0f + outlineThickness*1.3 / dist;
 				vertices[i] = x * scale;
 				vertices[i + 1] = y * scale;
 			}

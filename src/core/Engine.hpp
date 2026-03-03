@@ -31,13 +31,9 @@ public:
 
 	static void AddDefaultObjects();
 	static void InclineProblemScene();
-	// void SpawnBox(const math::Vec2& pos, const math::Vec2& vel, float width, float height, float mass, float restitution);
-	// void SpawnBall(const math::Vec2& pos, const math::Vec2& vel, float radius, float mass, float restitution);
 	static void CheckSpawning();
 	static void CheckCannon();
 	static void ClearBodies();
-
-	void AddThrusterToBody(physics::Rigidbody *target, math::Vec2 localOffset, float angleDegrees, float magnitude);
 
 	static void ResetSimTime() { simulationTimeMs = 0.0f; }
 

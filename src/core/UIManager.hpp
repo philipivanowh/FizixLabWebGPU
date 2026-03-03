@@ -7,6 +7,7 @@
 #include "physics/Rigidbody.hpp"
 #include "common/settings.hpp"
 #include "core/Engine.hpp"
+#include "core/KeybindUI.hpp"
 
 #include <array>
 #include <cstddef>
@@ -26,6 +27,7 @@ struct SpawnSettings
     float staticFriction = 1.0f;
     float kineticFriction = 0.7f;
     float thrusterForce = 5.0f;
+    int thrustKey = GLFW_KEY_SPACE;
     bool flip = true;
     std::array<float, 4> color = {255.0f, 255.0f, 255.0f, 1.0f};
     float restitution = 0.4f;
@@ -131,11 +133,18 @@ private:
     // -- Thruster inspector (shown when selectedBody is a Thruster) ----
     void RenderThrusterInspector(shape::Thruster *thruster);
 
+    // ── Spawn configuration sub-sections (only shown for certain shape types) ────
+    void RenderInclineSpawnConfiguration();
+    void RenderCannonSpawnConfiguration();
+    void RenderTriggerSpawnConfiguration();
+    void RenderThrusterSpawnConfiguration();
+
+
     // ── Spawner sub-sections ─────────────────────────────────────
     void RenderSpawnBasics();
     void RenderSpawnPhysicsControls();
     void RenderSpawnSizeControls();
-    void RenderSpawnSpecificControls();
+    void RenderSpawnConfigurationControls();
     void RenderSpawnActions();
 
     // ── Neon helpers ─────────────────────────────────────────────
@@ -147,6 +156,8 @@ private:
                                 const math::Vec2 &screenB,
                                 const math::Vec2 &wStart,
                                 const math::Vec2 &wEnd);
+
+    GLFWwindow *glfwWindow = nullptr;
 
     SpawnSettings spawnSettings;
     bool spawnRequestPending = false;

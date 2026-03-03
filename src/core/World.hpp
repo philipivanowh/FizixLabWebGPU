@@ -75,7 +75,7 @@ private:
 								const math::Vec2 &prevPos,
 								const math::Vec2 &integratedPos);
 	int ClampIterations(int value) const;
-	void RemoveObjects(physics::Rigidbody *&selectedBody, physics::Rigidbody *&draggedBody);
+	void RemoveObjects(float deltaMs,physics::Rigidbody *&selectedBody, physics::Rigidbody *&draggedBody);
 	void UpdateTriggerCollisions();
 	float CalculateLODMultiplier(const math::Vec2 &trailPosition) const; // LOD helper
 
@@ -84,6 +84,8 @@ private:
 	CollisionPipeline collisionPipeline;
 	CollisionSolver collisionSolver;
 	Settings *settings = nullptr;
+
+	const float REMOVAL_TIME_THRESHOLD = 0.5f; // Time in seconds before an object is removed after being marked for deletion
 
 	// Camera info for LOD calculations
 	math::Vec2 cameraPos{0.0f, 0.0f};

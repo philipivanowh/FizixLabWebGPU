@@ -195,40 +195,45 @@ void World::Initialize(Settings *settings)
 }
 physics::Rigidbody *World::PickBody(const math::Vec2 &p)
 {
-	for (auto &obj : objects)
-	{
-		// Transform the pick point into the body's local space by
-		// inverse-rotating it around the body's origin. This lets us
-		// test against the local (unrotated) AABB accurately even when
-		// the body is at an angle.
-		const float angle = -obj->rotation; // inverse rotation
-		const float cosA = std::cos(angle);
-		const float sinA = std::sin(angle);
+    // Helper lambda to perform the actual intersection math
+    auto isPointingAt = [&](physics::Rigidbody* obj) -> bool {
+        const float angle = -obj->rotation;
+        const float cosA = std::cos(angle);
+        const float sinA = std::sin(angle);
+        const float dx = p.x - obj->pos.x;
+        const float dy = p.y - obj->pos.y;
 
-		const float dx = p.x - obj->pos.x;
-		const float dy = p.y - obj->pos.y;
+        const math::Vec2 localP{
+            cosA * dx - sinA * dy + obj->pos.x,
+            sinA * dx + cosA * dy + obj->pos.y};
 
-		const math::Vec2 localP{
-			cosA * dx - sinA * dy + obj->pos.x,
-			sinA * dx + cosA * dy + obj->pos.y};
+        collision::AABB aabb;
+        if (const auto *shape = dynamic_cast<const shape::Shape *>(obj))
+            aabb = shape->GetLocalAABB();
+        else
+            aabb = obj->GetAABB();
 
-		collision::AABB aabb;
-		if (const auto *shape = dynamic_cast<const shape::Shape *>(obj.get()))
-		{
-			aabb = shape->GetLocalAABB();
-		}
-		else
-		{
-			aabb = obj->GetAABB();
-		}
+        return (localP.x >= aabb.min.x && localP.x <= aabb.max.x &&
+                localP.y >= aabb.min.y && localP.y <= aabb.max.y);
+    };
 
-		if (localP.x >= aabb.min.x && localP.x <= aabb.max.x &&
-			localP.y >= aabb.min.y && localP.y <= aabb.max.y)
-		{
-			return obj.get();
-		}
-	}
-	return nullptr;
+    // PASS 1: Check for Thrusters first (so they are always on top of the "stack")
+    for (auto &obj : objects)
+    {
+        if (dynamic_cast<shape::Thruster*>(obj.get())) {
+            if (isPointingAt(obj.get())) return obj.get();
+        }
+    }
+
+    // PASS 2: Check all other objects
+    for (auto &obj : objects)
+    {
+        if (!dynamic_cast<shape::Thruster*>(obj.get())) {
+            if (isPointingAt(obj.get())) return obj.get();
+        }
+    }
+
+    return nullptr;
 }
 
 math::Vec2 World::SnapToNearestDynamicObject(const math::Vec2 &position, float snapRadius)
@@ -324,7 +329,7 @@ void World::Update(float deltaMs, int iterations, physics::Rigidbody *&selectedB
 	UpdateTrails(deltaMs);
 
 	if (!settings->recording)
-		RemoveObjects(selectedBody, draggedBody);
+		RemoveObjects(deltaMs, selectedBody, draggedBody);
 }
 
 void World::Draw(Renderer &renderer) const
@@ -343,6 +348,28 @@ size_t World::RigidbodyCount() const
 	return objects.size();
 }
 
+// At the top of World.cpp, add this helper (or make it a private method):
+static void SafeErase(std::vector<std::unique_ptr<physics::Rigidbody>> &objects,
+					  size_t index)
+{
+	physics::Rigidbody *dying = objects[index].get();
+
+	// If the dying object is a thruster, Detach() is handled by ~Thruster().
+	// If it is a body that thrusters are attached to, we must find those
+	// thrusters and detach them NOW — before 'dying' is freed — so they
+	// don't hold a dangling attachedBody pointer.
+	for (auto &obj : objects)
+	{
+		if (auto *t = dynamic_cast<shape::Thruster *>(obj.get()))
+		{
+			if (t->GetAttachedBody() == dying)
+				t->Detach();
+		}
+	}
+
+	objects.erase(objects.begin() + static_cast<long>(index));
+}
+
 void World::RemoveObject(physics::Rigidbody *draggedBody)
 {
 
@@ -350,33 +377,43 @@ void World::RemoveObject(physics::Rigidbody *draggedBody)
 	{
 		if (draggedBody == objects[i].get())
 		{
-			draggedBody = nullptr;
-			objects.erase(objects.begin() + static_cast<long>(i));
+			SafeErase(objects, i);
 			return;
 		}
 	}
 }
 
-void World::RemoveObjects(physics::Rigidbody *&selectedBody, physics::Rigidbody *&draggedBody)
+void World::RemoveObjects(float deltaMs, physics::Rigidbody *&selectedBody, physics::Rigidbody *&draggedBody)
 {
+
+	float deltaSeconds = deltaMs / 1000.0f;
 
 	for (size_t i = 0; i < objects.size();)
 	{
+
 		collision::AABB box = objects[i]->GetAABB();
 		if (box.max.y < viewBottom)
 		{
-			if (selectedBody == objects[i].get())
+
+			objects[i]->removalTimer += deltaSeconds;
+			if (objects[i]->removalTimer >= REMOVAL_TIME_THRESHOLD)
 			{
-				selectedBody = nullptr;
+				if (selectedBody == objects[i].get())
+					selectedBody = nullptr;
+				if (draggedBody == objects[i].get())
+					draggedBody = nullptr;
+				SafeErase(objects, i);
 			}
-			if (draggedBody == objects[i].get())
+			else
 			{
-				draggedBody = nullptr;
+				++i;
 			}
-			objects.erase(objects.begin() + static_cast<long>(i));
 		}
+
 		else
 		{
+			// 4. RESET the timer if it pops back into view (e.g., via a bounce or explosion)
+			objects[i]->removalTimer = 0.0f;
 			++i;
 		}
 	}
@@ -437,6 +474,13 @@ void World::UpdateTriggerCollisions()
 
 void World::ClearObjects()
 {
+	// Detach all thrusters before clearing so no generator outlives
+	// the thruster that owns it
+	for (auto &obj : objects)
+	{
+		if (auto *t = dynamic_cast<shape::Thruster *>(obj.get()))
+			t->Detach();
+	}
 	objects.clear();
 	trails.clear();
 }
