@@ -27,6 +27,7 @@ struct SpawnSettings
     float staticFriction = 1.0f;
     float kineticFriction = 0.7f;
     float thrusterForce = 5.0f;
+    bool thrusterAccelMode = false;
     int thrustKey = GLFW_KEY_SPACE;
     bool flip = true;
     std::array<float, 4> color = {255.0f, 255.0f, 255.0f, 1.0f};
