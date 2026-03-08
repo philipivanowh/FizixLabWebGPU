@@ -318,6 +318,51 @@ void UIManager::RenderMainControls(std::size_t bodyCount,
     RenderInspectorPanel(selectedBody);
 }
 
+void UIManager::RenderVisualizationSetting()
+{
+    ImGui::Spacing();
+    ImGui::Separator();
+    ImGui::Spacing();
+    SectionHead("VISUALIZATION");
+
+    // ── Force Display ──────────────────────────────────────────────
+    ImGui::PushStyleColor(ImGuiCol_Text, Col::InkMid);
+    ImGui::Text("Force Diagrams");
+    ImGui::PopStyleColor();
+
+    ImGui::Indent(12.0f);
+
+    // Show FBD Arrows
+    bool showArrows = settings->showFBDArrows;
+    if (ImGui::Checkbox("##fbd_arrows", &showArrows))
+    {
+        settings->showFBDArrows = showArrows;
+    }
+    ImGui::SameLine();
+    ImGui::TextColored(showArrows ? Col::Ink : Col::InkFaint, "Force Arrows");
+    if (ImGui::IsItemHovered())
+    {
+        ImGui::SetTooltip("Display free body diagram force vectors");
+    }
+
+    // Show FBD Labels
+    bool showLabels = settings->showFBDLabels;
+    if (ImGui::Checkbox("##fbd_labels", &showLabels))
+    {
+        settings->showFBDLabels = showLabels;
+    }
+    ImGui::SameLine();
+    ImGui::TextColored(showLabels ? Col::Ink : Col::InkFaint, "Force Labels");
+    if (ImGui::IsItemHovered())
+    {
+        ImGui::SetTooltip("Display force magnitude and symbol (e.g., Fg = 98.1 N)");
+    }
+
+    ImGui::Unindent(12.0f);
+
+    ImGui::Spacing();
+}
+
 void UIManager::RenderSpawner() { RenderSpawnerPanel(); }
 
 // ================================================================
@@ -679,8 +724,12 @@ void UIManager::RenderSimPanel(std::size_t bodyCount)
         Engine::ClearBodies();
     ImGui::PopStyleColor(4);
 
+    
+    RenderVisualizationSetting();
+
     ImGui::End();
     ImGui::PopStyleColor(2);
+
 }
 
 // ================================================================

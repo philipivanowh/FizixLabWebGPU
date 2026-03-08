@@ -5,6 +5,9 @@
 #include "math/Math.hpp"
 #include "math/Mat4.hpp"
 #include "common/settings.hpp"
+#include <imgui.h>
+#include <backends/imgui_impl_wgpu.h>
+#include <backends/imgui_impl_glfw.h>
 
 #include <array>
 #include <cassert>
@@ -35,8 +38,9 @@ namespace
 	}
 } // namespace
 
-bool Renderer::Initialize(Settings &settings, GLFWscrollfun scrollCallback)
+bool Renderer::Initialize(Settings *settings, GLFWscrollfun scrollCallback)
 {
+	 this->settings = settings;
 	// Open window
 	if (!glfwInit())
 	{
@@ -47,7 +51,7 @@ bool Renderer::Initialize(Settings &settings, GLFWscrollfun scrollCallback)
 #ifdef __APPLE__
 
 #else
-	settings.InitFromMonitor();
+	this->settings->InitFromMonitor();
 #endif
 
 	// ── INSERT POINT A: native resolution ───────────────────────────────
@@ -59,10 +63,10 @@ bool Renderer::Initialize(Settings &settings, GLFWscrollfun scrollCallback)
 
 	// On macOS, request a full Retina (HiDPI) framebuffer.
 	// settings.InitFromMonitor();
-	windowWidth = settings.windowWidth;
-	windowHeight = settings.windowHeight;
-	framebufferWidth = settings.windowWidth;
-	framebufferHeight = settings.windowHeight;
+	windowWidth = settings->windowWidth;
+	windowHeight = settings->windowHeight;
+	framebufferWidth = settings->windowWidth;
+	framebufferHeight = settings->windowHeight;
 
 #ifdef __APPLE__
 	glfwWindowHint(GLFW_COCOA_RETINA_FRAMEBUFFER, GLFW_TRUE);
@@ -867,7 +871,7 @@ void Renderer::DrawHighlightOutline(physics::Rigidbody &body)
 		renderPass.setVertexBuffer(0, vertexBuffer, 0, circleVerts.size() * sizeof(float));
 		renderPass.draw(static_cast<uint32_t>(circleVerts.size() / 2), 1, 0, 0);
 	}
-	
+
 	else if (auto thruster = dynamic_cast<const shape::Thruster *>(&body))
 	{
 		renderPass.setPipeline(pipeline);
@@ -885,7 +889,7 @@ void Renderer::DrawHighlightOutline(physics::Rigidbody &body)
 			const float dist = std::sqrt(x * x + y * y);
 			if (dist > 0.001f)
 			{
-				const float scale = 1.0f + outlineThickness*1.3 / dist;
+				const float scale = 1.0f + outlineThickness * 1.3 / dist;
 				vertices[i] = x * scale;
 				vertices[i + 1] = y * scale;
 			}
@@ -944,9 +948,60 @@ void Renderer::DrawShape(physics::Rigidbody &body, bool highlight)
 	}
 }
 
+void Renderer::DrawTextWorld(const std::string& text,
+                             const math::Vec2& worldPos,
+                             const std::array<float, 4>& color,
+                             float scale)
+{
+    (void)scale;
+    // Store the label for later rendering
+    pendingTextLabels.push_back({text, worldPos, color});
+}
+
+void Renderer::ClearTextLabels()
+{
+    pendingTextLabels.clear();
+}
+
+void Renderer::FlushTextLabels()
+{
+    if (pendingTextLabels.empty())
+        return;
+    
+    ImDrawList* drawList = ImGui::GetBackgroundDrawList();
+    
+    for (const auto& label : pendingTextLabels)
+    {
+        // Convert world position to screen position
+        float screenX = (label.worldPos.x - cameraOffset.x) * currentZoom;
+        float screenY = windowHeight - ((label.worldPos.y - cameraOffset.y) * currentZoom);
+        
+        // Convert color from 0-1 range to ImGui color
+        ImU32 imguiColor = ImGui::ColorConvertFloat4ToU32(
+            ImVec4(label.color[0], label.color[1], label.color[2], label.color[3])
+        );
+        
+        // Calculate text size
+        ImVec2 textSize = ImGui::CalcTextSize(label.text.c_str());
+        ImVec2 textPos(screenX, screenY);
+        
+        // Draw background rectangle
+        drawList->AddRectFilled(
+            ImVec2(textPos.x - 2, textPos.y - 2),
+            ImVec2(textPos.x + textSize.x + 2, textPos.y + textSize.y + 2),
+            ImGui::ColorConvertFloat4ToU32(ImVec4(0.0f, 0.0f, 0.0f, 0.1f)), // ← Change 0.7f to 0.3f
+            2.0f
+        );
+        // Draw text
+        drawList->AddText(textPos, imguiColor, label.text.c_str());
+    }
+}
+
+// In Renderer.cpp
 void Renderer::DrawFBD(physics::Rigidbody &body)
 {
-	// Draw force arrow
+	if(!settings->showFBDArrows)
+		return;
 	std::vector<math::Vec2> forcesToDraw;
 	const auto &displayForces = body.GetForcesForDisplay();
 	forcesToDraw.reserve(displayForces.size());
@@ -957,9 +1012,27 @@ void Renderer::DrawFBD(physics::Rigidbody &body)
 	}
 
 	if (forcesToDraw.empty())
-	{
 		return;
-	}
+
+	// Helper to get force symbol based on type
+	auto getForceSymbol = [](physics::ForceType type) -> std::string
+	{
+		switch (type)
+		{
+		case physics::ForceType::Normal:
+			return "Fn";
+		case physics::ForceType::Frictional:
+			return "Ff";
+		case physics::ForceType::Gravitational:
+			return "Fg";
+		case physics::ForceType::Tension:
+			return "T";
+		case physics::ForceType::Applied:
+			return "Fa";
+		default:
+			return "F";
+		}
+	};
 
 	auto forceColorForType = [](physics::ForceType type) -> std::array<float, 4>
 	{
@@ -974,7 +1047,6 @@ void Renderer::DrawFBD(physics::Rigidbody &body)
 		case physics::ForceType::Tension:
 			return {0.9f, 0.9f, 0.2f, 0.4f};
 		case physics::ForceType::Applied:
-			return {0.95f, 0.60f, 0.15f, 0.85f};
 		default:
 			return {0.5f, 0.3f, 0.5f, 0.4f};
 		}
@@ -985,7 +1057,10 @@ void Renderer::DrawFBD(physics::Rigidbody &body)
 		const math::Vec2 force = forcesToDraw[i];
 		const float angleRadians = force.GetRadian();
 
+		// Convert force from pixels to Newtons for display
 		const math::Vec2 scaledForce = force / SimulationConstants::PIXELS_PER_METER;
+		const float forceMagnitudeNewtons = scaledForce.Length();
+
 		const math::Vec2 arrowEnd = force.Normalize() * math::MapForceToLength(
 															scaledForce,
 															VisualizationConstants::FBD_FORCE_MIN,
@@ -993,6 +1068,7 @@ void Renderer::DrawFBD(physics::Rigidbody &body)
 															VisualizationConstants::FBD_ARROW_MIN,
 															VisualizationConstants::FBD_ARROW_MAX,
 															VisualizationConstants::FBD_CURVE_EXPONENT);
+
 		const std::array<float, 4> forceColor = forceColorForType(displayForces[i].type);
 
 		const float arrowHalfThickness = VisualizationConstants::FBD_ARROW_THICKNESS / 2.0f;
@@ -1001,8 +1077,7 @@ void Renderer::DrawFBD(physics::Rigidbody &body)
 		const float perpendicularY = std::sin(angleRadians + math::PI / 2.0f);
 
 		const std::vector<float> forceVertices = {
-
-			// The rectangle part of the arrow
+			// Rectangle part of the arrow
 			arrowHalfThickness * perpendicularX, arrowHalfThickness * perpendicularY,
 			-arrowHalfThickness * perpendicularX, -arrowHalfThickness * perpendicularY,
 			arrowEnd.x - arrowHalfThickness * perpendicularX, arrowEnd.y - arrowHalfThickness * perpendicularY,
@@ -1011,7 +1086,7 @@ void Renderer::DrawFBD(physics::Rigidbody &body)
 			arrowEnd.x + arrowHalfThickness * perpendicularX, arrowEnd.y + arrowHalfThickness * perpendicularY,
 			arrowHalfThickness * perpendicularX, arrowHalfThickness * perpendicularY,
 
-			// The pointing part of the arrow
+			// Pointing part of the arrow
 			arrowEnd.x - arrowHeadHalfThickness * perpendicularX, arrowEnd.y - arrowHeadHalfThickness * perpendicularY,
 			arrowEnd.x + arrowHeadHalfThickness * perpendicularX, arrowEnd.y + arrowHeadHalfThickness * perpendicularY,
 			arrowEnd.x * VisualizationConstants::FBD_ARROW_HEAD_SCALE,
@@ -1027,6 +1102,38 @@ void Renderer::DrawFBD(physics::Rigidbody &body)
 		renderPass.setBindGroup(0, uniformBindGroup, 1, &forceUniformOffset);
 		renderPass.setVertexBuffer(0, vertexBuffer, 0, forceVertices.size() * sizeof(float));
 		renderPass.draw(vertexCount, 1, 0, 0);
+
+		// ── NEW: Draw force label ─────────────────────────────────────────
+		// Position label at the middle of the arrow, offset to the side
+		math::Vec2 labelOffset = arrowEnd * 0.5f;
+
+		// Offset perpendicular to arrow direction for better readability
+		const float labelOffsetDist = 20.0f;
+		math::Vec2 perpOffset(perpendicularX * labelOffsetDist,
+							  perpendicularY * labelOffsetDist);
+
+		math::Vec2 labelWorldPos = body.pos + labelOffset + perpOffset;
+
+		// Get force symbol
+		std::string symbol = getForceSymbol(displayForces[i].type);
+
+		// Format magnitude (1 decimal place)
+		char magnitudeStr[32];
+		std::snprintf(magnitudeStr, sizeof(magnitudeStr), "%.1f N", forceMagnitudeNewtons);
+
+		// Combine symbol and magnitude
+		std::string label = symbol + " = " + std::string(magnitudeStr);
+
+		// Use brighter color for text
+		std::array<float, 4> textColor = {
+			std::min(forceColor[0] * 2.0f, 1.0f),
+			std::min(forceColor[1] * 2.0f, 1.0f),
+			std::min(forceColor[2] * 2.0f, 1.0f),
+			1.0f // Full opacity for text
+		};
+
+		if(this->settings->showFBDLabels)
+			DrawTextWorld(label, labelWorldPos, textColor);
 	}
 }
 
