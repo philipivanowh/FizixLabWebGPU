@@ -64,7 +64,7 @@ physics::Rigidbody *Engine::thrusterSnapTarget = nullptr;
 // ================================================================
 bool Engine::Initialize()
 {
-    if (!renderer.Initialize(settings, Engine::Scroll_Feedback))
+    if (!renderer.Initialize(&settings, Engine::Scroll_Feedback))
         return false;
 
     uiManager.InitializeImGui(renderer, &settings, &world);
@@ -605,6 +605,9 @@ void Engine::CheckCannon()
 // ================================================================
 void Engine::Render()
 {
+    if(settings.showFBDLabels)
+        renderer.ClearTextLabels();
+
     renderer.BeginFrame();
 
     world.SetCameraInfo(cameraOffset, settings.zoom);
@@ -623,6 +626,10 @@ void Engine::Render()
 
     // ── ImGui ─────────────────────────────────────────────────────
     uiManager.BeginImGuiFrame();
+
+    if(settings.showFBDLabels)
+        renderer.FlushTextLabels();
+
     uiManager.RenderMainControls(world.RigidbodyCount(), selectedBody);
 
     physics::Rigidbody *removedObject = uiManager.ConsumeRemovedObject();

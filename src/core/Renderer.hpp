@@ -40,7 +40,7 @@ class Renderer
 {
 public:
 	// Initialize everything and return true if it went all right
-	bool Initialize(Settings& settings, GLFWscrollfun scrollCallback = nullptr);
+	bool Initialize(Settings *settings, GLFWscrollfun scrollCallback = nullptr);
 
 	// Uninitialize everything that was initialized
 	void Terminate();
@@ -67,6 +67,12 @@ public:
 	void DrawTrailPointsBatched(const std::vector<std::tuple<math::Vec2, float, std::array<float, 4>>> &trailPoints);
 	void DrawTestTriangle();
 	void DrawTest2Triangle();
+	void DrawTextWorld(const std::string &text,
+					   const math::Vec2 &worldPos,
+					   const std::array<float, 4> &color,
+					   float scale = 1.0f);
+	void FlushTextLabels();
+	void ClearTextLabels();
 
 	GLFWwindow *GetWindow() const { return window; }
 	Device GetDevice() const { return device; }
@@ -74,8 +80,8 @@ public:
 	RenderPassEncoder GetRenderPass() const { return renderPass; };
 	TextureFormat GetSurfaceFormat() const { return surfaceFormat; };
 	void SetZoom(float value);
-	void SetCameraOffset(const math::Vec2& offset);  // Add this
-    math::Vec2 GetCameraOffset() const;              // Add this
+	void SetCameraOffset(const math::Vec2 &offset); // Add this
+	math::Vec2 GetCameraOffset() const;				// Add this
 	float GetZoom() const { return currentZoom; }
 
 private:
@@ -117,18 +123,20 @@ private:
 	uint32_t framebufferHeight = WindowConstants::defaultWindowHeight;
 
 	bool surfaceIsSrgb = true;
-	//Camera
+	// Camera
 	float currentZoom = 1.0f;
-    math::Vec2 cameraOffset{0.0f, 0.0f}; 
+	math::Vec2 cameraOffset{0.0f, 0.0f};
 
-	const WGPUColor backgroundColor = WGPUColor{0.0060*9.6, 0.0075*10.5, 0.010*9.8, 1.0};
-	
-		
-	//Text
-	ShaderModule textShaderModule;
-	RenderPipeline textPipeline;
-	BindGroupLayout textBindGroupLayout;
-	PipelineLayout textPipelineLayout;
-	Buffer textVertexBuffer;
-	Sampler textSampler;
+	const WGPUColor backgroundColor = WGPUColor{0.0060 * 9.6, 0.0075 * 10.5, 0.010 * 9.8, 1.0};
+
+	Settings* settings = nullptr;
+
+	// Text
+	struct TextLabel
+	{
+		std::string text;
+		math::Vec2 worldPos;
+		std::array<float, 4> color;
+	};
+	std::vector<TextLabel> pendingTextLabels;
 };

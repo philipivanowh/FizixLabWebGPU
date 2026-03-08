@@ -64,6 +64,8 @@ public:
     int windowHeight = WindowConstants::defaultWindowHeight;
     float zoom = 1.0f;
     GLFWmonitor *monitor = nullptr;
+    bool showFBDLabels = true;
+    bool showFBDArrows = true;
 
     void InitFromMonitor()
     {
@@ -88,7 +90,6 @@ public:
     DragMode dragMode = DragMode::physicsDrag;
 
     // --- Time Control ---
-
 
     float timeScale = 1.0f; // 0 = paused, 1 = normal, 0.1 = slow-mo
     bool paused = false;

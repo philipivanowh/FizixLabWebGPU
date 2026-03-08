@@ -148,6 +148,9 @@ private:
     void RenderSpawnConfigurationControls();
     void RenderSpawnActions();
 
+    // ── Visualization settings ───────────────────────────────────
+    void RenderVisualizationSetting();
+
     // ── Neon helpers ─────────────────────────────────────────────
     bool NeonButton(const char *label, bool active = false);
     void PulsingRecordDot();
