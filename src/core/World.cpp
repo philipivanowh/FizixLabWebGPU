@@ -16,7 +16,8 @@ WorldSnapshot World::CaptureSnapshot() const
 							   obj->linearVel,
 							   obj->linearAcc,
 							   obj->rotation,
-							   obj->angularVel});
+							   obj->angularVel,
+							   obj->forces});
 	}
 	return snap;
 }
@@ -32,6 +33,7 @@ void World::RestoreSnapshot(const WorldSnapshot &snap)
 		objects[i]->linearAcc = snap.bodies[i].linearAcc;
 		objects[i]->rotation = snap.bodies[i].rotation;
 		objects[i]->angularVel = snap.bodies[i].angularVel;
+		objects[i]->forces = snap.bodies[i].forces;
 	}
 }
 

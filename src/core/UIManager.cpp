@@ -934,7 +934,7 @@ void UIManager::RenderInspectorPanel(physics::Rigidbody *body)
             ImGui::SameLine(92.0f);
             ImGui::TextColored(Col::InkMid, "(%.0f, %.0f)", fi.force.x, fi.force.y);
             ImGui::SameLine();
-            ImGui::TextColored(col, "  %.0f N", fi.force.Length());
+            ImGui::TextColored(col, "  %.0f N", fi.force.Length() / SimulationConstants::PIXELS_PER_METER);
         }
     }
 
@@ -1775,14 +1775,54 @@ void UIManager::RenderThrusterInspector(shape::Thruster *thruster)
 
     ImGui::Spacing();
 
-    // ── Force magnitude + Fx/Fy decomposition card ───────────────
+    // ── Force / Acceleration input ────────────────────────────────
     SectionHead("FORCE");
 
-    float currentForce = thruster->magnitude;
-
-    // Power meter bar
+    // ── Mode toggle: Force (N) ↔ Acceleration (m/s²) ─────────────
+    // magnitude is ALWAYS stored as Newtons internally.
+    // Acceleration mode simply divides by the attached body's mass
+    // on display and multiplies back on write — no physics change.
     {
-        const float frac = math::Clamp(currentForce / MAX_THRUSTER_FORCE, 0.0f, 1.0f);
+        const float hw = (cw - ImGui::GetStyle().ItemSpacing.x) * 0.5f;
+        auto ModeBtn = [&](const char *label, bool active)
+        {
+            ImGui::PushStyleColor(ImGuiCol_Button,        active ? Col::BlueSoft  : Col::WidgetBg);
+            ImGui::PushStyleColor(ImGuiCol_ButtonHovered, Col::HoverBg);
+            ImGui::PushStyleColor(ImGuiCol_ButtonActive,  Col::ActiveBg);
+            ImGui::PushStyleColor(ImGuiCol_Text,          active ? Col::Blue : Col::InkMid);
+            ImGui::PushStyleColor(ImGuiCol_Border,        active ? Col::A(Col::Blue, 0.55f) : Col::Border);
+            bool clicked = ImGui::Button(label, {hw, 0});
+            ImGui::PopStyleColor(5);
+            return clicked;
+        };
+        if (ModeBtn("  Force (N)  ",    !thruster->accelerationMode))
+            thruster->accelerationMode = false;
+        ImGui::SameLine();
+        if (ModeBtn("  Accel (m/sÂ²)  ", thruster->accelerationMode))
+            thruster->accelerationMode = true;
+    }
+
+    ImGui::Spacing();
+
+    // Resolve body mass — fall back to 1.0 if unattached so UI stays usable
+    const float bodyMass = (thruster->IsAttached() && thruster->GetAttachedBody())
+                               ? thruster->GetAttachedBody()->mass
+                               : 1.0f;
+
+    // The value shown and edited in the drag widget
+    // In force mode   : Newtons  (stored directly)
+    // In accel mode   : m/s²     (= magnitude / mass)
+    float displayVal = thruster->accelerationMode
+                           ? (thruster->magnitude / bodyMass)
+                           : thruster->magnitude;
+
+    const float maxDisplay = thruster->accelerationMode
+                                 ? (MAX_THRUSTER_FORCE / bodyMass)
+                                 : MAX_THRUSTER_FORCE;
+
+    // Power meter bar — always based on the underlying force fraction
+    {
+        const float frac = math::Clamp(thruster->magnitude / MAX_THRUSTER_FORCE, 0.0f, 1.0f);
         ImVec2 barP = ImGui::GetCursorScreenPos();
         const float barH = 6.0f;
 
@@ -1790,7 +1830,6 @@ void UIManager::RenderThrusterInspector(shape::Thruster *thruster)
                           Col::ToU32(Col::WidgetBg), 3.0f);
         if (frac > 0.001f)
         {
-            // Animated shimmer when active
             const float shim = thruster->isActiveThisFrame
                                    ? (0.92f + 0.08f * std::sin(t * 10.0f))
                                    : 1.0f;
@@ -1808,10 +1847,31 @@ void UIManager::RenderThrusterInspector(shape::Thruster *thruster)
         ImGui::Dummy({cw, barH + 2.0f});
     }
 
+    const char *dragFmt = thruster->accelerationMode ? "%.2f m/sÂ²" : "%.0f N";
+    const float dragStep = thruster->accelerationMode ? 0.1f : 5.0f;
+
     ImGui::SetNextItemWidth(-1);
-    ImGui::DragFloat("##force", &currentForce,
-                     5.0f, 0.0f, MAX_THRUSTER_FORCE, "%.0f N");
-    thruster->magnitude = math::Clamp(currentForce, 0.0f, MAX_THRUSTER_FORCE);
+    ImGui::DragFloat("##forceinput", &displayVal, dragStep, 0.0f, maxDisplay, dragFmt);
+
+    // Write back — convert to Newtons regardless of display mode
+    thruster->magnitude = math::Clamp(
+        thruster->accelerationMode ? (displayVal * bodyMass) : displayVal,
+        0.0f, MAX_THRUSTER_FORCE);
+
+    // Show equivalent value in the other unit as a hint
+    {
+        if (thruster->accelerationMode)
+        {
+            ImGui::TextColored(Col::InkFaint, "  = %.0f N  (mass: %.1f kg)",
+                               thruster->magnitude, bodyMass);
+        }
+        else if (bodyMass > 0.001f)
+        {
+            ImGui::TextColored(Col::InkFaint, "  = %.2f m/sÂ²  (mass: %.1f kg)",
+                               thruster->magnitude / bodyMass, bodyMass);
+        }
+    }
+
     // Fx / Fy decomposition card
     {
         const float rad = math::DegToRad(thruster->rotation);
@@ -1823,8 +1883,7 @@ void UIManager::RenderThrusterInspector(shape::Thruster *thruster)
         ImVec2 cMin = ImGui::GetCursorScreenPos();
         ImVec2 cMax = {cMin.x + cw, cMin.y + cardH};
 
-        dl->AddRectFilled(cMin, cMax,
-                          Col::ToU32(Col::WidgetBg), 5.0f);
+        dl->AddRectFilled(cMin, cMax, Col::ToU32(Col::WidgetBg), 5.0f);
         dl->AddRect(cMin, cMax,
                     Col::ToU32(thruster->isActiveThisFrame
                                    ? Col::A(Col::Amber, 0.4f)
@@ -1834,14 +1893,28 @@ void UIManager::RenderThrusterInspector(shape::Thruster *thruster)
         ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, {4.0f, 1.0f});
         ImGui::Dummy({0.0f, 4.0f});
 
-        ImGui::TextColored(Col::InkMid, "  FORCE COMPONENTS");
-        ImGui::TextColored(Col::InkFaint, "  Fx");
-        ImGui::SameLine(38.0f);
-        ImGui::TextColored(Col::Green, "%+.1f N", fx);
-        ImGui::SameLine(0, 14);
-        ImGui::TextColored(Col::InkFaint, "  Fy");
-        ImGui::SameLine(0, 6);
-        ImGui::TextColored(Col::Amber, "%+.1f N", fy);
+        if (thruster->accelerationMode)
+        {
+            ImGui::TextColored(Col::InkMid, "  ACCEL COMPONENTS");
+            ImGui::TextColored(Col::InkFaint, "  ax");
+            ImGui::SameLine(38.0f);
+            ImGui::TextColored(Col::Green, "%+.2f m/sÂ²", fx / bodyMass);
+            ImGui::SameLine(0, 14);
+            ImGui::TextColored(Col::InkFaint, "  ay");
+            ImGui::SameLine(0, 6);
+            ImGui::TextColored(Col::Amber, "%+.2f m/sÂ²", fy / bodyMass);
+        }
+        else
+        {
+            ImGui::TextColored(Col::InkMid, "  FORCE COMPONENTS");
+            ImGui::TextColored(Col::InkFaint, "  Fx");
+            ImGui::SameLine(38.0f);
+            ImGui::TextColored(Col::Green, "%+.1f N", fx);
+            ImGui::SameLine(0, 14);
+            ImGui::TextColored(Col::InkFaint, "  Fy");
+            ImGui::SameLine(0, 6);
+            ImGui::TextColored(Col::Amber, "%+.1f N", fy);
+        }
 
         ImGui::PopStyleVar();
         ImGui::Dummy({0.0f, 4.0f});
@@ -2368,20 +2441,53 @@ void UIManager::RenderThrusterSpawnConfiguration()
 
     ImGui::Spacing();
 
-    // ── Force magnitude ───────────────────────────────────────────
+    // ── Force / Acceleration input ────────────────────────────────
     SectionHead("FORCE");
+
+    // ── Mode toggle ───────────────────────────────────────────────
+    // thrusterForce always stores Newtons. Acceleration mode uses
+    // spawnSettings.mass as the reference body mass for conversion.
+    {
+        const float hw = (cw - ImGui::GetStyle().ItemSpacing.x) * 0.5f;
+        auto ModeBtn = [&](const char *label, bool active)
+        {
+            ImGui::PushStyleColor(ImGuiCol_Button,        active ? Col::BlueSoft  : Col::WidgetBg);
+            ImGui::PushStyleColor(ImGuiCol_ButtonHovered, Col::HoverBg);
+            ImGui::PushStyleColor(ImGuiCol_ButtonActive,  Col::ActiveBg);
+            ImGui::PushStyleColor(ImGuiCol_Text,          active ? Col::Blue : Col::InkMid);
+            ImGui::PushStyleColor(ImGuiCol_Border,        active ? Col::A(Col::Blue, 0.55f) : Col::Border);
+            bool clicked = ImGui::Button(label, {hw, 0});
+            ImGui::PopStyleColor(5);
+            return clicked;
+        };
+        if (ModeBtn("  Force (N)  ",    !spawnSettings.thrusterAccelMode))
+            spawnSettings.thrusterAccelMode = false;
+        ImGui::SameLine();
+        if (ModeBtn("  Accel (m/sÂ²)  ", spawnSettings.thrusterAccelMode))
+            spawnSettings.thrusterAccelMode = true;
+    }
+
+    ImGui::Spacing();
+
+    const float refMass   = std::max(spawnSettings.mass, 0.001f);
+    const float maxDisplay = spawnSettings.thrusterAccelMode
+                                 ? (MAX_THRUSTER_FORCE / refMass)
+                                 : MAX_THRUSTER_FORCE;
+
+    // Display value — convert for accel mode
+    float displayForce = spawnSettings.thrusterAccelMode
+                             ? (spawnSettings.thrusterForce / refMass)
+                             : spawnSettings.thrusterForce;
 
     const float forceFrac = math::Clamp(spawnSettings.thrusterForce / MAX_THRUSTER_FORCE, 0.0f, 1.0f);
 
-    // Thin coloured bar above the slider as a visual power meter
+    // Power meter bar
     {
         ImVec2 barStart = ImGui::GetCursorScreenPos();
         const float barH = 4.0f;
-        // Track
         dl->AddRectFilled(barStart,
                           {barStart.x + cw, barStart.y + barH},
                           Col::ToU32(Col::WidgetBg), 2.0f);
-        // Fill — green → amber → red based on fraction
         if (forceFrac > 0.001f)
         {
             ImU32 fillCol = forceFrac < 0.5f
@@ -2398,23 +2504,49 @@ void UIManager::RenderThrusterSpawnConfiguration()
         ImGui::Dummy({cw, barH + 2.0f});
     }
 
+    const char *dragFmt  = spawnSettings.thrusterAccelMode ? "%.2f m/sÂ²" : "%.0f N";
+    const float dragStep = spawnSettings.thrusterAccelMode ? 0.1f : 5.0f;
+
     ImGui::SetNextItemWidth(-1);
-    ImGui::DragFloat("##spawnerForce", &spawnSettings.thrusterForce,
-                     5.0f, 0.0f, MAX_THRUSTER_FORCE, "%.0f N");
-    spawnSettings.thrusterForce = math::Clamp(spawnSettings.thrusterForce, 0.0f, MAX_THRUSTER_FORCE);
+    ImGui::DragFloat("##spawnerForce", &displayForce, dragStep, 0.0f, maxDisplay, dragFmt);
+
+    // Write back as Newtons
+    spawnSettings.thrusterForce = math::Clamp(
+        spawnSettings.thrusterAccelMode ? (displayForce * refMass) : displayForce,
+        0.0f, MAX_THRUSTER_FORCE);
+
+    // Cross-unit hint
+    if (spawnSettings.thrusterAccelMode)
+        ImGui::TextColored(Col::InkFaint, "  = %.0f N  (ref mass: %.1f kg)",
+                           spawnSettings.thrusterForce, refMass);
+    else
+        ImGui::TextColored(Col::InkFaint, "  = %.2f m/sÂ²  (ref mass: %.1f kg)",
+                           spawnSettings.thrusterForce / refMass, refMass);
 
     // Fx / Fy decomposition hint
     {
         const float rad = math::DegToRad(spawnSettings.angle);
-        const float fx = spawnSettings.thrusterForce * std::cos(rad);
-        const float fy = spawnSettings.thrusterForce * std::sin(rad);
+        const float fx  = spawnSettings.thrusterForce * std::cos(rad);
+        const float fy  = spawnSettings.thrusterForce * std::sin(rad);
         ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, {4.0f, 1.0f});
-        ImGui::TextColored(Col::InkFaint, "  Fx");
-        ImGui::SameLine(56.0f);
-        ImGui::TextColored(Col::Green, "%+.0f N", fx);
-        ImGui::TextColored(Col::InkFaint, "  Fy");
-        ImGui::SameLine(56.0f);
-        ImGui::TextColored(Col::Amber, "%+.0f N  ", fy);
+        if (spawnSettings.thrusterAccelMode)
+        {
+            ImGui::TextColored(Col::InkFaint, "  ax");
+            ImGui::SameLine(56.0f);
+            ImGui::TextColored(Col::Green, "%+.2f m/sÂ²", fx / refMass);
+            ImGui::TextColored(Col::InkFaint, "  ay");
+            ImGui::SameLine(56.0f);
+            ImGui::TextColored(Col::Amber, "%+.2f m/sÂ²", fy / refMass);
+        }
+        else
+        {
+            ImGui::TextColored(Col::InkFaint, "  Fx");
+            ImGui::SameLine(56.0f);
+            ImGui::TextColored(Col::Green, "%+.0f N", fx);
+            ImGui::TextColored(Col::InkFaint, "  Fy");
+            ImGui::SameLine(56.0f);
+            ImGui::TextColored(Col::Amber, "%+.0f N  ", fy);
+        }
         ImGui::PopStyleVar();
     }
 }

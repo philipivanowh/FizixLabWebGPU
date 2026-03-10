@@ -6,8 +6,8 @@ namespace SimulationConstants
 {
     // Simulation settings
     constexpr float TIME_STEP_MS = 16.67f;       // Time step per frame in milliseconds
-    constexpr int MAX_PHYSICS_ITERATIONS = 1000; // Maximum physics iterations per frame
-    constexpr int MIN_PHYSICS_ITERATIONS = 200;  // Minimum physics iterations per frame
+    constexpr int MAX_PHYSICS_ITERATIONS = 500; // Maximum physics iterations per frame
+    constexpr int MIN_PHYSICS_ITERATIONS = 100;  // Minimum physics iterations per frame
     constexpr float PIXELS_PER_METER = 50.0f;    // Conversion factor from meters to pixels
     constexpr float FBD_SCALER_ADJUSTMENT = 0.005;
 
@@ -30,7 +30,7 @@ namespace PhysicsConstants
 
 namespace DragConstants
 {
-    constexpr float DRAG_STIFNESS = 20000.0f;
+    constexpr float DRAG_STIFNESS = 9000.0f;
 }
 
 namespace VisualizationConstants

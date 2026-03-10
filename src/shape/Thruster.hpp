@@ -114,6 +114,7 @@ namespace shape
 		bool bodyRelative = true;	// angle relative to attached body?
 		bool keyHold = false;		// true = only fire while key is held
 		int fireKey = GLFW_KEY_SPACE;
+		bool accelerationMode = false;
 
 		// Set by Engine each tick based on keyHold + key state
 		bool isActiveThisFrame = false;
