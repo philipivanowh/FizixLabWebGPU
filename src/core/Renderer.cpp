@@ -917,13 +917,15 @@ void Renderer::DrawShape(physics::Rigidbody &body, bool highlight)
 	if (auto box = dynamic_cast<const shape::Box *>(&body))
 	{
 		DrawBox(*box);
-		DrawFBD(body);
+		if(settings->showFBDArrows)
+			DrawFBD(body);
 		return;
 	}
 	else if (auto ball = dynamic_cast<const shape::Ball *>(&body))
 	{
 		DrawBall(*ball);
-		DrawFBD(body);
+		if(settings->showFBDArrows)
+			DrawFBD(body);
 		return;
 	}
 	else if (auto Cannon = dynamic_cast<const shape::Cannon *>(&body))
@@ -934,7 +936,8 @@ void Renderer::DrawShape(physics::Rigidbody &body, bool highlight)
 	else if (auto incline = dynamic_cast<const shape::Incline *>(&body))
 	{
 		DrawIncline(*incline);
-		DrawFBD(body);
+		if(settings->showFBDArrows)
+			DrawFBD(body);
 	}
 	else if (auto trigger = dynamic_cast<const shape::Trigger *>(&body))
 	{
@@ -973,8 +976,8 @@ void Renderer::FlushTextLabels()
     for (const auto& label : pendingTextLabels)
     {
         // Convert world position to screen position
-        float screenX = (label.worldPos.x - cameraOffset.x) * currentZoom;
-        float screenY = windowHeight - ((label.worldPos.y - cameraOffset.y) * currentZoom);
+        float screenX = (label.worldPos.x * currentZoom - cameraOffset.x) ;
+        float screenY = windowHeight - ((label.worldPos.y * currentZoom - cameraOffset.y));
         
         // Convert color from 0-1 range to ImGui color
         ImU32 imguiColor = ImGui::ColorConvertFloat4ToU32(
@@ -1000,8 +1003,7 @@ void Renderer::FlushTextLabels()
 // In Renderer.cpp
 void Renderer::DrawFBD(physics::Rigidbody &body)
 {
-	if(!settings->showFBDArrows)
-		return;
+
 	std::vector<math::Vec2> forcesToDraw;
 	const auto &displayForces = body.GetForcesForDisplay();
 	forcesToDraw.reserve(displayForces.size());

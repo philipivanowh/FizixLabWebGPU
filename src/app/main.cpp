@@ -34,7 +34,7 @@ int main()
 
         state->lastTimeMs = nowMs;
 
-        Engine::RunFrame(deltaMs, 1000);
+        Engine::RunFrame(deltaMs, 200);
 
         // ----------------------------------------------------
         // 🔴 CALL TOOLTIP HERE *ONLY IF YOU HAVE dx, dy*
@@ -55,7 +55,7 @@ int main()
         const std::chrono::duration<float, std::milli> delta = now - lastTime;
         lastTime = now;
 
-        Engine::RunFrame(delta.count(), 1000);
+        Engine::RunFrame(delta.count(), 200);
         
     }
 

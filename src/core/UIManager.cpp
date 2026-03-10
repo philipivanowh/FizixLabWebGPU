@@ -932,7 +932,7 @@ void UIManager::RenderInspectorPanel(physics::Rigidbody *body)
             ImGui::SameLine(92.0f);
             ImGui::TextColored(Col::InkMid, "(%.0f, %.0f)", fi.force.x, fi.force.y);
             ImGui::SameLine();
-            ImGui::TextColored(col, "  %.0f N", fi.force.Length());
+            ImGui::TextColored(col, "  %.0f N", fi.force.Length() / SimulationConstants::PIXELS_PER_METER);
         }
     }
 
