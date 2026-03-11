@@ -195,47 +195,58 @@ void World::Initialize(Settings *settings)
 {
 	this->settings = settings;
 }
+
+std::vector<shape::Rope> &World::GetRopes()
+{
+	return ropes;
+}
+
 physics::Rigidbody *World::PickBody(const math::Vec2 &p)
 {
-    // Helper lambda to perform the actual intersection math
-    auto isPointingAt = [&](physics::Rigidbody* obj) -> bool {
-        const float angle = -obj->rotation;
-        const float cosA = std::cos(angle);
-        const float sinA = std::sin(angle);
-        const float dx = p.x - obj->pos.x;
-        const float dy = p.y - obj->pos.y;
+	// Helper lambda to perform the actual intersection math
+	auto isPointingAt = [&](physics::Rigidbody *obj) -> bool
+	{
+		const float angle = -obj->rotation;
+		const float cosA = std::cos(angle);
+		const float sinA = std::sin(angle);
+		const float dx = p.x - obj->pos.x;
+		const float dy = p.y - obj->pos.y;
 
-        const math::Vec2 localP{
-            cosA * dx - sinA * dy + obj->pos.x,
-            sinA * dx + cosA * dy + obj->pos.y};
+		const math::Vec2 localP{
+			cosA * dx - sinA * dy + obj->pos.x,
+			sinA * dx + cosA * dy + obj->pos.y};
 
-        collision::AABB aabb;
-        if (const auto *shape = dynamic_cast<const shape::Shape *>(obj))
-            aabb = shape->GetLocalAABB();
-        else
-            aabb = obj->GetAABB();
+		collision::AABB aabb;
+		if (const auto *shape = dynamic_cast<const shape::Shape *>(obj))
+			aabb = shape->GetLocalAABB();
+		else
+			aabb = obj->GetAABB();
 
-        return (localP.x >= aabb.min.x && localP.x <= aabb.max.x &&
-                localP.y >= aabb.min.y && localP.y <= aabb.max.y);
-    };
+		return (localP.x >= aabb.min.x && localP.x <= aabb.max.x &&
+				localP.y >= aabb.min.y && localP.y <= aabb.max.y);
+	};
 
-    // PASS 1: Check for Thrusters first (so they are always on top of the "stack")
-    for (auto &obj : objects)
-    {
-        if (dynamic_cast<shape::Thruster*>(obj.get())) {
-            if (isPointingAt(obj.get())) return obj.get();
-        }
-    }
+	// PASS 1: Check for Thrusters first (so they are always on top of the "stack")
+	for (auto &obj : objects)
+	{
+		if (dynamic_cast<shape::Thruster *>(obj.get()))
+		{
+			if (isPointingAt(obj.get()))
+				return obj.get();
+		}
+	}
 
-    // PASS 2: Check all other objects
-    for (auto &obj : objects)
-    {
-        if (!dynamic_cast<shape::Thruster*>(obj.get())) {
-            if (isPointingAt(obj.get())) return obj.get();
-        }
-    }
+	// PASS 2: Check all other objects
+	for (auto &obj : objects)
+	{
+		if (!dynamic_cast<shape::Thruster *>(obj.get()))
+		{
+			if (isPointingAt(obj.get()))
+				return obj.get();
+		}
+	}
 
-    return nullptr;
+	return nullptr;
 }
 
 math::Vec2 World::SnapToNearestDynamicObject(const math::Vec2 &position, float snapRadius)
@@ -267,45 +278,69 @@ math::Vec2 World::SnapToNearestDynamicObject(const math::Vec2 &position, float s
 	return nearestBody ? nearestBody->pos : position;
 }
 
-void World::Update(float deltaMs, int iterations, physics::Rigidbody *&selectedBody, physics::Rigidbody *&draggedBody)
+void World::Update(float deltaMs, int iterations,
+				   physics::Rigidbody *&selectedBody,
+				   physics::Rigidbody *&draggedBody)
 {
-
 	iterations = ComputeAdaptiveIterations(deltaMs, iterations);
 
 	for (const auto &object : objects)
-	{
 		object->BeginFrameForces();
+
+	// Build static-body list once — passed to rope node collision every sub-step.
+	// Triggers are excluded: they are never physical barriers.
+	std::vector<physics::Rigidbody *> staticBodies;
+	for (const auto &obj : objects)
+	{
+		if (obj->bodyType == physics::RigidbodyType::Static &&
+			!dynamic_cast<shape::Trigger *>(obj.get()))
+			staticBodies.push_back(obj.get());
 	}
 
 	std::vector<math::Vec2> prevPositions(objects.size());
 
 	for (int currIteration = 0; currIteration < iterations; currIteration++)
 	{
-		// Record positions before integration so we know the swept path
 		for (size_t i = 0; i < objects.size(); ++i)
-		{
 			prevPositions[i] = objects[i]->pos;
+
+		// Integrate all Rigidbodies (endpoints integrate here)
+		for (const auto &object : objects)
+			object->Update(deltaMs, iterations);
+
+		
+		// Rope: integrate middle nodes + run stick constraints
+		for (auto &rope : ropes)
+		{
+			rope.Solve(deltaMs);
 		}
 
-		for (const auto &object : objects)
-		{
-			object->Update(deltaMs, iterations);
-		}
+		// Rope: thin static-only collision for middle nodes
+		
+		for (auto &rope : ropes)
+			rope.SolveNodeCollisions(staticBodies);
 
 		std::vector<math::Vec2> integratedPositions(objects.size());
 		for (size_t i = 0; i < objects.size(); ++i)
-		{
 			integratedPositions[i] = objects[i]->pos;
-		}
 
+		// Main collision pipeline — endpoints participate normally.
+		// Middle nodes are not in objects so they never appear here.
 		collisionPipeline.BuildPairs(objects);
 		for (const auto &pair : collisionPipeline.GetPairs())
 		{
 			physics::Rigidbody &bodyA = *objects[pair.first];
 			physics::Rigidbody &bodyB = *objects[pair.second];
-			if (dynamic_cast<shape::Trigger *>(&bodyA) || dynamic_cast<shape::Trigger *>(&bodyB))
-				continue; // Skip trigger pairs
-			if (dynamic_cast<shape::Thruster *>(&bodyA) || dynamic_cast<shape::Thruster *>(&bodyB))
+
+			if (dynamic_cast<shape::Trigger *>(&bodyA) ||
+				dynamic_cast<shape::Trigger *>(&bodyB))
+				continue;
+			if (dynamic_cast<shape::Thruster *>(&bodyA) ||
+				dynamic_cast<shape::Thruster *>(&bodyB))
+				continue;
+
+			// Skip only for the degenerate 2-node rope (endpoints are adjacent)
+			if (SameRopeAndAdjacent(bodyA, bodyB))
 				continue;
 
 			collisionSolver.ResolveIfColliding(bodyA, bodyB);
@@ -319,15 +354,14 @@ void World::Update(float deltaMs, int iterations, physics::Rigidbody *&selectedB
 		}
 	}
 
-	// Update trigger collision states
+	for (auto &rope : ropes)
+		rope.UpdateTensionDisplay();
+
 	UpdateTriggerCollisions();
 
 	for (const auto &object : objects)
-	{
 		object->FinalizeForces(deltaMs);
-	}
 
-	// Update trails
 	UpdateTrails(deltaMs);
 
 	if (!settings->recording)
@@ -336,13 +370,24 @@ void World::Update(float deltaMs, int iterations, physics::Rigidbody *&selectedB
 
 void World::Draw(Renderer &renderer) const
 {
-	// Draw trails first so they appear behind objects
+	// Trails sit behind everything
 	DrawTrails(renderer);
 
+	// Draw all regular bodies.
+	// isRopeNode skips the two endpoint Ball bodies — the rope draws them
+	// as part of its line segments so they don't render as circles.
 	for (const auto &object : objects)
 	{
+		if (object->isRopeNode)
+			continue;
 		renderer.DrawShape(*object, object->isHighlighted);
 	}
+
+	// Draw each rope: segment lines + taut highlight + pin anchor discs.
+	// Middle nodes are pure verlet positions and are never in objects, so
+	// they have no DrawShape call at all — DrawRope is their only renderer.
+	for (const auto &rope : ropes)
+		renderer.DrawRope(rope);
 }
 
 size_t World::RigidbodyCount() const
@@ -421,6 +466,58 @@ void World::RemoveObjects(float deltaMs, physics::Rigidbody *&selectedBody, phys
 	}
 }
 
+shape::Rope &World::AddRope(const shape::Rope::SpawnParams &p)
+{
+	ropes.emplace_back();
+	shape::Rope &rope = ropes.back();
+
+	// Step 1: get the two endpoint Ball unique_ptrs — no World knowledge needed
+	std::vector<std::unique_ptr<physics::Rigidbody>> endpoints = rope.Build(p);
+
+	// Step 2: World takes ownership, collect raw back-pointers
+	std::vector<physics::Rigidbody *> rawPtrs;
+	rawPtrs.reserve(endpoints.size());
+	for (auto &ep : endpoints)
+	{
+		rawPtrs.push_back(ep.get());
+		Add(std::move(ep));
+	}
+
+	// Step 3: Rope builds all RopeNodes (including middle) + constraints
+	rope.RegisterEndpoints(rawPtrs, p);
+
+	return rope;
+}
+
+// Returns true when bodyA and bodyB belong to the SAME rope AND share a direct
+// constraint.  Used to suppress CollisionSolver on adjacent node pairs.
+bool World::SameRopeAndAdjacent(const physics::Rigidbody &bodyA,
+								const physics::Rigidbody &bodyB) const
+{
+	for (const auto &rope : ropes)
+	{
+		if (rope.ContainsBody(&bodyA) && rope.ContainsBody(&bodyB))
+			return rope.AreAdjacent(&bodyA, &bodyB);
+	}
+	return false;
+}
+
+// Returns a pointer to the Rope that owns `body`, or nullptr.
+shape::Rope *World::FindRopeForBody(physics::Rigidbody *body)
+{
+	for (auto &rope : ropes)
+	{
+		if (rope.ContainsBody(body))
+			return &rope;
+	}
+	return nullptr;
+}
+
+const std::vector<shape::Rope> &World::GetRopes() const
+{
+	return ropes;
+}
+
 void World::UpdateTriggerCollisions()
 {
 
@@ -485,6 +582,7 @@ void World::ClearObjects()
 	}
 	objects.clear();
 	trails.clear();
+	ropes.clear();
 }
 
 void World::SetCameraInfo(const math::Vec2 &pos, float zoom)

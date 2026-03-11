@@ -33,32 +33,43 @@ struct SpawnSettings
     std::array<float, 4> color = {255.0f, 255.0f, 255.0f, 1.0f};
     float restitution = 0.4f;
     physics::RigidbodyType bodyType = physics::RigidbodyType::Dynamic;
+    math::Vec2 ropeEndPosition{0.0f, 0.0f};
+    int ropeSegments = 12;
+    float ropeStiffness = 1.0f;
+    float ropeDamping = 0.995f;
+    int ropeStickIterations = 10;
+    bool ropePinStart = true;
+    bool ropePinEnd = false;
 };
 
 struct CannonFireSettings
 {
     // ── Projectile kind ──────────────────────────────────────────
-    enum class ProjectileType { Ball, Box } projectileType = ProjectileType::Ball;
+    enum class ProjectileType
+    {
+        Ball,
+        Box
+    } projectileType = ProjectileType::Ball;
 
     // ── Aim ──────────────────────────────────────────────────────
     math::Vec2 cannonPos{0.0f, 0.0f}; // world-space barrel-tip origin
-    float      angleDegrees = 45.0f;  // barrel angle (degrees, 0 = right)
-    float      speed        = 10.0f; // launch speed magnitude (vel/s)
+    float angleDegrees = 45.0f;       // barrel angle (degrees, 0 = right)
+    float speed = 10.0f;              // launch speed magnitude (vel/s)
 
     // Derived — recomputed live whenever angle or speed changes
     float vx = 0.0f;
     float vy = 0.0f;
 
     // ── Projectile properties ────────────────────────────────────
-    float mass        = 10.0f;
-    float restitution = 0.4f;                                 // 0–1
+    float mass = 10.0f;
+    float restitution = 0.4f;                                // 0–1
     std::array<float, 4> color = {255.f, 255.f, 255.f, 1.f}; // RGBA 0–255
 
     // Ball-specific
-    float radius   = 0.5f;
+    float radius = 0.5f;
 
     // Box-specific
-    float boxWidth  = 1.0f;
+    float boxWidth = 1.0f;
     float boxHeight = 1.0f;
 
     void Recompute()
@@ -72,7 +83,7 @@ struct CannonFireSettings
 class UIManager
 {
 public:
-    void InitializeImGui(Renderer &renderer, Settings* settings, World* world);
+    void InitializeImGui(Renderer &renderer, Settings *settings, World *world);
     void TerminateImGui();
     void BeginImGuiFrame();
     void EndImGuiFrame(Renderer &renderer);
@@ -101,15 +112,14 @@ public:
 
     // Returns the pointer to a removed object if one was just removed, nullptr otherwise
     // Call once per frame; resets the pointer.
-    physics::Rigidbody* ConsumeRemovedObject()
+    physics::Rigidbody *ConsumeRemovedObject()
     {
-        physics::Rigidbody* temp = removedObjectPointer;
+        physics::Rigidbody *temp = removedObjectPointer;
         removedObjectPointer = nullptr;
         return temp;
     }
 
-
-    //Thruster Settings
+    // Thruster Settings
     const float MAX_THRUSTER_FORCE = 10000.0f;
 
 private:
@@ -120,9 +130,9 @@ private:
     void RenderTopTimelineBar();
     void RenderSpawnerPanel();
     void RenderSimPanel(std::size_t bodyCount);
-    void RenderInspectorPanel(physics::Rigidbody* body);
+    void RenderInspectorPanel(physics::Rigidbody *body);
 
-     // ── Cannon inspector (shown when selectedBody is a Cannon) ────
+    // ── Cannon inspector (shown when selectedBody is a Cannon) ────
     void RenderCannonInspector(shape::Cannon *cannon);
 
     // -- Incline inspector (shown when selectedBody is an Incline) ────
@@ -139,7 +149,7 @@ private:
     void RenderCannonSpawnConfiguration();
     void RenderTriggerSpawnConfiguration();
     void RenderThrusterSpawnConfiguration();
-
+    void RenderRopeSpawnConfiguration();
 
     // ── Spawner sub-sections ─────────────────────────────────────
     void RenderSpawnBasics();
@@ -165,23 +175,21 @@ private:
 
     SpawnSettings spawnSettings;
     bool spawnRequestPending = false;
-    World* world = nullptr;
+    World *world = nullptr;
 
-    
     CannonFireSettings cannonFireSettings;
     bool cannonFirePending = false;
 
-    Settings* settings = nullptr;
+    Settings *settings = nullptr;
 
     // Track position editing state for pause/unpause
     bool positionBeingEdited = false;
     bool wasPositionEditedLastFrame = false;
 
     // Track if an object was removed from the inspector
-    physics::Rigidbody* removedObjectPointer = nullptr;
+    physics::Rigidbody *removedObjectPointer = nullptr;
 
     // Window dimensions — set once in RenderMainControls
     float screenW = 1800;
     float screenH = 1000;
-
 };

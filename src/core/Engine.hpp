@@ -87,4 +87,8 @@ private:
 	// Thruster
 	static shape::Thruster *draggingThruster;	   // thruster currently being dragged
 	static physics::Rigidbody *thrusterSnapTarget; // body it will attach to on release
+
+	//Rope
+	static shape::RopeNode* draggedRopeNode;
+   	static shape::Rope*     draggedRope;
 };

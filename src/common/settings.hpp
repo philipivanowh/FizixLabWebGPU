@@ -26,6 +26,7 @@ namespace PhysicsConstants
     inline constexpr float DEFAULT_RESTITUTION = 0.4f;
     inline constexpr float MAX_PENETRATION_CORRECTION = 5.0f;
     constexpr float FRICTION_DISPLAY_THRESHOLD = 1.0f;
+    constexpr float TENSION_DISPLAY_THRESHOLD = 0.5f;
 }
 
 namespace DragConstants

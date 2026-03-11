@@ -53,6 +53,7 @@ namespace physics
 		void TranslateTo(const math::Vec2 &position);
 		void RotateTo(float angleRadians);
 		void Rotate(float amountRadians);
+		void SetMass(float newMass);
 		void AddDisplayForce(const math::Vec2 &forceAmount, const ForceType type);
 		void AddForceGenerator(std::unique_ptr<ForceGenerator> generator);
 		void RemoveForceGenerator(ForceGenerator *generatorToRemove);
@@ -111,6 +112,7 @@ namespace physics
 		mutable bool aabbUpdateRequired = true;
 
 		bool isHighlighted = false; // For rendering highlight outline
+		bool isRopeNode = false;
 
 	protected:
 		void UpdateGravity();

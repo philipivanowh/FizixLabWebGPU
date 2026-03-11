@@ -12,7 +12,8 @@ namespace shape
         Box,
         Cannon,
         Thruster,
-        Trigger
+        Trigger,
+        Rope
     };
 
     class Shape : public physics::Rigidbody

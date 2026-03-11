@@ -99,7 +99,7 @@ namespace shape
                 1.0f,
                 0.0f,
                 physics::RigidbodyType::Static),
-          magnitude(magnitudeN),
+          magnitude(magnitudeN * SimulationConstants::PIXELS_PER_METER),
           bodyRelative(bodyRelativeMode),
           keyHold(keyHoldMode),
           fireKey(fireKey_)

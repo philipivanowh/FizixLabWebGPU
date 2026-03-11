@@ -724,12 +724,10 @@ void UIManager::RenderSimPanel(std::size_t bodyCount)
         Engine::ClearBodies();
     ImGui::PopStyleColor(4);
 
-    
     RenderVisualizationSetting();
 
     ImGui::End();
     ImGui::PopStyleColor(2);
-
 }
 
 // ================================================================
@@ -877,9 +875,11 @@ void UIManager::RenderInspectorPanel(physics::Rigidbody *body)
         KVRow("Radius", Col::ToU32(Col::Ink), "%.2f m", ball->radius / SimulationConstants::PIXELS_PER_METER);
     }
 
-    KVRow("Mass", Col::ToU32(Col::Ink), "%.2f kg", body->mass);
+    float newMass = body->mass;
+    KVRow("Mass", Col::ToU32(Col::Ink), "%.2f kg", newMass);
     ImGui::SetNextItemWidth(-1);
-    ImGui::DragFloat("##mass", &body->mass, 0.01f, 0.01f, 1000.0f);
+    ImGui::DragFloat("##mass", &newMass, 0.01f, 0.01f, 1000.0f);
+    body->SetMass(newMass);
 
     KVRow("Restitution", Col::ToU32(Col::Ink), "%.2f", body->restitution);
     ImGui::SetNextItemWidth(-1);
@@ -930,7 +930,7 @@ void UIManager::RenderInspectorPanel(physics::Rigidbody *body)
             }
             ImGui::TextColored(col, "%-9s", name);
             ImGui::SameLine(92.0f);
-            ImGui::TextColored(Col::InkMid, "(%.0f, %.0f)", fi.force.x, fi.force.y);
+            ImGui::TextColored(Col::InkMid, "(%.0f, %.0f)", fi.force.x / SimulationConstants::PIXELS_PER_METER, fi.force.y / SimulationConstants::PIXELS_PER_METER);
             ImGui::SameLine();
             ImGui::TextColored(col, "  %.0f N", fi.force.Length() / SimulationConstants::PIXELS_PER_METER);
         }
@@ -1609,19 +1609,19 @@ void UIManager::RenderThrusterInspector(shape::Thruster *thruster)
 
     // ── Position (read-only while attached, editable when floating) ──
     {
-        math::Vec2 posM = thruster->pos / SimulationConstants::PIXELS_PER_METER;
+        math::Vec2 posMeters = thruster->pos / SimulationConstants::PIXELS_PER_METER;
         if (thruster->IsAttached())
         {
             // Read-only — position is driven by the attachment
             KVRow("Position", Col::ToU32(Col::InkFaint),
-                  "(%.2f, %.2f) m", posM.x, posM.y);
+                  "(%.2f, %.2f) m", posMeters.x, posMeters.y);
         }
         else
         {
             ImGui::TextColored(Col::InkMid, "Position");
             ImGui::SetNextItemWidth(-1);
-            ImGui::DragFloat2("##pos", &posM.x, 0.01f);
-            thruster->pos = posM * SimulationConstants::PIXELS_PER_METER;
+            ImGui::DragFloat2("##pos", &posMeters.x, 0.01f);
+            thruster->pos = posMeters * SimulationConstants::PIXELS_PER_METER;
             positionBeingEdited = ImGui::IsItemActive();
             if (positionBeingEdited && !wasPositionEditedLastFrame)
                 settings->paused = true;
@@ -1784,16 +1784,16 @@ void UIManager::RenderThrusterInspector(shape::Thruster *thruster)
         const float hw = (cw - ImGui::GetStyle().ItemSpacing.x) * 0.5f;
         auto ModeBtn = [&](const char *label, bool active)
         {
-            ImGui::PushStyleColor(ImGuiCol_Button,        active ? Col::BlueSoft  : Col::WidgetBg);
+            ImGui::PushStyleColor(ImGuiCol_Button, active ? Col::BlueSoft : Col::WidgetBg);
             ImGui::PushStyleColor(ImGuiCol_ButtonHovered, Col::HoverBg);
-            ImGui::PushStyleColor(ImGuiCol_ButtonActive,  Col::ActiveBg);
-            ImGui::PushStyleColor(ImGuiCol_Text,          active ? Col::Blue : Col::InkMid);
-            ImGui::PushStyleColor(ImGuiCol_Border,        active ? Col::A(Col::Blue, 0.55f) : Col::Border);
+            ImGui::PushStyleColor(ImGuiCol_ButtonActive, Col::ActiveBg);
+            ImGui::PushStyleColor(ImGuiCol_Text, active ? Col::Blue : Col::InkMid);
+            ImGui::PushStyleColor(ImGuiCol_Border, active ? Col::A(Col::Blue, 0.55f) : Col::Border);
             bool clicked = ImGui::Button(label, {hw, 0});
             ImGui::PopStyleColor(5);
             return clicked;
         };
-        if (ModeBtn("  Force (N)  ",    !thruster->accelerationMode))
+        if (ModeBtn("  Force (N)  ", !thruster->accelerationMode))
             thruster->accelerationMode = false;
         ImGui::SameLine();
         if (ModeBtn("  Accel (m/sÂ²)  ", thruster->accelerationMode))
@@ -1811,8 +1811,9 @@ void UIManager::RenderThrusterInspector(shape::Thruster *thruster)
     // In force mode   : Newtons  (stored directly)
     // In accel mode   : m/s²     (= magnitude / mass)
     float displayVal = thruster->accelerationMode
-                           ? (thruster->magnitude / bodyMass)
-                           : thruster->magnitude;
+                           ? (thruster->magnitude / bodyMass) / SimulationConstants::PIXELS_PER_METER
+                           : thruster->magnitude / SimulationConstants::PIXELS_PER_METER;
+    ;
 
     const float maxDisplay = thruster->accelerationMode
                                  ? (MAX_THRUSTER_FORCE / bodyMass)
@@ -1853,8 +1854,9 @@ void UIManager::RenderThrusterInspector(shape::Thruster *thruster)
 
     // Write back — convert to Newtons regardless of display mode
     thruster->magnitude = math::Clamp(
-        thruster->accelerationMode ? (displayVal * bodyMass) : displayVal,
-        0.0f, MAX_THRUSTER_FORCE);
+                              thruster->accelerationMode ? (displayVal * bodyMass) : displayVal,
+                              0.0f, MAX_THRUSTER_FORCE) *
+                          SimulationConstants::PIXELS_PER_METER;
 
     // Show equivalent value in the other unit as a hint
     {
@@ -2102,7 +2104,7 @@ void UIManager::RenderSpawnBasics()
 {
     SectionHead("SHAPE & PLACEMENT");
 
-    const char *shapes[] = {"Ball", "Incline", "Box", "Cannon", "Thruster", "Trigger"};
+    const char *shapes[] = {"Ball", "Incline", "Box", "Cannon", "Thruster", "Trigger", "Rope"};
     int si = (int)spawnSettings.shapeType;
     ImGui::SetNextItemWidth(-1);
     ImGui::Combo("##shape", &si, shapes, std::size(shapes));
@@ -2230,6 +2232,23 @@ void UIManager::RenderSpawnConfigurationControls()
         SectionHead("CONFIGURATION");
         RenderTriggerSpawnConfiguration();
     }
+    if (spawnSettings.shapeType == shape::ShapeType::Rope)
+    {
+        SectionHead("CONFIGURATION");
+        RenderRopeSpawnConfiguration();
+    }
+
+}
+
+void UIManager::RenderRopeSpawnConfiguration()
+{
+    ImGui::DragFloat2("End Position", &spawnSettings.ropeEndPosition.x, 0.1f);
+    ImGui::SliderInt("Segments", &spawnSettings.ropeSegments, 2, 40);
+    ImGui::SliderFloat("Stiffness", &spawnSettings.ropeStiffness, 0.1f, 1.0f);
+    ImGui::SliderFloat("Damping", &spawnSettings.ropeDamping, 0.9f, 1.0f);
+    ImGui::SliderInt("Iterations", &spawnSettings.ropeStickIterations, 2, 20);
+    ImGui::Checkbox("Pin Start", &spawnSettings.ropePinStart);
+    ImGui::Checkbox("Pin End", &spawnSettings.ropePinEnd);
 }
 
 void UIManager::RenderSpawnActions()
@@ -2449,16 +2468,16 @@ void UIManager::RenderThrusterSpawnConfiguration()
         const float hw = (cw - ImGui::GetStyle().ItemSpacing.x) * 0.5f;
         auto ModeBtn = [&](const char *label, bool active)
         {
-            ImGui::PushStyleColor(ImGuiCol_Button,        active ? Col::BlueSoft  : Col::WidgetBg);
+            ImGui::PushStyleColor(ImGuiCol_Button, active ? Col::BlueSoft : Col::WidgetBg);
             ImGui::PushStyleColor(ImGuiCol_ButtonHovered, Col::HoverBg);
-            ImGui::PushStyleColor(ImGuiCol_ButtonActive,  Col::ActiveBg);
-            ImGui::PushStyleColor(ImGuiCol_Text,          active ? Col::Blue : Col::InkMid);
-            ImGui::PushStyleColor(ImGuiCol_Border,        active ? Col::A(Col::Blue, 0.55f) : Col::Border);
+            ImGui::PushStyleColor(ImGuiCol_ButtonActive, Col::ActiveBg);
+            ImGui::PushStyleColor(ImGuiCol_Text, active ? Col::Blue : Col::InkMid);
+            ImGui::PushStyleColor(ImGuiCol_Border, active ? Col::A(Col::Blue, 0.55f) : Col::Border);
             bool clicked = ImGui::Button(label, {hw, 0});
             ImGui::PopStyleColor(5);
             return clicked;
         };
-        if (ModeBtn("  Force (N)  ",    !spawnSettings.thrusterAccelMode))
+        if (ModeBtn("  Force (N)  ", !spawnSettings.thrusterAccelMode))
             spawnSettings.thrusterAccelMode = false;
         ImGui::SameLine();
         if (ModeBtn("  Accel (m/sÂ²)  ", spawnSettings.thrusterAccelMode))
@@ -2467,7 +2486,7 @@ void UIManager::RenderThrusterSpawnConfiguration()
 
     ImGui::Spacing();
 
-    const float refMass   = std::max(spawnSettings.mass, 0.001f);
+    const float refMass = std::max(spawnSettings.mass, 0.001f);
     const float maxDisplay = spawnSettings.thrusterAccelMode
                                  ? (MAX_THRUSTER_FORCE / refMass)
                                  : MAX_THRUSTER_FORCE;
@@ -2502,7 +2521,7 @@ void UIManager::RenderThrusterSpawnConfiguration()
         ImGui::Dummy({cw, barH + 2.0f});
     }
 
-    const char *dragFmt  = spawnSettings.thrusterAccelMode ? "%.2f m/sÂ²" : "%.0f N";
+    const char *dragFmt = spawnSettings.thrusterAccelMode ? "%.2f m/sÂ²" : "%.0f N";
     const float dragStep = spawnSettings.thrusterAccelMode ? 0.1f : 5.0f;
 
     ImGui::SetNextItemWidth(-1);
@@ -2524,8 +2543,8 @@ void UIManager::RenderThrusterSpawnConfiguration()
     // Fx / Fy decomposition hint
     {
         const float rad = math::DegToRad(spawnSettings.angle);
-        const float fx  = spawnSettings.thrusterForce * std::cos(rad);
-        const float fy  = spawnSettings.thrusterForce * std::sin(rad);
+        const float fx = spawnSettings.thrusterForce * std::cos(rad);
+        const float fy = spawnSettings.thrusterForce * std::sin(rad);
         ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, {4.0f, 1.0f});
         if (spawnSettings.thrusterAccelMode)
         {

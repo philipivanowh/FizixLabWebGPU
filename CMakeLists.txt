@@ -38,6 +38,7 @@ add_executable(App
 	src/shape/Incline.cpp
 	src/shape/Thruster.cpp
 	src/shape/Trigger.cpp
+	src/shape/Rope.cpp
 	src/shape/Shape.cpp
 	src/collision/Collisions.cpp
 )

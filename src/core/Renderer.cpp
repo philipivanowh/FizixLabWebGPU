@@ -1004,6 +1004,8 @@ void Renderer::FlushTextLabels()
 void Renderer::DrawFBD(physics::Rigidbody &body)
 {
 
+	if (body.isRopeNode)   // ← add this guard
+        return;
 	std::vector<math::Vec2> forcesToDraw;
 	const auto &displayForces = body.GetForcesForDisplay();
 	forcesToDraw.reserve(displayForces.size());
@@ -1173,6 +1175,188 @@ void Renderer::EnsureVertexBufferSize(int size)
 	bufferDesc.usage = BufferUsage::CopyDst | BufferUsage::Vertex;
 	bufferDesc.mappedAtCreation = false;
 	vertexBuffer = device.createBuffer(bufferDesc);
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Renderer::DrawRope
+//
+// Add this method to Renderer.cpp.
+// Also add   void DrawRope(const Rope& rope);   to Renderer.hpp.
+//
+// Design follows DrawGrid exactly:
+//   • Rope segments  → batched into one linePipeline draw call (world-origin
+//     translation, absolute world-space coords) — same as grid lines.
+//   • Pin discs      → one small filled circle per pinned node via pipeline,
+//     same pattern as DrawTrailPoint.
+//   • Tension colour → the segment colour lerps from slack (tan) to taut
+//     (bright yellow) based on normalised tension, giving instant visual
+//     feedback on which parts of the rope are under load.
+// ─────────────────────────────────────────────────────────────────────────────
+void Renderer::DrawRope(const shape::Rope &rope)
+{
+    const auto &nodes       = rope.GetNodes();
+    const auto &constraints = rope.GetConstraints();
+
+    if (nodes.empty())
+        return;
+
+    // ── Find peak tension for normalisation (avoids division by zero) ────────
+    float maxTension = 1.0f;
+    for (const auto &c : constraints)
+    {
+        if (c.tensionMagnitude > maxTension)
+            maxTension = c.tensionMagnitude;
+    }
+
+    // ── Build one vertex buffer containing ALL segment endpoints ─────────────
+    // Each constraint contributes two vertices: (ax, ay, bx, by).
+    // Using world origin (0,0) as the uniform translation means we can pass
+    // absolute world positions directly — identical to how DrawGrid works.
+    std::vector<float> segVertices;
+    segVertices.reserve(constraints.size() * 4);
+
+    // Colour of each segment: lerp tan → yellow with tension
+    // We draw them in two passes (slack / taut) to avoid per-segment uniform
+    // uploads.  If your rope rarely has tension you can simplify to one pass.
+    const std::array<float, 4> slackColor  = {0.60f, 0.45f, 0.25f, 0.90f}; // warm tan
+    const std::array<float, 4> tautColor   = {1.00f, 0.95f, 0.20f, 1.00f}; // bright yellow
+
+    // Single-pass: batch all segments with the slack colour and let the taut
+    // ones stand out via a second thicker draw. For simplicity we just do one
+    // colour pass here — swap to two-pass if you want per-tension colouring.
+    for (const auto &c : constraints)
+    {
+        segVertices.push_back(c.a->body->pos.x);
+        segVertices.push_back(c.a->body->pos.y);
+        segVertices.push_back(c.b->body->pos.x);
+        segVertices.push_back(c.b->body->pos.y);
+    }
+
+    if (!segVertices.empty())
+    {
+        const math::Vec2 worldOrigin(0.0f, 0.0f);
+
+        EnsureVertexBufferSize(static_cast<int>(segVertices.size()));
+        queue.writeBuffer(vertexBuffer, 0,
+                          segVertices.data(),
+                          segVertices.size() * sizeof(float));
+
+        const uint32_t uniformOffset = UpdateUniforms(worldOrigin, slackColor);
+        renderPass.setPipeline(linePipeline);
+        renderPass.setBindGroup(0, uniformBindGroup, 1, &uniformOffset);
+        renderPass.setVertexBuffer(0, vertexBuffer, 0,
+                                   segVertices.size() * sizeof(float));
+        renderPass.draw(
+            static_cast<uint32_t>(segVertices.size() / 2), 1, 0, 0);
+
+        // ── Taut highlight pass ───────────────────────────────────────────
+        // Re-draw segments whose tension exceeds 10 % of peak with the
+        // bright yellow taut colour so high-load sections stand out clearly.
+        std::vector<float> tautVerts;
+        for (const auto &c : constraints)
+        {
+            const float t = c.tensionMagnitude / maxTension;
+            if (t < 0.1f)
+                continue;
+            tautVerts.push_back(c.a->body->pos.x);
+            tautVerts.push_back(c.a->body->pos.y);
+            tautVerts.push_back(c.b->body->pos.x);
+            tautVerts.push_back(c.b->body->pos.y);
+        }
+
+        if (!tautVerts.empty())
+        {
+            EnsureVertexBufferSize(static_cast<int>(tautVerts.size()));
+            queue.writeBuffer(vertexBuffer, 0,
+                              tautVerts.data(),
+                              tautVerts.size() * sizeof(float));
+
+            const uint32_t tautOffset = UpdateUniforms(worldOrigin, tautColor);
+            renderPass.setPipeline(linePipeline);
+            renderPass.setBindGroup(0, uniformBindGroup, 1, &tautOffset);
+            renderPass.setVertexBuffer(0, vertexBuffer, 0,
+                                       tautVerts.size() * sizeof(float));
+            renderPass.draw(
+                static_cast<uint32_t>(tautVerts.size() / 2), 1, 0, 0);
+        }
+    }
+
+    // ── Pin anchor discs ──────────────────────────────────────────────────────
+    // Draw a small filled disc at each pinned (static) node so anchors are
+    // clearly visible. Reuses the same triangle approach as DrawTrailPoint.
+    constexpr float PIN_RADIUS                  = 5.0f;
+    const std::array<float, 4> pinColor         = {0.30f, 0.65f, 1.00f, 1.00f}; // sky blue
+    const std::array<float, 4> pinOutlineColor  = {1.00f, 1.00f, 1.00f, 0.70f};
+
+    constexpr int PIN_STEPS = 16;
+    const float   angleStep = 2.0f * math::PI / static_cast<float>(PIN_STEPS);
+
+    for (const auto &node : nodes)
+    {
+        if (!node.pinned)
+            continue;
+
+        // Build a fan of triangles for the filled disc
+        std::vector<float> discVerts;
+        discVerts.reserve(static_cast<size_t>(PIN_STEPS) * 6);
+
+        for (int s = 0; s < PIN_STEPS; ++s)
+        {
+            const float t0 = angleStep * static_cast<float>(s);
+            const float t1 = angleStep * static_cast<float>(s + 1);
+            // centre
+            discVerts.push_back(0.0f);
+            discVerts.push_back(0.0f);
+            // edge vertex 0
+            discVerts.push_back(PIN_RADIUS * std::cos(t0));
+            discVerts.push_back(PIN_RADIUS * std::sin(t0));
+            // edge vertex 1
+            discVerts.push_back(PIN_RADIUS * std::cos(t1));
+            discVerts.push_back(PIN_RADIUS * std::sin(t1));
+        }
+
+        EnsureVertexBufferSize(static_cast<int>(discVerts.size()));
+        queue.writeBuffer(vertexBuffer, 0,
+                          discVerts.data(),
+                          discVerts.size() * sizeof(float));
+
+        const uint32_t discOffset = UpdateUniforms(node.body->pos, pinColor);
+        renderPass.setPipeline(pipeline);
+        renderPass.setBindGroup(0, uniformBindGroup, 1, &discOffset);
+        renderPass.setVertexBuffer(0, vertexBuffer, 0,
+                                   discVerts.size() * sizeof(float));
+        renderPass.draw(
+            static_cast<uint32_t>(discVerts.size() / 2), 1, 0, 0);
+
+        // Thin outline ring — reuse the same disc but draw as lines
+        std::vector<float> ringVerts;
+        ringVerts.reserve(static_cast<size_t>(PIN_STEPS) * 4);
+        for (int s = 0; s < PIN_STEPS; ++s)
+        {
+            const float t0 = angleStep * static_cast<float>(s);
+            const float t1 = angleStep * static_cast<float>(s + 1);
+            ringVerts.push_back((PIN_RADIUS + 2.0f) * std::cos(t0));
+            ringVerts.push_back((PIN_RADIUS + 2.0f) * std::sin(t0));
+            ringVerts.push_back((PIN_RADIUS + 2.0f) * std::cos(t1));
+            ringVerts.push_back((PIN_RADIUS + 2.0f) * std::sin(t1));
+        }
+
+        EnsureVertexBufferSize(static_cast<int>(ringVerts.size()));
+        queue.writeBuffer(vertexBuffer, 0,
+                          ringVerts.data(),
+                          ringVerts.size() * sizeof(float));
+
+        const uint32_t ringOffset = UpdateUniforms(node.body->pos, pinOutlineColor);
+        renderPass.setPipeline(linePipeline);
+        renderPass.setBindGroup(0, uniformBindGroup, 1, &ringOffset);
+        renderPass.setVertexBuffer(0, vertexBuffer, 0,
+                                   ringVerts.size() * sizeof(float));
+        renderPass.draw(
+            static_cast<uint32_t>(ringVerts.size() / 2), 1, 0, 0);
+    }
+
+    // Restore fill pipeline as convention (DrawShape callers expect it active)
+    renderPass.setPipeline(pipeline);
 }
 
 void Renderer::DrawBox(const shape::Box &box)

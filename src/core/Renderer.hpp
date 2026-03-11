@@ -25,6 +25,7 @@
 #include "shape/Incline.hpp"
 #include "shape/Trigger.hpp"
 #include "shape/Thruster.hpp"
+#include "shape/Rope.hpp"
 #include "physics/Rigidbody.hpp"
 #include "math/Vec2.hpp"
 #include "common/settings.hpp"
@@ -54,6 +55,7 @@ public:
 
 	void DrawHighlightOutline(physics::Rigidbody &body);
 	void DrawShape(physics::Rigidbody &body, bool highlight = false);
+	void DrawRope(const shape::Rope &rope);
 	void DrawBox(const shape::Box &box);
 	void DrawBall(const shape::Ball &ball);
 	void DrawCannon(const shape::Cannon &Cannon);

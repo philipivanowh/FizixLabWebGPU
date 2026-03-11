@@ -59,6 +59,10 @@ float Engine::simulationTimeMs = 0.0f;
 shape::Thruster *Engine::draggingThruster = nullptr;
 physics::Rigidbody *Engine::thrusterSnapTarget = nullptr;
 
+// -- Rope drag state -------------
+shape::RopeNode *Engine::draggedRopeNode = nullptr;
+shape::Rope *Engine::draggedRope = nullptr;
+
 // ================================================================
 // INIT / SHUTDOWN
 // ================================================================
@@ -130,6 +134,20 @@ void Engine::CheckSpawning()
             true,              // body-relative
             false,             // always-on
             req.thrustKey));
+    }
+    else if (req.shapeType == shape::ShapeType::Rope)
+    {
+        shape::Rope::SpawnParams rp;
+        rp.startWorld = req.position;
+        rp.endWorld = req.ropeEndPosition;
+        rp.segmentCount = req.ropeSegments;
+        rp.segmentMass = req.mass;
+        rp.stiffness = req.ropeStiffness;
+        rp.stickIterations = req.ropeStickIterations;
+        rp.damping = req.ropeDamping;
+        rp.pinStart = req.ropePinStart;
+        rp.pinEnd = req.ropePinEnd;
+        world.AddRope(rp);
     }
 
     // Always nudge physics forward after a spawn so the object
@@ -250,94 +268,91 @@ void Engine::Update(float deltaMs, int iterations)
     const float zoomedY = (scaledMy - cy) / zoom + cy - cameraOffset.y;
     mouseWorld = Vec2(zoomedX, static_cast<float>(winH) - zoomedY);
 
-    // ── Mouse down — select / drag / thruster grab ────────────────
+    // ── Mouse down ────────────────────────────────────────────────
     if (pressedLeft && !mouseDownLeft && !overUI)
     {
         mouseDownLeft = true;
-        physics::Rigidbody *clickedBody = world.PickBody(mouseWorld);
 
-        // Thrusters go through the exact same single-click-to-select,
-        // hold-to-drag path as every other body.  The only difference is
-        // that the hold counter block (below) detects a Thruster and
-        // switches to thruster-drag mode instead of normal draggedBody.
-        if (clickedBody == selectedBody && selectedBody != nullptr)
+        // ── NEW: rope node pick — checked before regular PickBody ─────────
+        // Rope nodes are tiny so we offer a generous 20 px grab radius.
         {
-            // Second click on same body — begin drag
-            if (auto *t = dynamic_cast<shape::Thruster *>(selectedBody))
+            constexpr float ROPE_PICK_RADIUS = 20.0f;
+            for (auto &rope : world.GetRopes())
             {
-                draggingThruster = t;
-                thrusterSnapTarget = nullptr;
-                t->Detach();
+                shape::RopeNode *node = rope.PickNode(mouseWorld, ROPE_PICK_RADIUS);
+                if (node)
+                {
+                    draggedRopeNode = node;
+                    draggedRope = &rope;
+                    isPanning = false;
+                    continue;
+                }
+            }
+        }
+
+        {
+            physics::Rigidbody *clickedBody = world.PickBody(mouseWorld);
+
+            if (clickedBody == selectedBody && selectedBody != nullptr)
+            {
+                if (auto *t = dynamic_cast<shape::Thruster *>(selectedBody))
+                {
+                    draggingThruster = t;
+                    thrusterSnapTarget = nullptr;
+                    t->Detach();
+                    isPanning = false;
+                }
+                else
+                {
+                    draggedBody = selectedBody;
+                    staticDragOffset = draggedBody->pos - mouseWorld;
+                    isPanning = false;
+                }
+                wasSelectedBodyJustClicked = false;
+                selectedBodyHoldFrames = 0;
+            }
+            else if (clickedBody)
+            {
+                if (selectedBody)
+                    selectedBody->isHighlighted = false;
+                selectedBody = clickedBody;
+                selectedBody->isHighlighted = true;
+                draggedBody = nullptr;
+                draggingThruster = nullptr;
+                wasSelectedBodyJustClicked = true;
+                selectedBodyHoldFrames = 0;
                 isPanning = false;
             }
             else
             {
-                // Normal body — second click begins standard drag
-                draggedBody = selectedBody;
-                staticDragOffset = draggedBody->pos - mouseWorld;
-                isPanning = false;
+                if (selectedBody)
+                {
+                    selectedBody->isHighlighted = false;
+                    selectedBody = nullptr;
+                }
+                draggedBody = nullptr;
+                draggingThruster = nullptr;
+                wasSelectedBodyJustClicked = false;
+                selectedBodyHoldFrames = 0;
+                isPanning = true;
+                panStartMouse = mouseScreen;
+                panStartCamera = cameraOffset;
             }
-            wasSelectedBodyJustClicked = false;
-            selectedBodyHoldFrames = 0;
-        }
-        else if (clickedBody)
-        {
-            // First click on a new body — select only
-            if (selectedBody)
-                selectedBody->isHighlighted = false;
-            selectedBody = clickedBody;
-            selectedBody->isHighlighted = true;
-            draggedBody = nullptr;
-            draggingThruster = nullptr;
-            wasSelectedBodyJustClicked = true;
-            selectedBodyHoldFrames = 0;
-            isPanning = false;
-        }
-        else
-        {
-            // Click on empty space — start panning
-            if (selectedBody)
-            {
-                selectedBody->isHighlighted = false;
-                selectedBody = nullptr;
-            }
-            // for (size_t i = 0; i < world.GetObjects().size(); i++)
-            // {
-            //     world.GetObjects()[i]->isHighlighted = false;
-            // }
-
-            draggedBody = nullptr;
-            draggingThruster = nullptr;
-            wasSelectedBodyJustClicked = false;
-            selectedBodyHoldFrames = 0;
-            isPanning = true;
-            panStartMouse = mouseScreen;
-            panStartCamera = cameraOffset;
         }
     }
 
-    // ── Hold counter — promote select to drag ─────────────────────
-    // For normal bodies: set draggedBody.
-    // For Thrusters:     detach from attached body and enter thruster-drag mode.
-    // Skip entirely while thruster-dragging is already active.
-    // ── Hold counter / Breakaway logic ─────────────────────────────
-    if (!draggingThruster && mouseDownLeft && selectedBody && !draggedBody && !isPanning)
+    // ── Hold counter — promote select → drag ──────────────────────
+    if (!draggingThruster && mouseDownLeft && selectedBody && !draggedBody &&
+        !isPanning && !draggedRopeNode) // ← don't promote while rope-dragging
     {
         selectedBodyHoldFrames++;
 
         auto *thruster = dynamic_cast<shape::Thruster *>(selectedBody);
-
-        // Calculate distance between mouse and the object
         float distToMouse = (mouseWorld - selectedBody->pos).Length();
 
-        // Promotion Logic:
-        // 1. Hold for enough frames (Standard)
-        // 2. OR if it's a thruster, pull it far enough away (Breakaway)
         bool shouldStartDrag = (selectedBodyHoldFrames >= dragThresholdFrames);
-        if (thruster && thruster->IsAttached() && distToMouse > 40.0f) // 40px threshold
-        {
+        if (thruster && thruster->IsAttached() && distToMouse > 40.0f)
             shouldStartDrag = true;
-        }
 
         if (shouldStartDrag)
         {
@@ -345,7 +360,7 @@ void Engine::Update(float deltaMs, int iterations)
             {
                 draggingThruster = thruster;
                 thrusterSnapTarget = nullptr;
-                thruster->Detach(); // Ownership moves back to world management
+                thruster->Detach();
             }
             else
             {
@@ -358,25 +373,30 @@ void Engine::Update(float deltaMs, int iterations)
     // ── Mouse release ─────────────────────────────────────────────
     if (!pressedLeft)
     {
-        // ── Thruster: attach to snap target on release ────────────
+        // ── NEW: rope drag release ────────────────────────────────
+        if (draggedRope)
+        {
+            draggedRope->ReleaseNode();
+            draggedRope = nullptr;
+            draggedRopeNode = nullptr;
+        }
+
         if (draggingThruster)
         {
             if (thrusterSnapTarget)
             {
-                // Convert the thruster's world position into the target's local space
                 const float c = std::cos(-thrusterSnapTarget->rotation);
                 const float s = std::sin(-thrusterSnapTarget->rotation);
                 const Vec2 diff = draggingThruster->pos - thrusterSnapTarget->pos;
                 const Vec2 localOffset(diff.x * c - diff.y * s,
                                        diff.x * s + diff.y * c);
 
-                draggingThruster->AttachTo(thrusterSnapTarget, localOffset, draggingThruster->GetAngleDegrees());
+                draggingThruster->AttachTo(thrusterSnapTarget, localOffset,
+                                           draggingThruster->GetAngleDegrees());
                 draggingThruster->enabled = true;
                 thrusterSnapTarget->isHighlighted = false;
             }
 
-            // ─────────────────────────────────────────────────────────
-            // Whether attached or not, clear thruster drag state
             draggingThruster = nullptr;
             thrusterSnapTarget = nullptr;
         }
@@ -417,15 +437,16 @@ void Engine::Update(float deltaMs, int iterations)
     if (mouseDownRight)
         mouseDeltaScale = mouseWorld - mouseInitialPos;
 
+    // ── NEW: rope node drag — move node to cursor each frame ──────
+    if (draggedRopeNode && draggedRope && mouseDownLeft)
+        draggedRope->DragNode(draggedRopeNode, mouseWorld);
+
     // ── Thruster: move with mouse + find snap target ──────────────
     if (draggingThruster && mouseDownLeft)
     {
         draggingThruster->pos = mouseWorld;
 
-        // 1. Keep track of the target from the PREVIOUS frame
         physics::Rigidbody *lastTarget = thrusterSnapTarget;
-
-        // 2. Use a smaller radius (40px instead of 80px) for tighter snapping
         const float snapRadius = 60.0f;
         const Vec2 snapped = world.SnapToNearestDynamicObject(mouseWorld, snapRadius);
 
@@ -433,7 +454,7 @@ void Engine::Update(float deltaMs, int iterations)
         {
             physics::Rigidbody *candidate = world.PickBody(snapped);
             if (candidate && candidate != draggingThruster &&
-                candidate->bodyType == RigidbodyType::Dynamic &&
+                candidate->bodyType == physics::RigidbodyType::Dynamic &&
                 !dynamic_cast<shape::Thruster *>(candidate))
             {
                 thrusterSnapTarget = candidate;
@@ -448,24 +469,21 @@ void Engine::Update(float deltaMs, int iterations)
             thrusterSnapTarget = nullptr;
         }
 
-        // 3. CLEANUP: If the target changed or was lost, un-highlight the old one immediately
         if (lastTarget && lastTarget != thrusterSnapTarget)
-        {
             lastTarget->isHighlighted = false;
-        }
     }
+
     // ── Normal body dragging ──────────────────────────────────────
-    // Skip if we're dragging a thruster — the block above handles it
     if (draggedBody && !isPanning && !draggingThruster)
     {
-        if (draggedBody->bodyType == RigidbodyType::Static)
+        if (draggedBody->bodyType == physics::RigidbodyType::Static)
         {
             if (!(dynamic_cast<shape::Cannon *>(draggedBody)))
                 draggedBody->TranslateTo(mouseWorld + staticDragOffset);
             else
                 draggedBody->TranslateTo(mouseWorld);
         }
-        else if (draggedBody->bodyType == RigidbodyType::Dynamic)
+        else if (draggedBody->bodyType == physics::RigidbodyType::Dynamic)
         {
             switch (settings.dragMode)
             {
@@ -479,7 +497,8 @@ void Engine::Update(float deltaMs, int iterations)
                                                   stiffness * math::Clamp(draggedBody->mass, 20.f, 100.f) / 20.f);
                 Vec2 delta = mouseWorld - draggedBody->pos;
                 draggedBody->dragForce =
-                    (delta * stiffness - draggedBody->linearVel * damping) * draggedBody->mass;
+                    (delta * stiffness - draggedBody->linearVel * damping) *
+                    draggedBody->mass;
                 break;
             }
             }
@@ -510,10 +529,6 @@ void Engine::Update(float deltaMs, int iterations)
     }
     else
     {
-        // ── LIVE MODE ─────────────────────────────────────────────
-
-        // Compute scaled delta first so thruster + recording use the
-        // same value that world.Update() will integrate
         float scaledDelta = 0.0f;
 
         if (spawnNudgeFrames > 0)
@@ -533,24 +548,17 @@ void Engine::Update(float deltaMs, int iterations)
 
         simulationTimeMs += scaledDelta;
 
-        // ── Thruster sync + force application ────────────────────
-        // Must happen AFTER delta is known and BEFORE world.Update()
-        // so the force lands in the current tick's integration.
         for (auto &obj : world.GetObjects())
         {
             auto *t = dynamic_cast<shape::Thruster *>(obj.get());
             if (!t || !t->IsAttached())
                 continue;
 
-            // Move the thruster to track its attached body
             t->SyncToAttachedBody();
-
-            // Determine whether it fires this frame
             t->isActiveThisFrame = t->enabled &&
                                    (!t->keyHold || glfwGetKey(window, t->fireKey) == GLFW_PRESS);
         }
 
-        // ── Recording ─────────────────────────────────────────────
         if (settings.recording)
         {
             if (++recordFrameCounter % settings.recordInterval == 0)
@@ -605,7 +613,7 @@ void Engine::CheckCannon()
 // ================================================================
 void Engine::Render()
 {
-    if(settings.showFBDLabels)
+    if (settings.showFBDLabels)
         renderer.ClearTextLabels();
 
     renderer.BeginFrame();
@@ -627,7 +635,7 @@ void Engine::Render()
     // ── ImGui ─────────────────────────────────────────────────────
     uiManager.BeginImGuiFrame();
 
-    if(settings.showFBDLabels)
+    if (settings.showFBDLabels)
         renderer.FlushTextLabels();
 
     uiManager.RenderMainControls(world.RigidbodyCount(), selectedBody);

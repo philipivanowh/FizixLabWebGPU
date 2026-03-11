@@ -5,6 +5,7 @@
 #include "physics/Rigidbody.hpp"
 #include "core/Snapshot.hpp"
 #include "math/Vec2.hpp"
+#include "shape/Rope.hpp"
 
 #include "common/settings.hpp"
 
@@ -47,9 +48,15 @@ public:
 	void Update(float deltaMs, int iterations, physics::Rigidbody *&selectedBody, physics::Rigidbody *&draggedBody);
 	void Draw(Renderer &renderer) const;
 
+	shape::Rope &AddRope(const shape::Rope::SpawnParams &p);
+	bool SameRopeAndAdjacent(const physics::Rigidbody &a,
+							 const physics::Rigidbody &b) const;
+	shape::Rope *FindRopeForBody(physics::Rigidbody *body);
+	const std::vector<shape::Rope> &GetRopes() const;
+
 	size_t RigidbodyCount() const;
 	void ClearObjects();
-	const std::vector<std::unique_ptr<physics::Rigidbody>>& GetObjects() const { return objects; }
+	const std::vector<std::unique_ptr<physics::Rigidbody>> &GetObjects() const { return objects; }
 
 	// Trail management
 	void StartTrail(physics::Rigidbody *projectile, float lifetime = 2.0f);
@@ -58,6 +65,7 @@ public:
 	void SetCameraInfo(const math::Vec2 &cameraPos, float zoom); // For LOD calculations
 
 	physics::Rigidbody *PickBody(const math::Vec2 &p);
+	std::vector<shape::Rope> &GetRopes();
 
 	// If `position` lies within `snapRadius` of any body’s center, return
 	// the body's position; otherwise return the original coordinate.  This
@@ -75,11 +83,12 @@ private:
 								const math::Vec2 &prevPos,
 								const math::Vec2 &integratedPos);
 	int ClampIterations(int value) const;
-	void RemoveObjects(float deltaMs,physics::Rigidbody *&selectedBody, physics::Rigidbody *&draggedBody);
+	void RemoveObjects(float deltaMs, physics::Rigidbody *&selectedBody, physics::Rigidbody *&draggedBody);
 	void UpdateTriggerCollisions();
 	float CalculateLODMultiplier(const math::Vec2 &trailPosition) const; // LOD helper
 
 	std::vector<std::unique_ptr<physics::Rigidbody>> objects;
+	std::vector<shape::Rope> ropes;
 	std::vector<ProjectileTrail> trails; // Active projectile trails
 	CollisionPipeline collisionPipeline;
 	CollisionSolver collisionSolver;
