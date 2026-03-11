@@ -5,6 +5,7 @@
 #include "shape/Box.hpp"
 #include "shape/Cannon.hpp"
 #include "shape/Incline.hpp"
+#include "shape/Spring.hpp"
 #include "shape/Trigger.hpp"
 #include "shape/Thruster.hpp"
 #include "shape/Shape.hpp"
@@ -135,19 +136,36 @@ void Engine::CheckSpawning()
             false,             // always-on
             req.thrustKey));
     }
-    else if (req.shapeType == shape::ShapeType::Rope)
+    // Rope is very unstable at this stage so it will be avoided
+    //  else if (req.shapeType == shape::ShapeType::Rope)
+    //  {
+    //      shape::Rope::SpawnParams rp;
+    //      rp.startWorld = req.position;
+    //      rp.endWorld = req.ropeEndPosition;
+    //      rp.segmentCount = req.ropeSegments;
+    //      rp.segmentMass = req.mass;
+    //      rp.stiffness = req.ropeStiffness;
+    //      rp.stickIterations = req.ropeStickIterations;
+    //      rp.damping = req.ropeDamping;
+    //      rp.pinStart = req.ropePinStart;
+    //      rp.pinEnd = req.ropePinEnd;
+    //      world.AddRope(rp);
+    //  }
+    else if (req.shapeType == shape::ShapeType::Spring)
     {
-        shape::Rope::SpawnParams rp;
-        rp.startWorld = req.position;
-        rp.endWorld = req.ropeEndPosition;
-        rp.segmentCount = req.ropeSegments;
-        rp.segmentMass = req.mass;
-        rp.stiffness = req.ropeStiffness;
-        rp.stickIterations = req.ropeStickIterations;
-        rp.damping = req.ropeDamping;
-        rp.pinStart = req.ropePinStart;
-        rp.pinEnd = req.ropePinEnd;
-        world.AddRope(rp);
+        const float PPM = SimulationConstants::PIXELS_PER_METER;
+
+        auto *sp = new shape::Spring(
+            req.position,
+            req.springAngle,
+            req.springRestLength * PPM,
+            req.springStiffness,
+            req.color);
+        sp->damping = req.springDamping;
+        sp->coilCount = req.springCoilCount;
+        if (req.springInitialCompression > 0.001f)
+            sp->SetCompression(req.springInitialCompression);
+        world.Add(std::unique_ptr<shape::Spring>(sp));
     }
 
     // Always nudge physics forward after a spawn so the object
@@ -485,6 +503,17 @@ void Engine::Update(float deltaMs, int iterations)
         }
         else if (draggedBody->bodyType == physics::RigidbodyType::Dynamic)
         {
+            // if (dynamic_cast<shape::Spring *>(draggedBody))
+            // {
+            //     // const float stiffness = DragConstants::DRAG_STIFNESS;
+            //     // const float damping = 30.0f * std::sqrt(
+            //     //                                   stiffness * math::Clamp(10, 20.f, 100.f) / 20.f);
+            //     // Vec2 delta = mouseWorld - draggedBody->pos;
+            //     // draggedBody->dragForce =
+            //     //     (delta * stiffness - draggedBody->linearVel * damping) *
+            //     //     draggedBody->mass;
+            // }
+
             switch (settings.dragMode)
             {
             case DragMode::percisionDrag:
@@ -566,8 +595,37 @@ void Engine::Update(float deltaMs, int iterations)
         }
 
         world.Update(scaledDelta, iterations, selectedBody, draggedBody);
+
         CheckSpawning();
         CheckCannon();
+        CheckSpring();
+    }
+}
+
+void Engine::CheckSpring()
+{
+    SpringReleaseSettings rel;
+    if (!uiManager.ConsumeSpringReleaseRequest(rel))
+        return;
+
+    constexpr float LAUNCH_RADIUS = 80.0f; // pixels, tune to taste
+    for (auto &rb : world.GetObjects())
+    {
+        if (rb->bodyType != physics::RigidbodyType::Dynamic)
+            continue;
+        math::Vec2 toBody = rb->pos - rel.tipPos;
+        float dist = toBody.Length();
+        if (dist > LAUNCH_RADIUS)
+            continue;
+
+        // Dot with launch direction to reject bodies behind the spring
+        float alignment = toBody.x * rel.direction.x + toBody.y * rel.direction.y;
+        if (alignment < -LAUNCH_RADIUS * 0.25f)
+            continue;
+
+        // Apply impulse:  Δv = impulse / mass
+        float speed = rel.impulseStrength / rb->mass;
+        rb->linearVel += rel.direction * speed;
     }
 }
 

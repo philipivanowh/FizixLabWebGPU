@@ -5,6 +5,7 @@
 #include "math/Math.hpp"
 #include "math/Mat4.hpp"
 #include "common/settings.hpp"
+#include "shape/Spring.hpp"
 #include <imgui.h>
 #include <backends/imgui_impl_wgpu.h>
 #include <backends/imgui_impl_glfw.h>
@@ -40,7 +41,7 @@ namespace
 
 bool Renderer::Initialize(Settings *settings, GLFWscrollfun scrollCallback)
 {
-	 this->settings = settings;
+	this->settings = settings;
 	// Open window
 	if (!glfwInit())
 	{
@@ -906,6 +907,51 @@ void Renderer::DrawHighlightOutline(physics::Rigidbody &body)
 		renderPass.setVertexBuffer(0, vertexBuffer, 0, vertexCount * 2 * sizeof(float));
 		renderPass.draw(vertexCount, 1, 0, 0);
 	}
+	else if (auto spring = dynamic_cast<const shape::Spring *>(&body))
+	{
+		// Highlight: draw the full bounding rect (coil + both plates) scaled
+		// outward from the base anchor, then overlay a bright border ring at
+		// the top-plate tip — mirrors the armed-pulse ring but always visible.
+		renderPass.setPipeline(pipeline);
+
+		// Collect all sub-part vertices into one buffer and push them outward
+		// from the local origin (which is the spring base anchor at pos).
+		std::vector<float> allVerts;
+		{
+			auto append = [&](const std::vector<float> &src)
+			{
+				allVerts.insert(allVerts.end(), src.begin(), src.end());
+			};
+			append(spring->GetCoilBodyVertexLocalPos());
+			append(spring->GetBasePlateVertexLocalPos());
+			append(spring->GetTopPlateVertexLocalPos());
+		}
+
+		for (size_t i = 0; i < allVerts.size(); i += 2)
+		{
+			const float x    = allVerts[i];
+			const float y    = allVerts[i + 1];
+			const float dist = std::sqrt(x * x + y * y);
+			if (dist > 0.001f)
+			{
+				const float scale = 1.0f + outlineThickness * 1.2f / dist;
+				allVerts[i]     = x * scale;
+				allVerts[i + 1] = y * scale;
+			}
+		}
+
+		if (!allVerts.empty())
+		{
+			EnsureVertexBufferSize(allVerts.size());
+			queue.writeBuffer(vertexBuffer, 0,
+							  allVerts.data(), allVerts.size() * sizeof(float));
+			vertexCount = static_cast<uint32_t>(allVerts.size() / 2);
+			uint32_t uniformOffset = UpdateUniforms(spring->pos, highlightColor);
+			renderPass.setBindGroup(0, uniformBindGroup, 1, &uniformOffset);
+			renderPass.setVertexBuffer(0, vertexBuffer, 0, vertexCount * 2 * sizeof(float));
+			renderPass.draw(vertexCount, 1, 0, 0);
+		}
+	}
 }
 
 void Renderer::DrawShape(physics::Rigidbody &body, bool highlight)
@@ -917,14 +963,14 @@ void Renderer::DrawShape(physics::Rigidbody &body, bool highlight)
 	if (auto box = dynamic_cast<const shape::Box *>(&body))
 	{
 		DrawBox(*box);
-		if(settings->showFBDArrows)
+		if (settings->showFBDArrows)
 			DrawFBD(body);
 		return;
 	}
 	else if (auto ball = dynamic_cast<const shape::Ball *>(&body))
 	{
 		DrawBall(*ball);
-		if(settings->showFBDArrows)
+		if (settings->showFBDArrows)
 			DrawFBD(body);
 		return;
 	}
@@ -936,7 +982,7 @@ void Renderer::DrawShape(physics::Rigidbody &body, bool highlight)
 	else if (auto incline = dynamic_cast<const shape::Incline *>(&body))
 	{
 		DrawIncline(*incline);
-		if(settings->showFBDArrows)
+		if (settings->showFBDArrows)
 			DrawFBD(body);
 	}
 	else if (auto trigger = dynamic_cast<const shape::Trigger *>(&body))
@@ -949,63 +995,66 @@ void Renderer::DrawShape(physics::Rigidbody &body, bool highlight)
 		// Draw FBD on the attached body, not the thruster itself
 		return;
 	}
+	else if (auto spring = dynamic_cast<shape::Spring *>(&body))
+	{
+		DrawSpring(*spring);
+		return;
+	}
 }
 
-void Renderer::DrawTextWorld(const std::string& text,
-                             const math::Vec2& worldPos,
-                             const std::array<float, 4>& color,
-                             float scale)
+void Renderer::DrawTextWorld(const std::string &text,
+							 const math::Vec2 &worldPos,
+							 const std::array<float, 4> &color,
+							 float scale)
 {
-    (void)scale;
-    // Store the label for later rendering
-    pendingTextLabels.push_back({text, worldPos, color});
+	(void)scale;
+	// Store the label for later rendering
+	pendingTextLabels.push_back({text, worldPos, color});
 }
 
 void Renderer::ClearTextLabels()
 {
-    pendingTextLabels.clear();
+	pendingTextLabels.clear();
 }
 
 void Renderer::FlushTextLabels()
 {
-    if (pendingTextLabels.empty())
-        return;
-    
-    ImDrawList* drawList = ImGui::GetBackgroundDrawList();
-    
-    for (const auto& label : pendingTextLabels)
-    {
-        // Convert world position to screen position
-        float screenX = (label.worldPos.x * currentZoom - cameraOffset.x) ;
-        float screenY = windowHeight - ((label.worldPos.y * currentZoom - cameraOffset.y));
-        
-        // Convert color from 0-1 range to ImGui color
-        ImU32 imguiColor = ImGui::ColorConvertFloat4ToU32(
-            ImVec4(label.color[0], label.color[1], label.color[2], label.color[3])
-        );
-        
-        // Calculate text size
-        ImVec2 textSize = ImGui::CalcTextSize(label.text.c_str());
-        ImVec2 textPos(screenX, screenY);
-        
-        // Draw background rectangle
-        drawList->AddRectFilled(
-            ImVec2(textPos.x - 2, textPos.y - 2),
-            ImVec2(textPos.x + textSize.x + 2, textPos.y + textSize.y + 2),
-            ImGui::ColorConvertFloat4ToU32(ImVec4(0.0f, 0.0f, 0.0f, 0.1f)), // ← Change 0.7f to 0.3f
-            2.0f
-        );
-        // Draw text
-        drawList->AddText(textPos, imguiColor, label.text.c_str());
-    }
+	if (pendingTextLabels.empty())
+		return;
+
+	ImDrawList *drawList = ImGui::GetBackgroundDrawList();
+
+	for (const auto &label : pendingTextLabels)
+	{
+		// Convert world position to screen position
+		float screenX = (label.worldPos.x * currentZoom - cameraOffset.x);
+		float screenY = windowHeight - ((label.worldPos.y * currentZoom - cameraOffset.y));
+
+		// Convert color from 0-1 range to ImGui color
+		ImU32 imguiColor = ImGui::ColorConvertFloat4ToU32(
+			ImVec4(label.color[0], label.color[1], label.color[2], label.color[3]));
+
+		// Calculate text size
+		ImVec2 textSize = ImGui::CalcTextSize(label.text.c_str());
+		ImVec2 textPos(screenX, screenY);
+
+		// Draw background rectangle
+		drawList->AddRectFilled(
+			ImVec2(textPos.x - 2, textPos.y - 2),
+			ImVec2(textPos.x + textSize.x + 2, textPos.y + textSize.y + 2),
+			ImGui::ColorConvertFloat4ToU32(ImVec4(0.0f, 0.0f, 0.0f, 0.1f)), // ← Change 0.7f to 0.3f
+			2.0f);
+		// Draw text
+		drawList->AddText(textPos, imguiColor, label.text.c_str());
+	}
 }
 
 // In Renderer.cpp
 void Renderer::DrawFBD(physics::Rigidbody &body)
 {
 
-	if (body.isRopeNode)   // ← add this guard
-        return;
+	if (body.isRopeNode) // ← add this guard
+		return;
 	std::vector<math::Vec2> forcesToDraw;
 	const auto &displayForces = body.GetForcesForDisplay();
 	forcesToDraw.reserve(displayForces.size());
@@ -1136,7 +1185,7 @@ void Renderer::DrawFBD(physics::Rigidbody &body)
 			1.0f // Full opacity for text
 		};
 
-		if(this->settings->showFBDLabels)
+		if (this->settings->showFBDLabels)
 			DrawTextWorld(label, labelWorldPos, textColor);
 	}
 }
@@ -1194,169 +1243,169 @@ void Renderer::EnsureVertexBufferSize(int size)
 // ─────────────────────────────────────────────────────────────────────────────
 void Renderer::DrawRope(const shape::Rope &rope)
 {
-    const auto &nodes       = rope.GetNodes();
-    const auto &constraints = rope.GetConstraints();
+	const auto &nodes = rope.GetNodes();
+	const auto &constraints = rope.GetConstraints();
 
-    if (nodes.empty())
-        return;
+	if (nodes.empty())
+		return;
 
-    // ── Find peak tension for normalisation (avoids division by zero) ────────
-    float maxTension = 1.0f;
-    for (const auto &c : constraints)
-    {
-        if (c.tensionMagnitude > maxTension)
-            maxTension = c.tensionMagnitude;
-    }
+	// ── Find peak tension for normalisation (avoids division by zero) ────────
+	float maxTension = 1.0f;
+	for (const auto &c : constraints)
+	{
+		if (c.tensionMagnitude > maxTension)
+			maxTension = c.tensionMagnitude;
+	}
 
-    // ── Build one vertex buffer containing ALL segment endpoints ─────────────
-    // Each constraint contributes two vertices: (ax, ay, bx, by).
-    // Using world origin (0,0) as the uniform translation means we can pass
-    // absolute world positions directly — identical to how DrawGrid works.
-    std::vector<float> segVertices;
-    segVertices.reserve(constraints.size() * 4);
+	// ── Build one vertex buffer containing ALL segment endpoints ─────────────
+	// Each constraint contributes two vertices: (ax, ay, bx, by).
+	// Using world origin (0,0) as the uniform translation means we can pass
+	// absolute world positions directly — identical to how DrawGrid works.
+	std::vector<float> segVertices;
+	segVertices.reserve(constraints.size() * 4);
 
-    // Colour of each segment: lerp tan → yellow with tension
-    // We draw them in two passes (slack / taut) to avoid per-segment uniform
-    // uploads.  If your rope rarely has tension you can simplify to one pass.
-    const std::array<float, 4> slackColor  = {0.60f, 0.45f, 0.25f, 0.90f}; // warm tan
-    const std::array<float, 4> tautColor   = {1.00f, 0.95f, 0.20f, 1.00f}; // bright yellow
+	// Colour of each segment: lerp tan → yellow with tension
+	// We draw them in two passes (slack / taut) to avoid per-segment uniform
+	// uploads.  If your rope rarely has tension you can simplify to one pass.
+	const std::array<float, 4> slackColor = {0.60f, 0.45f, 0.25f, 0.90f}; // warm tan
+	const std::array<float, 4> tautColor = {1.00f, 0.95f, 0.20f, 1.00f};  // bright yellow
 
-    // Single-pass: batch all segments with the slack colour and let the taut
-    // ones stand out via a second thicker draw. For simplicity we just do one
-    // colour pass here — swap to two-pass if you want per-tension colouring.
-    for (const auto &c : constraints)
-    {
-        segVertices.push_back(c.a->body->pos.x);
-        segVertices.push_back(c.a->body->pos.y);
-        segVertices.push_back(c.b->body->pos.x);
-        segVertices.push_back(c.b->body->pos.y);
-    }
+	// Single-pass: batch all segments with the slack colour and let the taut
+	// ones stand out via a second thicker draw. For simplicity we just do one
+	// colour pass here — swap to two-pass if you want per-tension colouring.
+	for (const auto &c : constraints)
+	{
+		segVertices.push_back(c.a->pos.x);
+		segVertices.push_back(c.a->pos.y);
+		segVertices.push_back(c.b->pos.x);
+		segVertices.push_back(c.b->pos.y);
+	}
 
-    if (!segVertices.empty())
-    {
-        const math::Vec2 worldOrigin(0.0f, 0.0f);
+	if (!segVertices.empty())
+	{
+		const math::Vec2 worldOrigin(0.0f, 0.0f);
 
-        EnsureVertexBufferSize(static_cast<int>(segVertices.size()));
-        queue.writeBuffer(vertexBuffer, 0,
-                          segVertices.data(),
-                          segVertices.size() * sizeof(float));
+		EnsureVertexBufferSize(static_cast<int>(segVertices.size()));
+		queue.writeBuffer(vertexBuffer, 0,
+						  segVertices.data(),
+						  segVertices.size() * sizeof(float));
 
-        const uint32_t uniformOffset = UpdateUniforms(worldOrigin, slackColor);
-        renderPass.setPipeline(linePipeline);
-        renderPass.setBindGroup(0, uniformBindGroup, 1, &uniformOffset);
-        renderPass.setVertexBuffer(0, vertexBuffer, 0,
-                                   segVertices.size() * sizeof(float));
-        renderPass.draw(
-            static_cast<uint32_t>(segVertices.size() / 2), 1, 0, 0);
+		const uint32_t uniformOffset = UpdateUniforms(worldOrigin, slackColor);
+		renderPass.setPipeline(linePipeline);
+		renderPass.setBindGroup(0, uniformBindGroup, 1, &uniformOffset);
+		renderPass.setVertexBuffer(0, vertexBuffer, 0,
+								   segVertices.size() * sizeof(float));
+		renderPass.draw(
+			static_cast<uint32_t>(segVertices.size() / 2), 1, 0, 0);
 
-        // ── Taut highlight pass ───────────────────────────────────────────
-        // Re-draw segments whose tension exceeds 10 % of peak with the
-        // bright yellow taut colour so high-load sections stand out clearly.
-        std::vector<float> tautVerts;
-        for (const auto &c : constraints)
-        {
-            const float t = c.tensionMagnitude / maxTension;
-            if (t < 0.1f)
-                continue;
-            tautVerts.push_back(c.a->body->pos.x);
-            tautVerts.push_back(c.a->body->pos.y);
-            tautVerts.push_back(c.b->body->pos.x);
-            tautVerts.push_back(c.b->body->pos.y);
-        }
+		// ── Taut highlight pass ───────────────────────────────────────────
+		// Re-draw segments whose tension exceeds 10 % of peak with the
+		// bright yellow taut colour so high-load sections stand out clearly.
+		std::vector<float> tautVerts;
+		for (const auto &c : constraints)
+		{
+			const float t = c.tensionMagnitude / maxTension;
+			if (t < 0.1f)
+				continue;
+			tautVerts.push_back(c.a->pos.x);
+			tautVerts.push_back(c.a->pos.y);
+			tautVerts.push_back(c.b->pos.x);
+			tautVerts.push_back(c.b->pos.y);
+		}
 
-        if (!tautVerts.empty())
-        {
-            EnsureVertexBufferSize(static_cast<int>(tautVerts.size()));
-            queue.writeBuffer(vertexBuffer, 0,
-                              tautVerts.data(),
-                              tautVerts.size() * sizeof(float));
+		if (!tautVerts.empty())
+		{
+			EnsureVertexBufferSize(static_cast<int>(tautVerts.size()));
+			queue.writeBuffer(vertexBuffer, 0,
+							  tautVerts.data(),
+							  tautVerts.size() * sizeof(float));
 
-            const uint32_t tautOffset = UpdateUniforms(worldOrigin, tautColor);
-            renderPass.setPipeline(linePipeline);
-            renderPass.setBindGroup(0, uniformBindGroup, 1, &tautOffset);
-            renderPass.setVertexBuffer(0, vertexBuffer, 0,
-                                       tautVerts.size() * sizeof(float));
-            renderPass.draw(
-                static_cast<uint32_t>(tautVerts.size() / 2), 1, 0, 0);
-        }
-    }
+			const uint32_t tautOffset = UpdateUniforms(worldOrigin, tautColor);
+			renderPass.setPipeline(linePipeline);
+			renderPass.setBindGroup(0, uniformBindGroup, 1, &tautOffset);
+			renderPass.setVertexBuffer(0, vertexBuffer, 0,
+									   tautVerts.size() * sizeof(float));
+			renderPass.draw(
+				static_cast<uint32_t>(tautVerts.size() / 2), 1, 0, 0);
+		}
+	}
 
-    // ── Pin anchor discs ──────────────────────────────────────────────────────
-    // Draw a small filled disc at each pinned (static) node so anchors are
-    // clearly visible. Reuses the same triangle approach as DrawTrailPoint.
-    constexpr float PIN_RADIUS                  = 5.0f;
-    const std::array<float, 4> pinColor         = {0.30f, 0.65f, 1.00f, 1.00f}; // sky blue
-    const std::array<float, 4> pinOutlineColor  = {1.00f, 1.00f, 1.00f, 0.70f};
+	// ── Pin anchor discs ──────────────────────────────────────────────────────
+	// Draw a small filled disc at each pinned (static) node so anchors are
+	// clearly visible. Reuses the same triangle approach as DrawTrailPoint.
+	constexpr float PIN_RADIUS = 5.0f;
+	const std::array<float, 4> pinColor = {0.30f, 0.65f, 1.00f, 1.00f}; // sky blue
+	const std::array<float, 4> pinOutlineColor = {1.00f, 1.00f, 1.00f, 0.70f};
 
-    constexpr int PIN_STEPS = 16;
-    const float   angleStep = 2.0f * math::PI / static_cast<float>(PIN_STEPS);
+	constexpr int PIN_STEPS = 16;
+	const float angleStep = 2.0f * math::PI / static_cast<float>(PIN_STEPS);
 
-    for (const auto &node : nodes)
-    {
-        if (!node.pinned)
-            continue;
+	for (const auto &node : nodes)
+	{
+		if (!node.IsEndpoint()) // only draw circles at the two real endpoints
+			continue;
 
-        // Build a fan of triangles for the filled disc
-        std::vector<float> discVerts;
-        discVerts.reserve(static_cast<size_t>(PIN_STEPS) * 6);
+		// Build a fan of triangles for the filled disc
+		std::vector<float> discVerts;
+		discVerts.reserve(static_cast<size_t>(PIN_STEPS) * 6);
 
-        for (int s = 0; s < PIN_STEPS; ++s)
-        {
-            const float t0 = angleStep * static_cast<float>(s);
-            const float t1 = angleStep * static_cast<float>(s + 1);
-            // centre
-            discVerts.push_back(0.0f);
-            discVerts.push_back(0.0f);
-            // edge vertex 0
-            discVerts.push_back(PIN_RADIUS * std::cos(t0));
-            discVerts.push_back(PIN_RADIUS * std::sin(t0));
-            // edge vertex 1
-            discVerts.push_back(PIN_RADIUS * std::cos(t1));
-            discVerts.push_back(PIN_RADIUS * std::sin(t1));
-        }
+		for (int s = 0; s < PIN_STEPS; ++s)
+		{
+			const float t0 = angleStep * static_cast<float>(s);
+			const float t1 = angleStep * static_cast<float>(s + 1);
+			// centre
+			discVerts.push_back(0.0f);
+			discVerts.push_back(0.0f);
+			// edge vertex 0
+			discVerts.push_back(PIN_RADIUS * std::cos(t0));
+			discVerts.push_back(PIN_RADIUS * std::sin(t0));
+			// edge vertex 1
+			discVerts.push_back(PIN_RADIUS * std::cos(t1));
+			discVerts.push_back(PIN_RADIUS * std::sin(t1));
+		}
 
-        EnsureVertexBufferSize(static_cast<int>(discVerts.size()));
-        queue.writeBuffer(vertexBuffer, 0,
-                          discVerts.data(),
-                          discVerts.size() * sizeof(float));
+		EnsureVertexBufferSize(static_cast<int>(discVerts.size()));
+		queue.writeBuffer(vertexBuffer, 0,
+						  discVerts.data(),
+						  discVerts.size() * sizeof(float));
 
-        const uint32_t discOffset = UpdateUniforms(node.body->pos, pinColor);
-        renderPass.setPipeline(pipeline);
-        renderPass.setBindGroup(0, uniformBindGroup, 1, &discOffset);
-        renderPass.setVertexBuffer(0, vertexBuffer, 0,
-                                   discVerts.size() * sizeof(float));
-        renderPass.draw(
-            static_cast<uint32_t>(discVerts.size() / 2), 1, 0, 0);
+		const uint32_t discOffset = UpdateUniforms(node.pos, pinColor);
+		renderPass.setPipeline(pipeline);
+		renderPass.setBindGroup(0, uniformBindGroup, 1, &discOffset);
+		renderPass.setVertexBuffer(0, vertexBuffer, 0,
+								   discVerts.size() * sizeof(float));
+		renderPass.draw(
+			static_cast<uint32_t>(discVerts.size() / 2), 1, 0, 0);
 
-        // Thin outline ring — reuse the same disc but draw as lines
-        std::vector<float> ringVerts;
-        ringVerts.reserve(static_cast<size_t>(PIN_STEPS) * 4);
-        for (int s = 0; s < PIN_STEPS; ++s)
-        {
-            const float t0 = angleStep * static_cast<float>(s);
-            const float t1 = angleStep * static_cast<float>(s + 1);
-            ringVerts.push_back((PIN_RADIUS + 2.0f) * std::cos(t0));
-            ringVerts.push_back((PIN_RADIUS + 2.0f) * std::sin(t0));
-            ringVerts.push_back((PIN_RADIUS + 2.0f) * std::cos(t1));
-            ringVerts.push_back((PIN_RADIUS + 2.0f) * std::sin(t1));
-        }
+		// Thin outline ring — reuse the same disc but draw as lines
+		std::vector<float> ringVerts;
+		ringVerts.reserve(static_cast<size_t>(PIN_STEPS) * 4);
+		for (int s = 0; s < PIN_STEPS; ++s)
+		{
+			const float t0 = angleStep * static_cast<float>(s);
+			const float t1 = angleStep * static_cast<float>(s + 1);
+			ringVerts.push_back((PIN_RADIUS + 2.0f) * std::cos(t0));
+			ringVerts.push_back((PIN_RADIUS + 2.0f) * std::sin(t0));
+			ringVerts.push_back((PIN_RADIUS + 2.0f) * std::cos(t1));
+			ringVerts.push_back((PIN_RADIUS + 2.0f) * std::sin(t1));
+		}
 
-        EnsureVertexBufferSize(static_cast<int>(ringVerts.size()));
-        queue.writeBuffer(vertexBuffer, 0,
-                          ringVerts.data(),
-                          ringVerts.size() * sizeof(float));
+		EnsureVertexBufferSize(static_cast<int>(ringVerts.size()));
+		queue.writeBuffer(vertexBuffer, 0,
+						  ringVerts.data(),
+						  ringVerts.size() * sizeof(float));
 
-        const uint32_t ringOffset = UpdateUniforms(node.body->pos, pinOutlineColor);
-        renderPass.setPipeline(linePipeline);
-        renderPass.setBindGroup(0, uniformBindGroup, 1, &ringOffset);
-        renderPass.setVertexBuffer(0, vertexBuffer, 0,
-                                   ringVerts.size() * sizeof(float));
-        renderPass.draw(
-            static_cast<uint32_t>(ringVerts.size() / 2), 1, 0, 0);
-    }
+		const uint32_t ringOffset = UpdateUniforms(node.pos, pinOutlineColor);
+		renderPass.setPipeline(linePipeline);
+		renderPass.setBindGroup(0, uniformBindGroup, 1, &ringOffset);
+		renderPass.setVertexBuffer(0, vertexBuffer, 0,
+								   ringVerts.size() * sizeof(float));
+		renderPass.draw(
+			static_cast<uint32_t>(ringVerts.size() / 2), 1, 0, 0);
+	}
 
-    // Restore fill pipeline as convention (DrawShape callers expect it active)
-    renderPass.setPipeline(pipeline);
+	// Restore fill pipeline as convention (DrawShape callers expect it active)
+	renderPass.setPipeline(pipeline);
 }
 
 void Renderer::DrawBox(const shape::Box &box)
@@ -1627,6 +1676,140 @@ void Renderer::DrawThruster(const shape::Thruster &thruster)
 			DrawPart(verts, col);
 		}
 	}
+}
+
+// ================================================================
+//  DrawSpring
+//
+//  Layered draw order (back → front):
+//    1. Guide ghost  — faint silhouette at full rest length
+//                      (only when compressed; drawn first so it
+//                      stays beneath everything)
+//    2. Coil body    — zigzag wire between the two plates
+//                      amber (loadedColor) when armed, metal
+//                      (color) when idle
+//    3. Base plate   — fixed anchor at pos (plateColor)
+//    4. Top plate    — moves inward with compression; matches
+//                      the coil colour so it reads as one piece
+//
+//  The guide and coil are triangle-list geometry produced by
+//  Spring.cpp — same convention as every other shape in this
+//  renderer.  The armed-state highlight re-uses the same amber
+//  tone the UIManager inspector uses so the visual language is
+//  consistent across UI and world-space rendering.
+// ================================================================
+void Renderer::DrawSpring(const shape::Spring &spring)
+{
+    if (!uniformBindGroup)
+    {
+        std::cout << "Uniform bind group is invalid; skipping DrawSpring." << std::endl;
+        return;
+    }
+
+    renderPass.setPipeline(pipeline);
+
+    // ── Shared draw helper — identical to DrawCannon / DrawThruster ──────────
+    auto DrawPart = [&](const std::vector<float> &verts,
+                        const std::array<float, 4> &color)
+    {
+        if (verts.empty())
+            return;
+        EnsureVertexBufferSize(verts.size());
+        queue.writeBuffer(vertexBuffer, 0, verts.data(), verts.size() * sizeof(float));
+        const uint32_t count = static_cast<uint32_t>(verts.size() / 2);
+        uint32_t off = UpdateUniforms(spring.pos, color);
+        renderPass.setBindGroup(0, uniformBindGroup, 1, &off);
+        renderPass.setVertexBuffer(0, vertexBuffer, 0, count * 2 * sizeof(float));
+        renderPass.draw(count, 1, 0, 0);
+    };
+
+    // ── Colour selection: armed → amber tones, idle → metal tones ────────────
+    // When the spring is loaded the coil and top plate glow amber so the
+    // player immediately sees it is primed.  The base plate always stays
+    // the darker plate colour — it is the fixed anchor and should look
+    // "heavier" than the moving parts.
+    const std::array<float, 4> &coilColor  = spring.isLoaded ? spring.loadedColor : spring.color;
+    const std::array<float, 4> &topColor   = spring.isLoaded ? spring.loadedColor : spring.color;
+
+    // ── 1. Guide ghost ────────────────────────────────────────────────────────
+    // Faint rest-length silhouette drawn first (lowest z-order).
+    // Spring.cpp returns an empty vector when compression < 0.5 % so this
+    // is a no-op when the spring is at its natural length.
+    DrawPart(spring.GetGuideBodyVertexLocalPos(), spring.guideColor);
+
+    // ── 2. Coil body ──────────────────────────────────────────────────────────
+    // Zigzag wire — the most visually dominant part.
+    // It compresses toward the base plate as compressionFraction rises.
+    DrawPart(spring.GetCoilBodyVertexLocalPos(), coilColor);
+
+    // ── 3. Base plate ─────────────────────────────────────────────────────────
+    // Fixed — drawn after the coil so it caps the base end cleanly.
+    DrawPart(spring.GetBasePlateVertexLocalPos(), spring.plateColor);
+
+    // ── 4. Top plate ──────────────────────────────────────────────────────────
+    // Moves inward with compression; same colour as the coil so the
+    // "moving assembly" reads as a single unit separate from the anchor.
+    DrawPart(spring.GetTopPlateVertexLocalPos(), topColor);
+
+    // ── 5. Armed pulse ring (line overlay) ───────────────────────────────────
+    // When the spring is loaded, draw a thin pulsing circle around the tip
+    // to give the player a clear "energy ready to fire" cue.
+    // The ring radius matches plateHalfHeight so it wraps the top plate edge.
+    if (spring.isLoaded)
+    {
+       // const float PPM        = SimulationConstants::PIXELS_PER_METER;
+        const float rad_ang    = (spring.angleDegrees * math::PI / 180.0f) + spring.rotation;
+        const float curLen     = spring.restLength * (1.0f - spring.compressionFraction);
+
+        // Centre of the top plate in local space, then offset by pos
+        const math::Vec2 tipCentre{
+            spring.pos.x + std::cos(rad_ang) * (curLen - spring.plateWidth * 0.5f),
+            spring.pos.y + std::sin(rad_ang) * (curLen - spring.plateWidth * 0.5f)
+        };
+
+        // Animated radius: gentle pulsing via time — same technique as
+        // DrawThruster's flame flicker.
+        const float t        = static_cast<float>(glfwGetTime());
+        const float pulse    = 0.90f + 0.10f * std::sin(t * 6.0f);
+        const float ringR    = spring.plateHalfHeight * 1.35f * pulse;
+
+        constexpr int RING_STEPS = 24;
+        const float angleStep    = 2.0f * math::PI / static_cast<float>(RING_STEPS);
+        std::vector<float> ringVerts;
+        ringVerts.reserve(RING_STEPS * 4);
+
+        for (int i = 0; i < RING_STEPS; ++i)
+        {
+            const float a0 = angleStep * static_cast<float>(i);
+            const float a1 = angleStep * static_cast<float>(i + 1);
+            ringVerts.push_back(ringR * std::cos(a0));
+            ringVerts.push_back(ringR * std::sin(a0));
+            ringVerts.push_back(ringR * std::cos(a1));
+            ringVerts.push_back(ringR * std::sin(a1));
+        }
+
+        EnsureVertexBufferSize(static_cast<int>(ringVerts.size()));
+        queue.writeBuffer(vertexBuffer, 0,
+                          ringVerts.data(), ringVerts.size() * sizeof(float));
+
+        // Ring alpha pulses with the same timer for a breathing effect
+        const float alpha = 0.50f + 0.30f * std::sin(t * 6.0f);
+        const std::array<float, 4> ringColor{
+            spring.loadedColor[0],
+            spring.loadedColor[1],
+            spring.loadedColor[2],
+            alpha
+        };
+
+        const uint32_t ringOff = UpdateUniforms(tipCentre, ringColor);
+        renderPass.setPipeline(linePipeline);
+        renderPass.setBindGroup(0, uniformBindGroup, 1, &ringOff);
+        renderPass.setVertexBuffer(0, vertexBuffer, 0, ringVerts.size() * sizeof(float));
+        renderPass.draw(static_cast<uint32_t>(ringVerts.size() / 2), 1, 0, 0);
+
+        // Restore fill pipeline — convention followed by every draw function
+        renderPass.setPipeline(pipeline);
+    }
 }
 
 void Renderer::DrawBallLine(const shape::Ball &ball)

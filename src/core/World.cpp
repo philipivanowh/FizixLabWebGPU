@@ -1,6 +1,7 @@
 #include "core/World.hpp"
 
 #include "core/Renderer.hpp"
+#include "shape/Spring.hpp"
 #include "shape/Trigger.hpp"
 #include "shape/Thruster.hpp"
 #include "collision/Collisions.hpp"
@@ -284,6 +285,10 @@ void World::Update(float deltaMs, int iterations,
 {
 	iterations = ComputeAdaptiveIterations(deltaMs, iterations);
 
+	//shape::Spring *draggedSpring = dynamic_cast<shape::Spring *>(draggedBody);
+	// float savedDraggedInvMass = 0.0f;
+	// float savedDraggedInvInertia = 0.0f;
+
 	for (const auto &object : objects)
 		object->BeginFrameForces();
 
@@ -293,7 +298,7 @@ void World::Update(float deltaMs, int iterations,
 	for (const auto &obj : objects)
 	{
 		if (obj->bodyType == physics::RigidbodyType::Static &&
-			!dynamic_cast<shape::Trigger *>(obj.get()))
+			!dynamic_cast<shape::Trigger *>(obj.get()) && !obj->isRopeNode)
 			staticBodies.push_back(obj.get());
 	}
 
@@ -301,6 +306,25 @@ void World::Update(float deltaMs, int iterations,
 
 	for (int currIteration = 0; currIteration < iterations; currIteration++)
 	{
+		// While dragging a spring, treat it as kinematic/immovable for physics so
+		// other objects can't shove it around. The mouse position still controls
+		// it via Engine::Update's TranslateTo().
+		// if (draggedSpring)
+		// {
+		// 	savedDraggedInvMass = draggedSpring->invMass;
+		// 	savedDraggedInvInertia = draggedSpring->invInertia;
+
+		// 	draggedSpring->invMass = 0.0f;
+		// 	draggedSpring->invInertia = 0.0f;
+		// 	draggedSpring->linearVel = math::Vec2();
+		// 	draggedSpring->linearAcc = math::Vec2();
+		// 	draggedSpring->angularVel = 0.0f;
+		// 	draggedSpring->angularAcc = 0.0f;
+		// 	draggedSpring->netForce = math::Vec2();
+		// 	draggedSpring->netTorque = 0.0f;
+		// 	draggedSpring->dragForce = math::Vec2();
+		// }
+
 		for (size_t i = 0; i < objects.size(); ++i)
 			prevPositions[i] = objects[i]->pos;
 
@@ -312,13 +336,24 @@ void World::Update(float deltaMs, int iterations,
 		// Rope: integrate middle nodes + run stick constraints
 		for (auto &rope : ropes)
 		{
-			rope.Solve(deltaMs);
+			rope.Solve(deltaMs,iterations);
 		}
 
 		// Rope: thin static-only collision for middle nodes
 		
 		for (auto &rope : ropes)
 			rope.SolveNodeCollisions(staticBodies);
+
+		// Springs: update compression/forces before collision resolution so the
+		// collider length tracks the moving top plate within the same tick.
+		const float dtSeconds = (iterations > 0)
+			? (deltaMs / (1000.0f * static_cast<float>(iterations)))
+			: (deltaMs / 1000.0f);
+		for (auto &rb : objects)
+		{
+			if (auto *spring = dynamic_cast<shape::Spring *>(rb.get()))
+				spring->PhysicsUpdate(dtSeconds, objects);
+		}
 
 		std::vector<math::Vec2> integratedPositions(objects.size());
 		for (size_t i = 0; i < objects.size(); ++i)
@@ -352,6 +387,12 @@ void World::Update(float deltaMs, int iterations,
 								   prevPositions[pair.second],
 								   integratedPositions[pair.second]);
 		}
+
+		// if (draggedSpring)
+		// {
+		// 	draggedSpring->invMass = savedDraggedInvMass;
+		// 	draggedSpring->invInertia = savedDraggedInvInertia;
+		// }
 	}
 
 	for (auto &rope : ropes)
@@ -386,6 +427,8 @@ void World::Draw(Renderer &renderer) const
 	// Draw each rope: segment lines + taut highlight + pin anchor discs.
 	// Middle nodes are pure verlet positions and are never in objects, so
 	// they have no DrawShape call at all — DrawRope is their only renderer.
+	
+    std::cout << ropes.size() << std::endl;
 	for (const auto &rope : ropes)
 		renderer.DrawRope(rope);
 }

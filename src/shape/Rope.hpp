@@ -91,7 +91,7 @@ public:
 
     // Call AFTER Rigidbody::Update() for all objects (endpoints already integrated).
     // Integrates middle nodes, then runs Gauss-Seidel stick projection.
-    void Solve(float deltaMs);
+    void Solve(float deltaMs,int iterations);
 
     // Thin collision loop — tests every MIDDLE node against each static body.
     // Uses a reusable probe Ball so existing collision::Collide() is called

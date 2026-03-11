@@ -51,18 +51,10 @@ namespace physics
 		AddForceGenerator(std::make_unique<DragForceGenerator>());
 	}
 
-<<<<<<< HEAD
 	void Rigidbody::SetMass(float newMass){
 		mass = (newMass > 0.0f) ? newMass : 1.0f;
 		invMass = (bodyType != RigidbodyType::Static) ? 1.0f / mass : 1.0f;
 		UpdateMassProperties();
-=======
-	void Rigidbody::SetMass(float newMass)
-	{
-		mass = (newMass > 0.0f) ? newMass : 1.0f;
-		invMass = (bodyType != RigidbodyType::Static) ? 1.0f / mass : 0.0f;
-		UpdateMassProperties(); // recalculates inertia + invInertia
->>>>>>> 4ff0b49f47615f720e20d1e33790cc98fe710a3d
 	}
 
 	void Rigidbody::UpdateMassProperties()

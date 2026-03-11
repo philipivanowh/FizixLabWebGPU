@@ -55,8 +55,16 @@ void CollisionSolver::SeparateBodies(physics::Rigidbody &bodyA,
         bodyA.Translate(correction.Negate());
     else
     {
-        bodyA.Translate(correction.Negate() / 2.0f);
-        bodyB.Translate(correction / 2.0f);
+        // Mass-weighted positional correction so "very heavy" bodies
+        // (tiny invMass) don't get shoved around as much as light ones.
+        const float invMassA = bodyA.invMass;
+        const float invMassB = bodyB.invMass;
+        const float invMassSum = invMassA + invMassB;
+        if (invMassSum <= 0.0f)
+            return;
+
+        bodyA.Translate(correction.Negate() * (invMassA / invMassSum));
+        bodyB.Translate(correction * (invMassB / invMassSum));
     }
 }
 

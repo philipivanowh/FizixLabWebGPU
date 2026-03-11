@@ -3,6 +3,7 @@
 #include "shape/Ball.hpp"
 #include "shape/Box.hpp"
 #include "shape/Incline.hpp"
+#include "shape/Spring.hpp"
 #include "shape/Trigger.hpp"
 #include "math/Math.hpp"
 
@@ -220,6 +221,8 @@ namespace collision
 		const shape::Ball *ballB = dynamic_cast<const shape::Ball *>(&bodyB);
 		const shape::Incline *inclineA = dynamic_cast<const shape::Incline *>(&bodyA);
 		const shape::Incline *inclineB = dynamic_cast<const shape::Incline *>(&bodyB);
+		const shape::Spring *springA = dynamic_cast<const shape::Spring *>(&bodyA);
+		const shape::Spring *springB = dynamic_cast<const shape::Spring *>(&bodyB);
 
 		if (boxA)
 		{
@@ -228,6 +231,13 @@ namespace collision
 				return FindContactPointsFromPolygons(
 					boxA->GetVertexWorldPos(),
 					boxB->GetVertexWorldPos());
+			}
+
+			if (springB)
+			{
+				return FindContactPointsFromPolygons(
+					boxA->GetVertexWorldPos(),
+					springB->GetVertexWorldPos());
 			}
 
 			if (inclineB)
@@ -254,6 +264,15 @@ namespace collision
 					ballA->pos,
 					ballA->radius,
 					boxB->GetVertexWorldPos());
+				contactCount = 1;
+			}
+
+			if (springB)
+			{
+				contact1 = FindCirclePolygonContactPoint(
+					ballA->pos,
+					ballA->radius,
+					springB->GetVertexWorldPos());
 				contactCount = 1;
 			}
 
@@ -284,6 +303,13 @@ namespace collision
 					boxB->GetVertexWorldPos());
 			}
 
+			if (springB)
+			{
+				return FindContactPointsFromPolygons(
+					inclineA->GetVertexWorldPos(),
+					springB->GetVertexWorldPos());
+			}
+
 			if (inclineB)
 			{
 				return FindContactPointsFromPolygons(
@@ -297,6 +323,39 @@ namespace collision
 					ballB->pos,
 					ballB->radius,
 					inclineA->GetVertexWorldPos());
+				contactCount = 1;
+			}
+		}
+
+		if (springA)
+		{
+			if (springB)
+			{
+				return FindContactPointsFromPolygons(
+					springA->GetVertexWorldPos(),
+					springB->GetVertexWorldPos());
+			}
+
+			if (boxB)
+			{
+				return FindContactPointsFromPolygons(
+					springA->GetVertexWorldPos(),
+					boxB->GetVertexWorldPos());
+			}
+
+			if (inclineB)
+			{
+				return FindContactPointsFromPolygons(
+					springA->GetVertexWorldPos(),
+					inclineB->GetVertexWorldPos());
+			}
+
+			if (ballB)
+			{
+				contact1 = FindCirclePolygonContactPoint(
+					ballB->pos,
+					ballB->radius,
+					springA->GetVertexWorldPos());
 				contactCount = 1;
 			}
 		}
@@ -315,8 +374,56 @@ namespace collision
 		const shape::Ball *ballB = dynamic_cast<const shape::Ball *>(&bodyB);
 		const shape::Incline *inclineA = dynamic_cast<const shape::Incline *>(&bodyA);
 		const shape::Incline *inclineB = dynamic_cast<const shape::Incline *>(&bodyB);
+		const shape::Spring *springA = dynamic_cast<const shape::Spring *>(&bodyA);
+		const shape::Spring *springB = dynamic_cast<const shape::Spring *>(&bodyB);
 		const shape::Trigger *triggerA = dynamic_cast<const shape::Trigger *>(&bodyA);
 		const shape::Trigger *triggerB = dynamic_cast<const shape::Trigger *>(&bodyB);
+
+		if (springA)
+		{
+			const auto &vertsA = springA->GetVertexWorldPos();
+			const math::Vec2 centerA = FindArithmeticMean(vertsA);
+
+			if (springB)
+			{
+				const auto &vertsB = springB->GetVertexWorldPos();
+				const math::Vec2 centerB = FindArithmeticMean(vertsB);
+				hit = IntersectPolygons(centerA, vertsA, centerB, vertsB);
+				return hit;
+			}
+
+			if (boxB)
+			{
+				const auto &vertsB = boxB->GetVertexWorldPos();
+				hit = IntersectPolygons(centerA, vertsA, boxB->pos, vertsB);
+				return hit;
+			}
+
+			if (inclineB)
+			{
+				const auto &vertsB = inclineB->GetVertexWorldPos();
+				hit = IntersectPolygons(centerA, vertsA, inclineB->pos, vertsB);
+				return hit;
+			}
+
+			if (triggerB)
+			{
+				const auto &vertsB = triggerB->GetVertexWorldPos();
+				hit = IntersectPolygons(centerA, vertsA, triggerB->pos, vertsB);
+				return hit;
+			}
+
+			if (ballB)
+			{
+				hit = IntersectCirclePolygon(ballB->pos, ballB->radius, centerA, vertsA);
+				if (!hit.result)
+				{
+					return hit;
+				}
+				hit.normal = hit.normal.Negate();
+				return hit;
+			}
+		}
 
 		if (boxA)
 		{
@@ -342,6 +449,16 @@ namespace collision
 					return hit;
 				}
 				hit.normal = hit.normal.Negate();
+				return hit;
+			}
+
+			if (springB)
+			{
+				const auto &vertsA = boxA->GetVertexWorldPos();
+				const auto &vertsB = springB->GetVertexWorldPos();
+				const math::Vec2 centerB = FindArithmeticMean(vertsB);
+
+				hit = IntersectPolygons(boxA->pos, vertsA, centerB, vertsB);
 				return hit;
 			}
 
@@ -378,6 +495,14 @@ namespace collision
 			{
 				const auto &vertsB = boxB->GetVertexWorldPos();
 				hit = IntersectCirclePolygon(ballA->pos, ballA->radius, boxB->pos, vertsB);
+				return hit;
+			}
+
+			if (springB)
+			{
+				const auto &vertsB = springB->GetVertexWorldPos();
+				const math::Vec2 centerB = FindArithmeticMean(vertsB);
+				hit = IntersectCirclePolygon(ballA->pos, ballA->radius, centerB, vertsB);
 				return hit;
 			}
 
@@ -429,6 +554,16 @@ namespace collision
 				return hit;
 			}
 
+			if (springB)
+			{
+				const auto &vertsA = inclineA->GetVertexWorldPos();
+				const auto &vertsB = springB->GetVertexWorldPos();
+				const math::Vec2 centerB = FindArithmeticMean(vertsB);
+
+				hit = IntersectPolygons(inclineA->pos, vertsA, centerB, vertsB);
+				return hit;
+			}
+
 			if (inclineB)
 			{
 				const auto &vertsA = inclineA->GetVertexWorldPos();
@@ -458,6 +593,16 @@ namespace collision
 
 		if (triggerA)
 		{
+			if (springB)
+			{
+				const auto &vertsA = triggerA->GetVertexWorldPos();
+				const auto &vertsB = springB->GetVertexWorldPos();
+				const math::Vec2 centerB = FindArithmeticMean(vertsB);
+
+				hit = IntersectPolygons(triggerA->pos, vertsA, centerB, vertsB);
+				return hit;
+			}
+
 			if (boxB)
 			{
 				const auto &vertsA = triggerA->GetVertexWorldPos();

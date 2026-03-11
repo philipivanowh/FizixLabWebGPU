@@ -33,6 +33,7 @@ public:
 	static void InclineProblemScene();
 	static void CheckSpawning();
 	static void CheckCannon();
+	static void CheckSpring();
 	static void ClearBodies();
 
 	static void ResetSimTime() { simulationTimeMs = 0.0f; }

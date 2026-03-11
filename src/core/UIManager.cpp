@@ -794,6 +794,13 @@ void UIManager::RenderInspectorPanel(physics::Rigidbody *body)
         ImGui::PopStyleColor(2);
         return;
     }
+    else if (auto *spring = dynamic_cast<shape::Spring *>(body))
+    {
+        RenderSpringInspector(spring);
+        ImGui::End();
+        ImGui::PopStyleColor(2);
+        return;
+    }
 
     // Type badge — animated blue underline appears on Dynamic
     const bool isStatic = body->bodyType == physics::RigidbodyType::Static;
@@ -2041,6 +2048,280 @@ void UIManager::RenderThrusterInspector(shape::Thruster *thruster)
     ImGui::Spacing();
 }
 
+void UIManager::RenderSpringInspector(shape::Spring *spring)
+{
+    const float t  = static_cast<float>(ImGui::GetTime());
+    const float cw = ImGui::GetContentRegionAvail().x;
+
+    // ── Header with armed/idle badge ─────────────────────────────
+    SectionHead("SPRING");
+
+    {
+        const char *badge    = spring->isLoaded ? "◆ ARMED" : "○ IDLE";
+        const ImVec4 badgeC  = spring->isLoaded ? Col::Amber : Col::InkFaint;
+        const float  bw      = ImGui::CalcTextSize(badge).x;
+        ImGui::SameLine(cw - bw + 4.0f);
+        ImGui::TextColored(badgeC, "%s", badge);
+    }
+
+    // ── Position ──────────────────────────────────────────────────
+    ImGui::TextColored(Col::InkFaint, "  Position");
+    ImGui::SameLine(92.0f);
+    ImGui::TextColored(Col::Ink, "(%.1f,  %.1f)",
+        spring->pos.x / SimulationConstants::PIXELS_PER_METER,
+        spring->pos.y / SimulationConstants::PIXELS_PER_METER);
+
+    math::Vec2 posM = spring->pos / SimulationConstants::PIXELS_PER_METER;
+    ImGui::SetNextItemWidth(-1);
+    ImGui::DragFloat2("##spos", &posM.x, 0.01f);
+    spring->pos = posM * SimulationConstants::PIXELS_PER_METER;
+
+    positionBeingEdited = ImGui::IsItemActive();
+    if (positionBeingEdited && !wasPositionEditedLastFrame)
+        settings->paused = true;
+    else if (!positionBeingEdited && wasPositionEditedLastFrame)
+        settings->paused = false;
+    wasPositionEditedLastFrame = positionBeingEdited;
+
+    ImGui::Spacing();
+
+    // ── Angle ─────────────────────────────────────────────────────
+    SectionHead("ANGLE");
+
+    ImGui::PushStyleColor(ImGuiCol_SliderGrab,       Col::Blue);
+    ImGui::PushStyleColor(ImGuiCol_SliderGrabActive, Col::BlueHov);
+    ImGui::SetNextItemWidth(-1);
+    ImGui::DragFloat("##sang", &spring->angleDegrees,
+                     0.5f, 0.0f, 360.0f, "%.1f deg");
+    ImGui::PopStyleColor(2);
+
+    if (spring->angleDegrees < 0.0f)   spring->angleDegrees += 360.0f;
+    if (spring->angleDegrees >= 360.0f) spring->angleDegrees = std::fmod(spring->angleDegrees, 360.0f);
+
+    // Mini angle arrow diagram (same style as cannon inspector)
+    {
+        const float rad    = spring->angleDegrees * 3.14159265f / 180.0f;
+        const float armLen = 32.0f;
+        ImVec2 origin      = ImGui::GetCursorScreenPos();
+        origin.x += 120.0f;
+        origin.y += 28.0f;
+        ImVec2 tip = { origin.x + armLen * std::cos(rad),
+                       origin.y - armLen * std::sin(rad) };
+
+        auto *dl = ImGui::GetWindowDrawList();
+        // Base dot
+        dl->AddCircleFilled(origin, 3.0f, Col::ToU32(Col::A(Col::Blue, 0.55f)));
+        // Arrow shaft
+        dl->AddLine(origin, tip, Col::ToU32(Col::Blue), 2.0f);
+        // Arrowhead dot
+        dl->AddCircleFilled(tip, 2.8f, Col::ToU32(Col::Blue));
+        // Label
+        char abuf[24];
+        snprintf(abuf, sizeof(abuf), "%.0f°", spring->angleDegrees);
+        dl->AddText({ tip.x + 5.0f, tip.y - 6.0f }, Col::ToU32(Col::Ink), abuf);
+
+        // Faint direction label: shows axis name
+        const float deg = spring->angleDegrees;
+        const char *axisHint = (deg < 22.5f || deg >= 337.5f) ? "→ Right"  :
+                               (deg < 67.5f)                  ? "↗ Up-Right":
+                               (deg < 112.5f)                 ? "↑ Up"      :
+                               (deg < 157.5f)                 ? "↖ Up-Left" :
+                               (deg < 202.5f)                 ? "← Left"    :
+                               (deg < 247.5f)                 ? "↙ Dn-Left" :
+                               (deg < 292.5f)                 ? "↓ Down"    :
+                                                                "↘ Dn-Right";
+        ImGui::SetCursorScreenPos({ origin.x - 100.0f, origin.y - 8.0f });
+        ImGui::TextColored(Col::InkFaint, "%s", axisHint);
+
+        // Advance past diagram
+        ImGui::Dummy({ 0.0f, armLen + 6.0f });
+    }
+
+    ImGui::Spacing();
+
+    // ── Spring Properties ─────────────────────────────────────────
+    SectionHead("SPRING PROPERTIES");
+
+    // Rest length
+    ImGui::TextColored(Col::InkMid, "Rest Length");
+    float restM = spring->restLength / SimulationConstants::PIXELS_PER_METER;
+    ImGui::SetNextItemWidth(-1);
+    if (ImGui::DragFloat("##srl", &restM, 0.05f, 0.1f, 50.0f, "%.2f m"))
+        spring->restLength = std::max(restM, 0.1f) * SimulationConstants::PIXELS_PER_METER;
+
+    // Stiffness k
+    ImGui::TextColored(Col::InkMid, "Stiffness k");
+    ImGui::SetNextItemWidth(-1);
+    ImGui::DragFloat("##sk", &spring->stiffness, 5.0f, 1.0f, 5000.0f, "%.0f N/m");
+
+    // Damping
+    ImGui::TextColored(Col::InkMid, "Damping");
+    ImGui::SetNextItemWidth(-1);
+    ImGui::DragFloat("##sdamp", &spring->damping, 0.1f, 0.0f, 100.0f, "%.1f");
+
+    // Coil count
+    ImGui::TextColored(Col::InkMid, "Coil Count");
+    ImGui::SetNextItemWidth(-1);
+    ImGui::DragInt("##scoils", &spring->coilCount, 0.1f, 2, 20);
+
+    ImGui::Spacing();
+
+    // ── Live force readout ────────────────────────────────────────
+    {
+        const float PPM       = SimulationConstants::PIXELS_PER_METER;
+        const float xMeters   = spring->restLength * spring->compressionFraction / PPM;
+        const float forceN    = spring->stiffness * xMeters;
+        const float energyJ   = 0.5f * spring->stiffness * xMeters * xMeters;
+
+        const float cardH  = ImGui::GetTextLineHeightWithSpacing() * 2.8f + 10.0f;
+        ImVec2 cMin = ImGui::GetCursorScreenPos();
+        ImVec2 cMax = { cMin.x + cw, cMin.y + cardH };
+        ImGui::GetWindowDrawList()->AddRectFilled(cMin, cMax, Col::ToU32(Col::WidgetBg), 5.0f);
+        ImGui::GetWindowDrawList()->AddRect(
+            cMin, cMax,
+            Col::ToU32(spring->isLoaded
+                ? Col::A(Col::Amber, 0.40f)
+                : Col::Border),
+            5.0f, 0, 1.0f);
+
+        ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, {6.0f, 2.0f});
+        ImGui::Dummy({4.0f, 4.0f});
+        ImGui::TextColored(Col::InkMid, "  STORED ENERGY");
+        ImGui::TextColored(Col::InkFaint, "  F  ");
+        ImGui::SameLine(38.0f);
+        ImGui::TextColored(Col::Blue,  "%+.1f N", forceN);
+        ImGui::SameLine(0, 14);
+        ImGui::TextColored(Col::InkFaint, "E  ");
+        ImGui::SameLine(0, 4);
+        ImGui::TextColored(Col::Green, "%.4f J", energyJ);
+        ImGui::PopStyleVar();
+        ImGui::Dummy({0.0f, 4.0f});
+    }
+
+    ImGui::Spacing();
+
+    // ── Compression section ───────────────────────────────────────
+    SectionHead("COMPRESSION");
+
+    // Compression fraction slider
+    const float sliderGrabCol = spring->isLoaded ? Col::Amber.x : Col::Blue.x;
+    (void)sliderGrabCol; // suppress warning; we push colour below
+
+    ImGui::PushStyleColor(ImGuiCol_SliderGrab,
+                          spring->isLoaded ? Col::Amber : Col::Blue);
+    ImGui::PushStyleColor(ImGuiCol_SliderGrabActive,
+                          spring->isLoaded ? Col::A(Col::Amber, 0.9f) : Col::BlueHov);
+    ImGui::SetNextItemWidth(-1);
+    float comp = spring->compressionFraction;
+    if (ImGui::SliderFloat("##scomp", &comp,
+                            0.0f, spring->maxCompression, "%.2f"))
+    {
+        spring->SetCompression(comp);
+    }
+    ImGui::PopStyleColor(2);
+
+    // Compression bar — colour shifts from green (low) to red (high)
+    {
+        const float bw = cw;
+        const float frac = spring->compressionFraction / spring->maxCompression;
+        AnimBar(frac, bw, 6.0f,
+                Col::ToU32(Col::Green),
+                Col::ToU32(Col::Red));
+        ImGui::TextColored(Col::InkFaint,
+            "  %.1f%% of %.2f m  (x = %.3f m)",
+            spring->compressionFraction * 100.0f,
+            spring->restLength / SimulationConstants::PIXELS_PER_METER,
+            spring->restLength * spring->compressionFraction / SimulationConstants::PIXELS_PER_METER);
+    }
+
+    ImGui::Spacing();
+
+    // ARM / DISARM toggle
+    {
+        const float halfW = (cw - ImGui::GetStyle().ItemSpacing.x) * 0.5f;
+        const bool  armed = spring->isLoaded;
+        const bool  hasComp = (spring->compressionFraction > 0.001f);
+
+        // ARM
+        ImGui::PushStyleColor(ImGuiCol_Button,
+                              armed ? Col::A(Col::Amber, 0.22f) : Col::WidgetBg);
+        ImGui::PushStyleColor(ImGuiCol_ButtonHovered, Col::HoverBg);
+        ImGui::PushStyleColor(ImGuiCol_ButtonActive,  Col::ActiveBg);
+        ImGui::PushStyleColor(ImGuiCol_Text,
+                              armed ? Col::Amber : (hasComp ? Col::InkMid : Col::InkFaint));
+        ImGui::PushStyleColor(ImGuiCol_Border,
+                              armed ? Col::A(Col::Amber, 0.60f) : Col::Border);
+        if (!hasComp && !armed) ImGui::BeginDisabled();
+        if (ImGui::Button(armed ? "  DISARM  " : "  ARM  ", { halfW, 0 }))
+        {
+            if (!armed && hasComp)
+                spring->isLoaded = true;
+            else
+                spring->isLoaded = false;
+        }
+        if (!hasComp && !armed) ImGui::EndDisabled();
+        ImGui::PopStyleColor(5);
+
+        ImGui::SameLine();
+
+        // RELEASE — big animated green when armed, disabled otherwise
+        const float beat = Col::Smooth(0.5f + 0.5f * sinf(t * 3.5f));
+        ImGui::PushStyleColor(ImGuiCol_Button,
+                              armed ? Col::A(Col::Green, 0.15f + 0.07f * beat) : Col::WidgetBg);
+        ImGui::PushStyleColor(ImGuiCol_ButtonHovered,
+                              armed ? Col::A(Col::Green, 0.28f) : Col::HoverBg);
+        ImGui::PushStyleColor(ImGuiCol_ButtonActive,
+                              armed ? Col::A(Col::Green, 0.45f) : Col::ActiveBg);
+        ImGui::PushStyleColor(ImGuiCol_Text,
+                              armed ? Col::Green : Col::InkFaint);
+        ImGui::PushStyleColor(ImGuiCol_Border,
+                              armed ? Col::A(Col::Green, 0.45f + 0.30f * beat) : Col::Border);
+        if (!armed) ImGui::BeginDisabled();
+        if (ImGui::Button("  RELEASE  ", { halfW, 0 }))
+        {
+            // Fill release request for Engine to consume
+            springReleaseSettings.tipPos          = spring->GetTipWorldPos();
+            springReleaseSettings.direction       = spring->GetTipDirection();
+            springReleaseSettings.compressionDist =
+                spring->restLength * spring->compressionFraction /
+                SimulationConstants::PIXELS_PER_METER;
+            springReleaseSettings.impulseStrength = spring->Release();
+            springReleasePending = true;
+        }
+        if (!armed) ImGui::EndDisabled();
+        ImGui::PopStyleColor(5);
+    }
+
+    ImGui::Spacing();
+    ImGui::TextColored(Col::InkFaint,
+        "  ARM holds compression; RELEASE fires stored energy.");
+
+    ImGui::Spacing();
+    ImGui::Spacing();
+
+    // ── Remove Button ─────────────────────────────────────────────
+    ImGui::PushStyleColor(ImGuiCol_Button,        Col::A(Col::Red, 0.3f));
+    ImGui::PushStyleColor(ImGuiCol_ButtonHovered, Col::A(Col::Red, 0.5f));
+    ImGui::PushStyleColor(ImGuiCol_ButtonActive,  Col::A(Col::Red, 0.7f));
+    ImGui::PushStyleColor(ImGuiCol_Text,          Col::Red);
+    ImGui::PushStyleColor(ImGuiCol_Border,        Col::A(Col::Red, 0.6f));
+    if (ImGui::Button("Remove Body", { -1, 0 }))
+    {
+        removedObjectPointer = spring;
+        world->RemoveObject(spring);
+    }
+    ImGui::PopStyleColor(5);
+    ImGui::Spacing();
+}
+
+bool UIManager::ConsumeSpringReleaseRequest(SpringReleaseSettings &out)
+{
+    if (!springReleasePending) return false;
+    out = springReleaseSettings;
+    springReleasePending = false;
+    return true;
+}
+
 bool UIManager::ConsumeCannonFireRequest(CannonFireSettings &out)
 {
     if (!cannonFirePending)
@@ -2103,7 +2384,7 @@ void UIManager::RenderSpawnBasics()
 {
     SectionHead("SHAPE & PLACEMENT");
 
-    const char *shapes[] = {"Ball", "Incline", "Box", "Cannon", "Thruster", "Trigger", "Rope"};
+    const char *shapes[] = {"Ball", "Incline", "Box", "Cannon", "Thruster", "Trigger", "Rope", "Spring"};
     int si = (int)spawnSettings.shapeType;
     ImGui::SetNextItemWidth(-1);
     ImGui::Combo("##shape", &si, shapes, std::size(shapes));
@@ -2226,17 +2507,21 @@ void UIManager::RenderSpawnConfigurationControls()
     {
         RenderThrusterSpawnConfiguration();
     }
-    if (spawnSettings.shapeType == shape::ShapeType::Trigger)
+    else if (spawnSettings.shapeType == shape::ShapeType::Trigger)
     {
         SectionHead("CONFIGURATION");
         RenderTriggerSpawnConfiguration();
     }
-    if (spawnSettings.shapeType == shape::ShapeType::Rope)
+    else if (spawnSettings.shapeType == shape::ShapeType::Rope)
     {
         SectionHead("CONFIGURATION");
         RenderRopeSpawnConfiguration();
     }
-
+    else if (spawnSettings.shapeType == shape::ShapeType::Spring)
+    {
+        SectionHead("CONFIGURATION");
+        RenderSpringSpawnConfiguration();
+    }
 }
 
 void UIManager::RenderRopeSpawnConfiguration()
@@ -2566,6 +2851,158 @@ void UIManager::RenderThrusterSpawnConfiguration()
         ImGui::PopStyleVar();
     }
 }
+
+void UIManager::RenderSpringSpawnConfiguration()
+{
+    auto *dl = ImGui::GetWindowDrawList();
+    const float cw = ImGui::GetContentRegionAvail().x;
+
+    // ── Angle dial (reuses Thruster spawner dial style) ───────────
+    SectionHead("LAUNCH DIRECTION");
+
+    constexpr float R = 42.0f;
+    constexpr float CX = 52.0f;
+    ImVec2 dialC = ImGui::GetCursorScreenPos();
+    dialC.x += CX;
+    dialC.y += R + 4.0f;
+
+    // Dial background
+    dl->AddCircleFilled(dialC, R,     Col::ToU32(Col::WidgetBg), 64);
+    dl->AddCircle(dialC, R,           Col::ToU32(Col::Border), 64, 1.2f);
+
+    // Cardinal tick marks
+    for (int i = 0; i < 4; i++)
+    {
+        const float a  = i * math::PI * 0.5f;
+        dl->AddLine({ dialC.x + (R - 4.f) * std::cos(a), dialC.y - (R - 4.f) * std::sin(a) },
+                    { dialC.x +  R        * std::cos(a), dialC.y -  R        * std::sin(a) },
+                    Col::ToU32(Col::A(Col::InkFaint, 0.5f)), 1.2f);
+    }
+    const char *cards[] = { "E","N","W","S" };
+    for (int i = 0; i < 4; i++)
+    {
+        const float a = i * math::PI * 0.5f;
+        dl->AddText({ dialC.x + (R + 10.f) * std::cos(a) - 3.5f,
+                      dialC.y - (R + 10.f) * std::sin(a) - 5.0f },
+                    Col::ToU32(Col::InkFaint), cards[i]);
+    }
+
+    // Drag interaction zone
+    ImGui::SetCursorScreenPos({ dialC.x - R, dialC.y - R });
+    ImGui::InvisibleButton("##springDialSpawner", { R * 2.0f, R * 2.0f });
+    if (ImGui::IsItemActive())
+    {
+        ImVec2 m = ImGui::GetIO().MousePos;
+        float dx = m.x - dialC.x, dy = dialC.y - m.y;
+        if (dx != 0.0f || dy != 0.0f)
+            spawnSettings.springAngle = std::fmod(
+                std::atan2(dy, dx) * 180.0f / math::PI + 360.0f, 360.0f);
+    }
+
+    // Arrow
+    {
+        const float rad = math::DegToRad(spawnSettings.springAngle);
+        const float arm = R - 6.0f;
+        const ImVec2 tip { dialC.x + arm * std::cos(rad),
+                           dialC.y - arm * std::sin(rad) };
+        // Halo + shaft
+        dl->AddLine(dialC, tip, Col::ToU32(Col::A(Col::Blue, 0.18f)), 7.0f);
+        dl->AddLine(dialC, tip, Col::ToU32(Col::Blue), 2.2f);
+        // Arrowhead
+        const float perp = rad + math::PI * 0.5f;
+        constexpr float hs = 5.0f;
+        ImVec2 hl { tip.x - 8.f * std::cos(rad) + hs * std::cos(perp),
+                    tip.y + 8.f * std::sin(rad) - hs * std::sin(perp) };
+        ImVec2 hr { tip.x - 8.f * std::cos(rad) - hs * std::cos(perp),
+                    tip.y + 8.f * std::sin(rad) + hs * std::sin(perp) };
+        dl->AddTriangleFilled(tip, hl, hr, Col::ToU32(Col::Blue));
+        dl->AddCircleFilled(dialC, 3.2f, Col::ToU32(Col::A(Col::Blue, 0.7f)));
+    }
+
+    // Advance cursor past dial
+    ImGui::SetCursorScreenPos({ ImGui::GetCursorScreenPos().x,
+                                 dialC.y + R + 8.0f });
+    // Numeric drag beside dial
+    ImGui::SameLine(CX + R * 2.0f + 10.0f);
+    ImGui::SetNextItemWidth(cw - CX - R * 2.0f - 12.0f);
+    ImGui::PushStyleColor(ImGuiCol_SliderGrab, Col::Blue);
+    ImGui::DragFloat("##springSpawnAngle", &spawnSettings.springAngle,
+                     0.5f, 0.0f, 360.0f, "%.0f°");
+    ImGui::PopStyleColor();
+
+    ImGui::Spacing();
+
+    // ── Geometry ──────────────────────────────────────────────────
+    SectionHead("GEOMETRY");
+
+    ImGui::TextColored(Col::InkMid, "Rest Length");
+    ImGui::SetNextItemWidth(-1);
+    ImGui::DragFloat("##srlen", &spawnSettings.springRestLength,
+                     0.05f, 0.2f, 30.0f, "%.2f m");
+
+    ImGui::TextColored(Col::InkMid, "Coil Count");
+    ImGui::SetNextItemWidth(-1);
+    ImGui::DragInt("##srcoils", &spawnSettings.springCoilCount,
+                   0.1f, 2, 20);
+
+    ImGui::Spacing();
+
+    // ── Physics ───────────────────────────────────────────────────
+    SectionHead("PHYSICS");
+
+    ImGui::TextColored(Col::InkMid, "Stiffness k");
+    ImGui::SetNextItemWidth(-1);
+    ImGui::DragFloat("##srk", &spawnSettings.springStiffness,
+                     5.0f, 1.0f, 5000.0f, "%.0f N/m");
+    if (ImGui::IsItemHovered())
+        ImGui::SetTooltip("Spring constant k in Hooke's law  F = k·x\n"
+                          "Typical: soft 50 N/m, medium 500 N/m, stiff 3000+ N/m");
+
+    ImGui::TextColored(Col::InkMid, "Damping");
+    ImGui::SetNextItemWidth(-1);
+    ImGui::DragFloat("##srdamp", &spawnSettings.springDamping,
+                     0.1f, 0.0f, 100.0f, "%.1f");
+
+    ImGui::Spacing();
+
+    // ── Initial compression ───────────────────────────────────────
+    SectionHead("INITIAL COMPRESSION");
+
+    ImGui::PushStyleColor(ImGuiCol_SliderGrab,
+        spawnSettings.springInitialCompression > 0.001f ? Col::Amber : Col::Blue);
+    ImGui::PushStyleColor(ImGuiCol_SliderGrabActive,
+        spawnSettings.springInitialCompression > 0.001f
+            ? Col::A(Col::Amber, 0.9f) : Col::BlueHov);
+    ImGui::SetNextItemWidth(-1);
+    ImGui::SliderFloat("##sric", &spawnSettings.springInitialCompression,
+                       0.0f, 0.85f, "%.2f  (0=free, 1=full)");
+    ImGui::PopStyleColor(2);
+
+    // Preview: show calculated force at this compression
+    {
+        //const float PPM      = SimulationConstants::PIXELS_PER_METER;
+        const float xM       = spawnSettings.springRestLength
+                               * spawnSettings.springInitialCompression;
+        const float forceN   = spawnSettings.springStiffness * xM;
+        const float energyJ  = 0.5f * spawnSettings.springStiffness * xM * xM;
+
+        ImGui::TextColored(Col::InkFaint,
+            "  F = %.1f N    E = %.4f J    x = %.3f m",
+            forceN, energyJ, xM);
+
+        // Small energy bar
+        const float maxE = 0.5f * spawnSettings.springStiffness
+                           * (spawnSettings.springRestLength * 0.85f)
+                           * (spawnSettings.springRestLength * 0.85f);
+        const float frac = (maxE > 0.001f)
+                           ? std::min(energyJ / maxE, 1.0f) : 0.0f;
+        AnimBar(frac, cw, 5.0f,
+                Col::ToU32(Col::Green), Col::ToU32(Col::Amber));
+    }
+
+    ImGui::Spacing();
+}
+
 
 bool UIManager::ConsumeSpawnRequest(SpawnSettings &out)
 {

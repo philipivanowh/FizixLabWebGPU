@@ -4,6 +4,7 @@
 #include "math/Vec2.hpp"
 #include "shape/Shape.hpp"
 #include "shape/Thruster.hpp"
+#include "shape/Spring.hpp"
 #include "physics/Rigidbody.hpp"
 #include "common/settings.hpp"
 #include "core/Engine.hpp"
@@ -40,6 +41,22 @@ struct SpawnSettings
     int ropeStickIterations = 10;
     bool ropePinStart = true;
     bool ropePinEnd = false;
+
+    // Spring
+    float springRestLength = 1.5f;  // metres (converted to pixels on spawn)
+    float springStiffness = 500.0f; // N/m
+    float springDamping = 5.0f;
+    float springAngle = 90.0f;             // degrees, default points up
+    float springInitialCompression = 0.0f; // fraction 0..1 applied on spawn
+    int springCoilCount = 6;
+};
+
+struct SpringReleaseSettings
+{
+    math::Vec2 tipPos;     // world-space position of spring tip
+    math::Vec2 direction;  // unit vector pointing away from base
+    float impulseStrength; // k·x in pixel-space units
+    float compressionDist; // compression in metres (for debug/display)
 };
 
 struct CannonFireSettings
@@ -106,6 +123,8 @@ public:
 
     bool ConsumeSpawnRequest(SpawnSettings &out);
 
+    bool ConsumeSpringReleaseRequest(SpringReleaseSettings &out);
+
     // Returns true (and fills `out`) when the user clicked FIRE in the
     // cannon inspector.  Call once per frame; resets the pending flag.
     bool ConsumeCannonFireRequest(CannonFireSettings &out);
@@ -144,12 +163,17 @@ private:
     // -- Thruster inspector (shown when selectedBody is a Thruster) ----
     void RenderThrusterInspector(shape::Thruster *thruster);
 
+    // -- Spring inspector (shown when selectedBody is a spring) ---
+
+    void RenderSpringInspector(shape::Spring *spring);
+
     // ── Spawn configuration sub-sections (only shown for certain shape types) ────
     void RenderInclineSpawnConfiguration();
     void RenderCannonSpawnConfiguration();
     void RenderTriggerSpawnConfiguration();
     void RenderThrusterSpawnConfiguration();
     void RenderRopeSpawnConfiguration();
+    void RenderSpringSpawnConfiguration();
 
     // ── Spawner sub-sections ─────────────────────────────────────
     void RenderSpawnBasics();
@@ -179,6 +203,10 @@ private:
 
     CannonFireSettings cannonFireSettings;
     bool cannonFirePending = false;
+
+    // Spring
+    SpringReleaseSettings springReleaseSettings;
+    bool springReleasePending = false;
 
     Settings *settings = nullptr;
 
