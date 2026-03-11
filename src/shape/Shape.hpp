@@ -13,7 +13,7 @@ namespace shape
         Cannon,
         Thruster,
         Trigger,
-        Rope,
+       // Rope, Uncomment it if you want the rope
         Spring
     };
 

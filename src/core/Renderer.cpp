@@ -1026,9 +1026,17 @@ void Renderer::FlushTextLabels()
 
 	for (const auto &label : pendingTextLabels)
 	{
-		// Convert world position to screen position
-		float screenX = (label.worldPos.x * currentZoom - cameraOffset.x);
-		float screenY = windowHeight - ((label.worldPos.y * currentZoom - cameraOffset.y));
+		// Convert world position (origin bottom-left) to ImGui screen position
+		// (origin top-left). Must match the shader transform:
+		//   zoomed = ( (world - cameraOffset) - center ) * zoom + center
+		const float cx = static_cast<float>(windowWidth) * 0.5f;
+		const float cy = static_cast<float>(windowHeight) * 0.5f;
+
+		const float screenX =
+			((label.worldPos.x - cameraOffset.x) - cx) * currentZoom + cx;
+		const float screenYBottom =
+			((label.worldPos.y - cameraOffset.y) - cy) * currentZoom + cy;
+		const float screenY = static_cast<float>(windowHeight) - screenYBottom;
 
 		// Convert color from 0-1 range to ImGui color
 		ImU32 imguiColor = ImGui::ColorConvertFloat4ToU32(

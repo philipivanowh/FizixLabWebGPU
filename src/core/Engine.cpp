@@ -136,7 +136,7 @@ void Engine::CheckSpawning()
             false,             // always-on
             req.thrustKey));
     }
-    // Rope is very unstable at this stage so it will be avoided
+    // Rope is very unstable at this stage so it will be avoided uncomment it if you want to see it
     //  else if (req.shapeType == shape::ShapeType::Rope)
     //  {
     //      shape::Rope::SpawnParams rp;
