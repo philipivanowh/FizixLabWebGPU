@@ -51,10 +51,18 @@ namespace physics
 		AddForceGenerator(std::make_unique<DragForceGenerator>());
 	}
 
+<<<<<<< HEAD
 	void Rigidbody::SetMass(float newMass){
 		mass = (newMass > 0.0f) ? newMass : 1.0f;
 		invMass = (bodyType != RigidbodyType::Static) ? 1.0f / mass : 1.0f;
 		UpdateMassProperties();
+=======
+	void Rigidbody::SetMass(float newMass)
+	{
+		mass = (newMass > 0.0f) ? newMass : 1.0f;
+		invMass = (bodyType != RigidbodyType::Static) ? 1.0f / mass : 0.0f;
+		UpdateMassProperties(); // recalculates inertia + invInertia
+>>>>>>> 4ff0b49f47615f720e20d1e33790cc98fe710a3d
 	}
 
 	void Rigidbody::UpdateMassProperties()
@@ -96,8 +104,8 @@ namespace physics
 			UpdateForces(dtSeconds);
 			linearAcc = netForce / mass;
 			linearVel = linearVel + (linearAcc * static_cast<float>(dtSeconds));
-			pos       = pos + (linearVel * static_cast<float>(dtSeconds));
-			rotation  = std::fmod((rotation + angularVel * static_cast<float>(dtSeconds)), 360.0f);
+			pos = pos + (linearVel * static_cast<float>(dtSeconds));
+			rotation = std::fmod((rotation + angularVel * static_cast<float>(dtSeconds)), 360.0f);
 
 			netForce = math::Vec2();
 			dragForce = math::Vec2();
@@ -106,7 +114,7 @@ namespace physics
 		}
 	}
 
-		void Rigidbody::RemoveForceGenerator(ForceGenerator *generatorToRemove)
+	void Rigidbody::RemoveForceGenerator(ForceGenerator *generatorToRemove)
 	{
 		forceGenerators.erase(
 			std::remove_if(forceGenerators.begin(),

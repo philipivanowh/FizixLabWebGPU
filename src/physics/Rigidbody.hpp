@@ -8,7 +8,7 @@
 
 namespace physics
 {
-	
+
 	enum RigidbodyType
 	{
 		Static,
@@ -61,7 +61,7 @@ namespace physics
 		void BeginFrameForces();
 		void AccumulateNormalImpulse(const math::Vec2 &normalImpulse);
 		void AccumulateFrictionImpulse(const math::Vec2 &frictionImpulse);
-		void FinalizeForces(float deltaMs);    
+		void FinalizeForces(float deltaMs);
 		math::Vec2 GetNormalForce() const;
 		math::Vec2 GetFrictionForce() const;
 		const std::vector<ForceInfo> &GetForcesForDisplay() const;
@@ -91,7 +91,7 @@ namespace physics
 		float staticFriction = 0.0f;
 		float kineticFriction = 0.1f;
 
-		//Removal
+		// Removal
 		float removalTimer = 0.0f;
 
 		// Normal
@@ -104,7 +104,7 @@ namespace physics
 		math::Vec2 smoothedNormalForce{};
 		math::Vec2 smoothedFrictionForce{};
 
-		math::Vec2 prevSmoothedFrictionDir{};  // unit vector from last frame
+		math::Vec2 prevSmoothedFrictionDir{}; // unit vector from last frame
 
 		math::Vec2 dragForce = math::Vec2();
 		std::vector<std::unique_ptr<ForceGenerator>> forceGenerators;
