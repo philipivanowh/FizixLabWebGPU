@@ -21,7 +21,7 @@ struct SpawnSettings
     math::Vec2 velocity{0.0f, 0.0f};
     float boxWidth = 1.0f;
     float boxHeight = 1.0f;
-    float base = 3.0f;
+    float base = 10.0f;
     float angle = 30.0f;
     float radius = 0.5f;
     float mass = 10.0f;

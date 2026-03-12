@@ -1050,7 +1050,7 @@ void UIManager::RenderCannonInspector(shape::Cannon *cannon)
     // DragFloat allows both dragging AND text input with 0.01f precision
     ImGui::DragFloat("##cangle",
                      &cannon->barrelAngleDegrees,
-                     0.01f,  // Speed when dragging
+                     0.1f,  // Speed when dragging
                      0.0f,   // Min value
                      360.0f, // Max value
                      "%.2f deg");
