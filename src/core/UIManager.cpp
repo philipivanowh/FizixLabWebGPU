@@ -2384,8 +2384,8 @@ void UIManager::RenderSpawnBasics()
 {
     SectionHead("SHAPE & PLACEMENT");
     //If you want to include Rope replace it with this comment line
-    //const char *shapes[] = {"Ball", "Incline", "Box", "Cannon", "Thruster", "Trigger", "Rope", "Spring"};
-    const char *shapes[] = {"Ball", "Incline", "Box", "Cannon", "Thruster", "Trigger", "Spring"};
+    const char *shapes[] = {"Ball", "Incline", "Box", "Cannon", "Thruster", "Trigger", "Rope", "Spring"};
+    //const char *shapes[] = {"Ball", "Incline", "Box", "Cannon", "Thruster", "Trigger", "Spring"};
     int si = (int)spawnSettings.shapeType;
     ImGui::SetNextItemWidth(-1);
     ImGui::Combo("##shape", &si, shapes, std::size(shapes));
@@ -2517,6 +2517,11 @@ void UIManager::RenderSpawnConfigurationControls()
     {
         SectionHead("CONFIGURATION");
         RenderSpringSpawnConfiguration();
+    }
+     else if (spawnSettings.shapeType == shape::ShapeType::Rope)
+    {
+        SectionHead("CONFIGURATION");
+        RenderRopeSpawnConfiguration();
     }
 }
 

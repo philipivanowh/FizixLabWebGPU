@@ -137,20 +137,20 @@ void Engine::CheckSpawning()
             req.thrustKey));
     }
     // Rope is very unstable at this stage so it will be avoided uncomment it if you want to see it
-    //  else if (req.shapeType == shape::ShapeType::Rope)
-    //  {
-    //      shape::Rope::SpawnParams rp;
-    //      rp.startWorld = req.position;
-    //      rp.endWorld = req.ropeEndPosition;
-    //      rp.segmentCount = req.ropeSegments;
-    //      rp.segmentMass = req.mass;
-    //      rp.stiffness = req.ropeStiffness;
-    //      rp.stickIterations = req.ropeStickIterations;
-    //      rp.damping = req.ropeDamping;
-    //      rp.pinStart = req.ropePinStart;
-    //      rp.pinEnd = req.ropePinEnd;
-    //      world.AddRope(rp);
-    //  }
+    else if (req.shapeType == shape::ShapeType::Rope)
+    {
+        shape::Rope::SpawnParams rp;
+        rp.startWorld = req.position;
+        rp.endWorld = req.ropeEndPosition;
+        rp.segmentCount = req.ropeSegments;
+        rp.segmentMass = req.mass;
+        rp.stiffness = req.ropeStiffness;
+        rp.stickIterations = req.ropeStickIterations;
+        rp.damping = req.ropeDamping;
+        rp.pinStart = req.ropePinStart;
+        rp.pinEnd = req.ropePinEnd;
+        world.AddRope(rp);
+    }
     else if (req.shapeType == shape::ShapeType::Spring)
     {
         const float PPM = SimulationConstants::PIXELS_PER_METER;
