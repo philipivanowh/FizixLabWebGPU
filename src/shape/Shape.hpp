@@ -20,7 +20,7 @@ namespace shape
     class Shape : public physics::Rigidbody
     {
     public:
-        ShapeType ShapeType;
+        ShapeType shapeType;
         Shape(const math::Vec2 &pos,
               const math::Vec2 &vel,
               const math::Vec2 &acc,
@@ -35,5 +35,7 @@ namespace shape
 
         mutable std::vector<math::Vec2> vertices;
         mutable collision::AABB aabb;
+
+        ShapeType GetShapeType() const { return shapeType; }
     };
 }

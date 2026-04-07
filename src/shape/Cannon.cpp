@@ -179,6 +179,7 @@ Cannon::Cannon(const math::Vec2& pos,
       barrelAngleDegrees(angle),
       color(colorValue)
 {
+    shapeType = ShapeType::Cannon;
     // ── Barrel color family ──────────────────────────────────────
     barrelColor      = colorValue;                     // base metal tone
     breechColor      = DarkenColor(colorValue, 0.78f); // heavier, darker rear block

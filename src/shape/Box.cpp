@@ -21,6 +21,7 @@ namespace shape
 			 physics::RigidbodyType RigidbodyTypeValue)
 		: Shape(pos, vel, acc, massValue, restitution, RigidbodyTypeValue), width(widthValue * SimulationConstants::PIXELS_PER_METER), height(heightValue * SimulationConstants::PIXELS_PER_METER), color(colorValue)
 	{
+		shapeType = ShapeType::Box;
 		verticesSize = 6;
 		UpdateMassProperties();
 

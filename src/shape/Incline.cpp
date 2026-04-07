@@ -20,13 +20,15 @@ namespace shape
 					 const std::array<float, 4> &colorValue,
 					 float staticFrictionValue,
 					 float kineticFrictionValue)
-		: Shape(pos, vel, acc, 1, 0, physics::RigidbodyType::Static), base(base* SimulationConstants::PIXELS_PER_METER), height(std::tan(angle * math::PI / 180.0f) * base), angle(angle * math::PI / 180.0f), flip(flip), color(colorValue)
+		: Shape(pos, vel, acc, 1, 0, physics::RigidbodyType::Static), base(base* SimulationConstants::PIXELS_PER_METER), height(std::tan(angle) * base), angle(angle), flip(flip), color(colorValue)
 	{
 
+		shapeType = ShapeType::Incline;
 		staticFriction = staticFrictionValue;
 		kineticFriction = kineticFrictionValue;
 		verticesSize = 3;
 		UpdateMassProperties();
+		SetAngle(this->angle);
 
 		UpdateVertices();
 	}
@@ -60,15 +62,10 @@ namespace shape
 
 	void Incline::SetBase(float newBase)
 	{
-		float oldHeight = height;
-
 		base = std::max(newBase, 10.0f); // Minimum base width
 
 		// Recalculate height (angle stays the same)
 		height = std::tan(angle) * base;
-
-		// Adjust position so base stays anchored
-		AdjustPositionForBaseAnchor(oldHeight, height);
 
 		// Update vertices with new dimensions
 		UpdateVertices();
@@ -79,9 +76,6 @@ namespace shape
 	void Incline::SetAngle(float angleDegrees)
 	{
 		// Convert to radians and store
-		float oldHeight = height;
-
-		// Convert to radians and store
 		angle = angleDegrees * math::PI / 180.0f;
 
 		// Clamp angle to reasonable range (avoid vertical or negative)
@@ -90,7 +84,6 @@ namespace shape
 		// Recalculate height based on new angle
 		height = std::tan(angle) * base;
 
-		AdjustPositionForBaseAnchor(oldHeight, height);
 
 		// Update the vertices with new dimensions
 		UpdateVertices();
@@ -122,17 +115,6 @@ namespace shape
 				math::Vec2(-halfWidth, height), // Top left (apex)
 			};
 		}
-	}
-
-	void Incline::AdjustPositionForBaseAnchor(float oldHeight, float newHeight)
-	{
-		// Since vertices are now anchored at base (y=0), but the object's
-		// position represents its center, we need to adjust pos.y when height changes
-		//
-		// Old center Y was at oldHeight/2, new center Y should be at newHeight/2
-		// The difference in center position is what we add to pos.y
-		float centerShift = (newHeight - oldHeight) / 2.0f;
-		pos.y += centerShift;
 	}
 
 	std::vector<float> Incline::GetVertexLocalPos() const
