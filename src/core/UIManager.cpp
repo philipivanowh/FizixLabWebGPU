@@ -885,7 +885,8 @@ void UIManager::RenderInspectorPanel(physics::Rigidbody *body)
     float newMass = body->mass;
     KVRow("Mass", Col::ToU32(Col::Ink), "%.2f kg", newMass);
     ImGui::SetNextItemWidth(-1);
-    ImGui::DragFloat("##mass", &body->mass, 0.01f, 0.01f, 1000.0f);
+    ImGui::DragFloat("##mass", &newMass, 0.01f, 0.01f, 1000.0f);
+    body->SetMass(newMass);
 
     KVRow("Restitution", Col::ToU32(Col::Ink), "%.2f", body->restitution);
     ImGui::SetNextItemWidth(-1);
