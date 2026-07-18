@@ -10,6 +10,10 @@
 #include <backends/imgui_impl_wgpu.h>
 #include <backends/imgui_impl_glfw.h>
 
+#ifdef __EMSCRIPTEN__
+#include <emscripten/html5.h>
+#endif
+
 #include <array>
 #include <cassert>
 #include <cmath>
@@ -97,7 +101,7 @@ bool Renderer::Initialize(Settings *settings, GLFWscrollfun scrollCallback)
 		return false;
 	}
 
-	surface = glfwGetWGPUSurface(instance, window);
+	surface = glfwCreateWindowWGPUSurface(instance, window);
 
 	// Get adapter
 	std::cout << "Requesting adapter..." << std::endl;
@@ -110,31 +114,32 @@ bool Renderer::Initialize(Settings *settings, GLFWscrollfun scrollCallback)
 
 	std::cout << "Requesting device..." << std::endl;
 	DeviceDescriptor deviceDesc = {};
-	deviceDesc.label = "My Device";
+	deviceDesc.label = StringView("My Device");
 	deviceDesc.requiredFeatureCount = 0;
 	deviceDesc.requiredLimits = nullptr;
 	deviceDesc.defaultQueue.nextInChain = nullptr;
-	deviceDesc.defaultQueue.label = "The default queue";
-	deviceDesc.deviceLostCallback = [](WGPUDeviceLostReason reason, char const *message, void * /* pUserData */)
+	deviceDesc.defaultQueue.label = StringView("The default queue");
+	deviceDesc.deviceLostCallbackInfo.mode = CallbackMode::AllowSpontaneous;
+	deviceDesc.deviceLostCallbackInfo.callback = [](WGPUDevice const * /* device */, WGPUDeviceLostReason reason, WGPUStringView message, void * /* userdata1 */, void * /* userdata2 */)
 	{
 		std::cout << "Device lost: reason " << reason;
-		if (message)
-			std::cout << " (" << message << ")";
+		if (message.data)
+			std::cout << " (" << std::string_view(message.data, message.length) << ")";
+		std::cout << std::endl;
+	};
+	deviceDesc.uncapturedErrorCallbackInfo.callback = [](WGPUDevice const * /* device */, WGPUErrorType type, WGPUStringView message, void * /* userdata1 */, void * /* userdata2 */)
+	{
+		std::cout << "Uncaptured device error: type " << type;
+		if (message.data)
+			std::cout << " (" << std::string_view(message.data, message.length) << ")";
 		std::cout << std::endl;
 	};
 
-	RequiredLimits requiredLimits = GetRequiredLimits(adapter);
-	uniformAlignment = requiredLimits.limits.minUniformBufferOffsetAlignment;
+	Limits requiredLimits = GetRequiredLimits(adapter);
+	uniformAlignment = requiredLimits.minUniformBufferOffsetAlignment;
 	deviceDesc.requiredLimits = &requiredLimits;
 	device = adapter.requestDevice(deviceDesc);
 	std::cout << "Got device: " << device << std::endl;
-
-	// Device error callback
-	uncapturedErrorCallbackHandle = device.setUncapturedErrorCallback([](ErrorType type, char const *message)
-																	  {
-		std::cout << "Uncaptured device error: type " << type;
-		if (message) std::cout << " (" << message << ")";
-		std::cout << std::endl; });
 
 	queue = device.getQueue();
 
@@ -240,18 +245,29 @@ math::Vec2 Renderer::GetCameraOffset() const
 
 TextureView Renderer::GetNextSurfaceTextureView()
 {
+	// Release any surface texture left over from a skipped frame
+	if (currentSurfaceTexture)
+	{
+		currentSurfaceTexture.release();
+		currentSurfaceTexture = nullptr;
+	}
+
 	// Get the surface texture
 	SurfaceTexture surfaceTexture;
 	surface.getCurrentTexture(&surfaceTexture);
-	if (surfaceTexture.status != SurfaceGetCurrentTextureStatus::Success)
+	if (surfaceTexture.status != SurfaceGetCurrentTextureStatus::SuccessOptimal &&
+		surfaceTexture.status != SurfaceGetCurrentTextureStatus::SuccessSuboptimal)
 	{
+		if (surfaceTexture.texture)
+			Texture(surfaceTexture.texture).release();
 		return nullptr;
 	}
 	Texture texture = surfaceTexture.texture;
+	currentSurfaceTexture = texture;
 
 	// Create a view for this surface texture
 	TextureViewDescriptor viewDescriptor;
-	viewDescriptor.label = "Surface texture view";
+	viewDescriptor.label = StringView("Surface texture view");
 	viewDescriptor.format = texture.getFormat();
 	viewDescriptor.dimension = TextureViewDimension::_2D;
 	viewDescriptor.baseMipLevel = 0;
@@ -260,12 +276,6 @@ TextureView Renderer::GetNextSurfaceTextureView()
 	viewDescriptor.arrayLayerCount = 1;
 	viewDescriptor.aspect = TextureAspect::All;
 	TextureView targetView = texture.createView(viewDescriptor);
-
-#ifndef WEBGPU_BACKEND_WGPU
-	// We no longer need the texture, only its view
-	// (NB: with wgpu-native, surface textures must not be manually released)
-	Texture(surfaceTexture.texture).release();
-#endif // WEBGPU_BACKEND_WGPU
 	return targetView;
 }
 
@@ -273,19 +283,15 @@ void Renderer::InitializePipeline()
 {
 	// Load the shader module
 	ShaderModuleDescriptor shaderDesc;
-#ifdef WEBGPU_BACKEND_WGPU
-	shaderDesc.hintCount = 0;
-	shaderDesc.hints = nullptr;
-#endif
 	std::string shaderSource = Utility::LoadFileToString("src/shaders/triangle.wgsl");
 	// We use the extension mechanism to specify the WGSL part of the shader module descriptor
-	ShaderModuleWGSLDescriptor shaderCodeDesc;
+	ShaderSourceWGSL shaderCodeDesc;
 	// Set the chained struct's header
 	shaderCodeDesc.chain.next = nullptr;
-	shaderCodeDesc.chain.sType = SType::ShaderModuleWGSLDescriptor;
+	shaderCodeDesc.chain.sType = SType::ShaderSourceWGSL;
 	// Connect the chain
 	shaderDesc.nextInChain = &shaderCodeDesc.chain;
-	shaderCodeDesc.code = shaderSource.c_str();
+	shaderCodeDesc.code = StringView(shaderSource);
 	ShaderModule shaderModule = device.createShaderModule(shaderDesc);
 
 	// Create the render pipeline
@@ -317,7 +323,7 @@ void Renderer::InitializePipeline()
 	// Here we tell that the programmable vertex shader stage is described
 	// by the function called 'vs_main' in that module.
 	pipelineDesc.vertex.module = shaderModule;
-	pipelineDesc.vertex.entryPoint = "vs_main";
+	pipelineDesc.vertex.entryPoint = StringView("vs_main");
 	pipelineDesc.vertex.constantCount = 0;
 	pipelineDesc.vertex.constants = nullptr;
 
@@ -342,7 +348,7 @@ void Renderer::InitializePipeline()
 	// by the function called 'fs_main' in the shader module.
 	FragmentState fragmentState;
 	fragmentState.module = shaderModule;
-	fragmentState.entryPoint = "fs_main";
+	fragmentState.entryPoint = StringView("fs_main");
 	fragmentState.constantCount = 0;
 	fragmentState.constants = nullptr;
 
@@ -444,6 +450,24 @@ void Renderer::BeginFrame()
 {
 	glfwPollEvents();
 
+#ifdef __EMSCRIPTEN__
+	// Keep the GLFW "window" (the canvas backing store) in sync with the
+	// canvas CSS size. This keeps rendering resolution, aspect ratio and
+	// mouse coordinates 1:1 with what the page displays, at any page size.
+	{
+		double cssWidth = 0.0, cssHeight = 0.0;
+		emscripten_get_element_css_size("#canvas", &cssWidth, &cssHeight);
+		const uint32_t cssW = static_cast<uint32_t>(cssWidth);
+		const uint32_t cssH = static_cast<uint32_t>(cssHeight);
+		if (cssW > 0 && cssH > 0 && (cssW != windowWidth || cssH != windowHeight))
+		{
+			windowWidth = cssW;
+			windowHeight = cssH;
+			glfwSetWindowSize(window, static_cast<int>(cssW), static_cast<int>(cssH));
+		}
+	}
+#endif
+
 	uint32_t newFramebufferWidth = framebufferWidth;
 	uint32_t newFramebufferHeight = framebufferHeight;
 	glfwGetFramebufferSize(window,
@@ -477,7 +501,7 @@ void Renderer::BeginFrame()
 
 	// Create a command encoder for the draw call
 	CommandEncoderDescriptor encoderDesc = {};
-	encoderDesc.label = "My command encoder";
+	encoderDesc.label = StringView("My command encoder");
 	encoder = wgpuDeviceCreateCommandEncoder(device, &encoderDesc);
 
 	// Create the render pass that clears the screen with our color
@@ -626,7 +650,7 @@ void Renderer::EndFrame()
 
 	// Finally encode and submit the render pass
 	CommandBufferDescriptor cmdBufferDescriptor = {};
-	cmdBufferDescriptor.label = "Command buffer";
+	cmdBufferDescriptor.label = StringView("Command buffer");
 	CommandBuffer command = encoder.finish(cmdBufferDescriptor);
 	encoder.release();
 
@@ -639,48 +663,48 @@ void Renderer::EndFrame()
 	surface.present();
 #endif
 
+	// Now that the frame is submitted (and presented), the surface texture
+	// acquired in GetNextSurfaceTextureView() can be released.
+	if (currentSurfaceTexture)
+	{
+		currentSurfaceTexture.release();
+		currentSurfaceTexture = nullptr;
+	}
+
 #if defined(WEBGPU_BACKEND_DAWN)
 	device.tick();
 #elif defined(WEBGPU_BACKEND_WGPU)
-	device.poll(false);
+	device.poll(false, nullptr);
 #endif
 }
 
-RequiredLimits Renderer::GetRequiredLimits(Adapter adapter) const
+Limits Renderer::GetRequiredLimits(Adapter adapter) const
 {
 	// Get adapter supported limits, in case we need them
-	SupportedLimits supportedLimits;
-#ifdef __EMSCRIPTEN__
-	// Error in Chrome: Aborted(TODO: wgpuAdapterGetLimits unimplemented)
-	// (as of September 4, 2023), so we hardcode values:
-	// These work for 99.95% of clients (source: https://web3dsurvey.com/webgpu)
-	supportedLimits.limits.minStorageBufferOffsetAlignment = 32;
-	supportedLimits.limits.minUniformBufferOffsetAlignment = 32;
-#else
+	// (wgpuAdapterGetLimits is implemented on all current backends, including
+	// emdawnwebgpu on the web, so no more hardcoded values.)
+	Limits supportedLimits = Default;
 	adapter.getLimits(&supportedLimits);
-#endif
 
 	// Don't forget to = Default
-	RequiredLimits requiredLimits = Default;
+	Limits requiredLimits = Default;
 
 	// We use at most 1 vertex attribute for now
-	requiredLimits.limits.maxVertexAttributes = supportedLimits.limits.maxVertexAttributes;
-	;
+	requiredLimits.maxVertexAttributes = supportedLimits.maxVertexAttributes;
 	// We should also tell that we use 1 vertex buffers
-	requiredLimits.limits.maxVertexBuffers = supportedLimits.limits.maxVertexBuffers;
+	requiredLimits.maxVertexBuffers = supportedLimits.maxVertexBuffers;
 	// Allow larger buffers for uniforms and dynamic data.
-	requiredLimits.limits.maxBufferSize = supportedLimits.limits.maxBufferSize;
+	requiredLimits.maxBufferSize = supportedLimits.maxBufferSize;
 	// Maximum stride between 2 consecutive vertices in the vertex buffer
-	requiredLimits.limits.maxVertexBufferArrayStride = supportedLimits.limits.maxVertexBufferArrayStride;
-	;
+	requiredLimits.maxVertexBufferArrayStride = supportedLimits.maxVertexBufferArrayStride;
 
 	// These two limits are different because they are "minimum" limits,
 	// they are the only ones we are may forward from the adapter's supported
 	// limits.
-	requiredLimits.limits.minUniformBufferOffsetAlignment = supportedLimits.limits.minUniformBufferOffsetAlignment;
-	requiredLimits.limits.minStorageBufferOffsetAlignment = supportedLimits.limits.minStorageBufferOffsetAlignment;
+	requiredLimits.minUniformBufferOffsetAlignment = supportedLimits.minUniformBufferOffsetAlignment;
+	requiredLimits.minStorageBufferOffsetAlignment = supportedLimits.minStorageBufferOffsetAlignment;
 
-	requiredLimits.limits.maxBindGroups = 2;
+	requiredLimits.maxBindGroups = 2;
 
 	return requiredLimits;
 }

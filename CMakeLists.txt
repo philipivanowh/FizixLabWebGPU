@@ -53,7 +53,7 @@ target_link_libraries(App PRIVATE glfw webgpu glfw3webgpu imgui)
 target_copy_webgpu_binaries(App)
 
 set_target_properties(App PROPERTIES
-	CXX_STANDARD 17
+	CXX_STANDARD 20
 	CXX_STANDARD_REQUIRED ON
 	CXX_EXTENSIONS OFF
 	COMPILE_WARNING_AS_ERROR ON
@@ -67,18 +67,35 @@ endif()
 
 if (EMSCRIPTEN)
 	set_target_properties(App PROPERTIES SUFFIX ".html")
-	target_link_options(App PRIVATE 
-		-sASYNCIFY
-		-sUSE_WEBGPU=1
-		-sUSE_GLFW=3
-		-sALLOW_MEMORY_GROWTH=1
-		-sNO_DISABLE_EXCEPTION_CATCHING
-		-sSTACK_SIZE=5MB
-		-sINITIAL_MEMORY=256MB
-	)
+
+	# NB: --use-port is NOT set here. The 'webgpu' target (WebGPU-distribution,
+	# EMDAWNWEBGPU backend) propagates its own pinned emdawnwebgpu port as
+	# INTERFACE compile+link options to App, imgui and glfw3webgpu. Adding the
+	# emsdk built-in port here as well would pull in a second, conflicting copy
+	# of the WebGPU headers.
+    target_link_options(App PRIVATE
+        -sASYNCIFY
+        -sUSE_GLFW=3
+        -sALLOW_MEMORY_GROWTH=1
+        # Growable (resizable) ArrayBuffers are rejected by Chrome's
+        # GPUQueue.writeBuffer ("value must not be resizable"), so grow memory
+        # the classic way (detach + replace views) instead.
+        -sGROWABLE_ARRAYBUFFERS=0
+        -sNO_DISABLE_EXCEPTION_CATCHING
+        -sSTACK_SIZE=5MB
+        -sINITIAL_MEMORY=256MB
+    )
 
 	# Add shader file to embed
 	target_link_options(App PRIVATE
 		"SHELL:--preload-file ${CMAKE_CURRENT_SOURCE_DIR}/src/shaders@/src/shaders"
+	)
+
+	# Custom minimal page: fullscreen canvas, no Emscripten branding
+	target_link_options(App PRIVATE
+		"SHELL:--shell-file ${CMAKE_CURRENT_SOURCE_DIR}/web/shell.html"
+	)
+	set_property(TARGET App APPEND PROPERTY LINK_DEPENDS
+		"${CMAKE_CURRENT_SOURCE_DIR}/web/shell.html"
 	)
 endif()

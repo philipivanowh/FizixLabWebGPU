@@ -1,16 +1,6 @@
 #pragma once
 
-// Suppress warnings and errors from the third-party Emscripten WebGPU header
-#ifdef __EMSCRIPTEN__
-#pragma GCC diagnostic push
-#pragma GCC diagnostic ignored "-w"
-#endif
-
 #include <webgpu/webgpu.hpp>
-
-#ifdef __EMSCRIPTEN__
-#pragma GCC diagnostic pop
-#endif
 
 #include <GLFW/glfw3.h>
 #include <glfw3webgpu.h>
@@ -92,7 +82,7 @@ private:
 	wgpu::TextureView GetNextSurfaceTextureView();
 	// Substep of Initialize() that creates the render pipeline
 	void InitializePipeline();
-	wgpu::RequiredLimits GetRequiredLimits(Adapter adapter) const;
+	wgpu::Limits GetRequiredLimits(Adapter adapter) const;
 	void InitializeBuffers();
 	void EnsureVertexBufferSize(int size);
 	uint32_t UpdateUniforms(const math::Vec2 &position, const std::array<float, 4> &color);
@@ -104,7 +94,6 @@ private:
 	wgpu::Device device;
 	Queue queue;
 	Surface surface;
-	std::unique_ptr<ErrorCallback> uncapturedErrorCallbackHandle;
 	TextureFormat surfaceFormat = TextureFormat::Undefined;
 	RenderPassEncoder renderPass;
 	RenderPipeline pipeline;
@@ -117,6 +106,9 @@ private:
 	uint32_t vertexCount;
 	CommandEncoder encoder;
 	TextureView targetView;
+	// Surface texture acquired for the current frame; must only be released
+	// after submit/present (wgpu-native destroys it as soon as it is released)
+	Texture currentSurfaceTexture = nullptr;
 	uint32_t uniformAlignment = 1;
 	size_t uniformBufferStride = 0;
 	size_t uniformBufferSize = 0;
@@ -126,7 +118,8 @@ private:
 	uint32_t framebufferWidth = WindowConstants::defaultWindowWidth;
 	uint32_t framebufferHeight = WindowConstants::defaultWindowHeight;
 
-	bool surfaceIsSrgb = true;
+	// Only read on __APPLE__ (macOS sRGB surface colour pre-correction)
+	[[maybe_unused]] bool surfaceIsSrgb = true;
 	// Camera
 	float currentZoom = 1.0f;
 	math::Vec2 cameraOffset{0.0f, 0.0f};

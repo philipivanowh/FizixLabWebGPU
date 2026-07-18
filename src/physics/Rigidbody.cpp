@@ -95,8 +95,9 @@ namespace physics
 			ClearForces();
 			UpdateForces(dtSeconds);
 			linearAcc = netForce / mass;
-			linearVel = linearVel + (linearAcc * static_cast<float>(dtSeconds));
-			pos = pos + (linearVel * static_cast<float>(dtSeconds));
+			
+			pos += (linearVel * static_cast<float>(dtSeconds)) + (linearAcc * static_cast<float>(dtSeconds) * 0.5f);
+			linearVel += (linearAcc * static_cast<float>(dtSeconds));
 			rotation = std::fmod((rotation + angularVel * static_cast<float>(dtSeconds)), 360.0f);
 
 			netForce = math::Vec2();

@@ -45,41 +45,88 @@ Notes:
 
 ### Requirements
 
-- CMake
-- A C++17 compiler (MSVC, clang, gcc)
-- Git (CMake fetches the WebGPU backend dependencies)
+- CMake 3.16+
+- A C++20 compiler (MSVC, clang, gcc)
+- Git and an internet connection for the first configure (CMake fetches the
+  WebGPU backend, and on web builds the emdawnwebgpu port)
 
-### Native (recommended)
+### Native on macOS
+
+You need the Xcode Command Line Tools (`xcode-select --install`) and CMake
+(`brew install cmake`).
 
 From the repo root:
 
 ```bash
-cmake -S . -B build
-cmake --build build
+cmake -S . -B build-native -DCMAKE_BUILD_TYPE=Release
+cmake --build build-native -j8
 ```
 
-Run:
-- Windows: `build/App.exe`
-- macOS/Linux: `build/App`
-
-Tip (Visual Studio generator): `cmake --build build --config Release`
-
-### Choosing a WebGPU backend
-
-The build supports multiple WebGPU backends via CMake:
+Run it:
 
 ```bash
-cmake -S . -B build -DWEBGPU_BACKEND=WGPU
-# or: -DWEBGPU_BACKEND=DAWN
-cmake --build build
+./build-native/App
 ```
 
-### Web (Emscripten)
+The first configure downloads the WebGPU implementation (wgpu-native) via
+FetchContent; after that, rebuilds are offline. The `libwgpu_native.dylib` is
+copied next to the binary automatically.
 
-Web builds are work-in-progress. If you want to experiment:
+The same two commands work on Windows (`build-native\App.exe`, add
+`--config Release` with the Visual Studio generator) and Linux.
 
-- Install Emscripten: https://emscripten.org/docs/getting_started/downloads.html
-- Configure with `emcmake cmake ...` and set `-DWEBGPU_BACKEND=EMSCRIPTEN`
+### Choosing a native WebGPU backend
+
+wgpu-native is the default. Dawn also works:
+
+```bash
+cmake -S . -B build-native -DWEBGPU_BACKEND=DAWN
+cmake --build build-native
+```
+
+### Web (Emscripten + emdawnwebgpu)
+
+The web build uses Emscripten with the [emdawnwebgpu](https://dawn.googlesource.com/dawn)
+port — no flags needed, `emcmake` selects it automatically.
+
+1. **Install Emscripten** (4.0.10 or newer) via [emsdk](https://emscripten.org/docs/getting_started/downloads.html):
+
+   ```bash
+   git clone https://github.com/emscripten-core/emsdk.git
+   cd path/emsdk 
+   ./emsdk install latest
+
+   **Activate Emscripten** 
+   cd path/emsdk 
+   ./emsdk activate latest
+   source ./emsdk_env.sh   # do this in every new shell before building
+   ```
+
+2. **Build** from the repo root:
+
+   ```bash
+   emcmake cmake -S . -B build-web -DCMAKE_BUILD_TYPE=Release
+   cmake --build build-web -j8
+   ```
+
+   This produces `build-web/App.html` (the page, using the custom shell in
+   `web/shell.html`) plus `App.js`, `App.wasm` and `App.data` (preloaded
+   shaders).
+
+3. **Launch it locally** — browsers won't load wasm from `file://`, so serve
+   the folder over HTTP:
+
+   ```bash
+   python3 -m http.server 8123 --directory build-web
+   ```
+
+   Then open <http://localhost:8123/App.html> in a WebGPU-capable browser
+   (current Chrome or Edge work best). The sandbox fills the window and
+   adapts to any window size.
+
+4. **Deploy** (optional): the four files in `build-web/` are a fully static
+   site. Copy them to any static host (GitHub Pages, itch.io, Netlify, …),
+   renaming `App.html` to `index.html`. No special server headers are needed.
 
 ## Contributing
 

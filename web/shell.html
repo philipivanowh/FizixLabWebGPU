@@ -1,0 +1,76 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>FizixLab</title>
+  <style>
+    html, body {
+      margin: 0;
+      padding: 0;
+      width: 100%;
+      height: 100%;
+      overflow: hidden;
+      background: #0a0c10;
+    }
+    #canvas {
+      display: block;
+      width: 100%;
+      height: 100%;
+      outline: none;
+    }
+    #status {
+      position: absolute;
+      inset: 0;
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+      align-items: center;
+      justify-content: center;
+      color: #8fa3bf;
+      font: 14px/1.4 ui-monospace, SFMono-Regular, Menlo, monospace;
+      background: #0a0c10;
+      transition: opacity 0.4s;
+      z-index: 10;
+    }
+    #status.hidden {
+      opacity: 0;
+      pointer-events: none;
+    }
+    #status .title {
+      font-size: 20px;
+      letter-spacing: 0.2em;
+      color: #c7d5ea;
+    }
+  </style>
+</head>
+<body>
+  <div id="status">
+    <div class="title">FIZIXLAB</div>
+    <div id="statusText">loading&hellip;</div>
+  </div>
+  <canvas id="canvas" oncontextmenu="event.preventDefault()" tabindex="-1"></canvas>
+  <script>
+    var Module = {
+      canvas: document.getElementById('canvas'),
+      // stdout/stderr go to the browser console instead of an on-page textarea
+      print: (...args) => console.log(...args),
+      printErr: (...args) => console.error(...args),
+      setStatus: (text) => {
+        const el = document.getElementById('statusText');
+        if (el && text) el.textContent = text;
+      },
+      onRuntimeInitialized: () => {
+        document.getElementById('status').classList.add('hidden');
+      },
+    };
+    window.addEventListener('error', (e) => {
+      Module.setStatus('Error — open the browser console for details');
+    });
+    if (!('gpu' in navigator)) {
+      Module.setStatus('This browser does not support WebGPU — try a current version of Chrome or Edge.');
+    }
+  </script>
+  {{{ SCRIPT }}}
+</body>
+</html>

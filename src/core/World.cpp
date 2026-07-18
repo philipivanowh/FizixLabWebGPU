@@ -298,11 +298,38 @@ void World::Update(float deltaMs, int iterations,
 	for (const auto &obj : objects)
 	{
 		if (obj->bodyType == physics::RigidbodyType::Static &&
-			!dynamic_cast<shape::Trigger *>(obj.get()) && !obj->isRopeNode)
+			shape::KindOf(*obj) != shape::ShapeType::Trigger && !obj->isRopeNode)
 			staticBodies.push_back(obj.get());
 	}
 
 	std::vector<math::Vec2> prevPositions(objects.size());
+	std::vector<math::Vec2> integratedPositions(objects.size());
+
+	// Broadphase once per frame (Box2D-style): BuildPairs fattens every AABB
+	// by the body's expected travel over the whole frame, so the candidate
+	// list stays a valid superset for all sub-steps. Pair filtering (triggers,
+	// thrusters, rope adjacency) is frame-constant, so it is hoisted here too.
+	collisionPipeline.BuildPairs(objects, deltaMs / 1000.0f);
+	std::vector<CollisionPipeline::Pair> activePairs;
+	activePairs.reserve(collisionPipeline.GetPairs().size());
+	for (const auto &pair : collisionPipeline.GetPairs())
+	{
+		physics::Rigidbody &bodyA = *objects[pair.first];
+		physics::Rigidbody &bodyB = *objects[pair.second];
+
+		const shape::ShapeType kindA = shape::KindOf(bodyA);
+		const shape::ShapeType kindB = shape::KindOf(bodyB);
+		if (kindA == shape::ShapeType::Trigger || kindB == shape::ShapeType::Trigger)
+			continue;
+		if (kindA == shape::ShapeType::Thruster || kindB == shape::ShapeType::Thruster)
+			continue;
+
+		// Skip only for the degenerate 2-node rope (endpoints are adjacent)
+		if (SameRopeAndAdjacent(bodyA, bodyB))
+			continue;
+
+		activePairs.push_back(pair);
+	}
 
 	for (int currIteration = 0; currIteration < iterations; currIteration++)
 	{
@@ -351,32 +378,20 @@ void World::Update(float deltaMs, int iterations,
 			: (deltaMs / 1000.0f);
 		for (auto &rb : objects)
 		{
-			if (auto *spring = dynamic_cast<shape::Spring *>(rb.get()))
-				spring->PhysicsUpdate(dtSeconds, objects);
+			if (shape::KindOf(*rb) == shape::ShapeType::Spring)
+				static_cast<shape::Spring *>(rb.get())->PhysicsUpdate(dtSeconds, objects);
 		}
 
-		std::vector<math::Vec2> integratedPositions(objects.size());
 		for (size_t i = 0; i < objects.size(); ++i)
 			integratedPositions[i] = objects[i]->pos;
 
 		// Main collision pipeline — endpoints participate normally.
 		// Middle nodes are not in objects so they never appear here.
-		collisionPipeline.BuildPairs(objects);
-		for (const auto &pair : collisionPipeline.GetPairs())
+		// (Pairs were built and filtered once, before the sub-step loop.)
+		for (const auto &pair : activePairs)
 		{
 			physics::Rigidbody &bodyA = *objects[pair.first];
 			physics::Rigidbody &bodyB = *objects[pair.second];
-
-			if (dynamic_cast<shape::Trigger *>(&bodyA) ||
-				dynamic_cast<shape::Trigger *>(&bodyB))
-				continue;
-			if (dynamic_cast<shape::Thruster *>(&bodyA) ||
-				dynamic_cast<shape::Thruster *>(&bodyB))
-				continue;
-
-			// Skip only for the degenerate 2-node rope (endpoints are adjacent)
-			if (SameRopeAndAdjacent(bodyA, bodyB))
-				continue;
 
 			collisionSolver.ResolveIfColliding(bodyA, bodyB);
 
@@ -427,8 +442,6 @@ void World::Draw(Renderer &renderer) const
 	// Draw each rope: segment lines + taut highlight + pin anchor discs.
 	// Middle nodes are pure verlet positions and are never in objects, so
 	// they have no DrawShape call at all — DrawRope is their only renderer.
-	
-    std::cout << ropes.size() << std::endl;
 	for (const auto &rope : ropes)
 		renderer.DrawRope(rope);
 }

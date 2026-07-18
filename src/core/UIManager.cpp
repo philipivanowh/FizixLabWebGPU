@@ -277,7 +277,15 @@ void UIManager::InitializeImGui(Renderer &renderer, Settings *settings, World *w
     io.IniFilename = nullptr;
     ApplyNeonTheme();
     ImGui_ImplGlfw_InitForOther(renderer.GetWindow(), true);
-    ImGui_ImplWGPU_Init(renderer.GetDevice(), 3, renderer.GetSurfaceFormat());
+#ifdef __EMSCRIPTEN__
+    ImGui_ImplGlfw_InstallEmscriptenCallbacks(renderer.GetWindow(), "#canvas");
+#endif
+    ImGui_ImplWGPU_InitInfo initInfo;
+    initInfo.Device = renderer.GetDevice();
+    initInfo.NumFramesInFlight = 3;
+    initInfo.RenderTargetFormat = renderer.GetSurfaceFormat();
+    initInfo.DepthStencilFormat = WGPUTextureFormat_Undefined;
+    ImGui_ImplWGPU_Init(&initInfo);
 }
 
 void UIManager::TerminateImGui()

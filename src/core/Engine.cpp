@@ -12,6 +12,10 @@
 #include "math/Math.hpp"
 
 #include <array>
+#include <chrono>
+#include <cstdio>
+#include <cstdlib>
+#include <cstring>
 #include <memory>
 #include <cmath>
 #include <string>
@@ -75,6 +79,11 @@ bool Engine::Initialize()
     uiManager.InitializeImGui(renderer, &settings, &world);
     world.Initialize(&settings);
     AddDefaultObjects();
+
+    // Benchmark hook: FIZIX_SCENE=stress ./App loads a dense scene,
+    // FIZIX_PERF=1 ./App prints physics-step timings to stdout.
+    if (const char *scene = std::getenv("FIZIX_SCENE"); scene && std::strcmp(scene, "stress") == 0)
+        StressTestScene();
     return true;
 }
 
@@ -558,24 +567,45 @@ void Engine::Update(float deltaMs, int iterations)
     }
     else
     {
-        float scaledDelta = 0.0f;
+        // ── Fixed timestep ────────────────────────────────────────
+        // Physics always advances in steps of exactly kFixedStepMs of
+        // simulation time, no matter the display frame rate or the
+        // playback speed. timeScale feeds the accumulator, so slow-mo
+        // runs FEWER steps per real second — never smaller ones.
+        constexpr float kFixedStepMs = 1000.0f / 60.0f;
+        constexpr int kMaxStepsPerFrame = 5;
+
+        static float accumulatorMs = 0.0f;
+
+        int stepsToRun = 0;
 
         if (spawnNudgeFrames > 0)
         {
-            scaledDelta = 16.67f;
+            stepsToRun = 1;
             spawnNudgeFrames--;
         }
         else if (settings.stepOneFrame)
         {
-            scaledDelta = 16.67f * settings.timeScale;
+            stepsToRun = 1;
             settings.stepOneFrame = false;
         }
         else if (!settings.paused)
         {
-            scaledDelta = deltaMs * settings.timeScale;
-        }
+            accumulatorMs += deltaMs * settings.timeScale;
 
-        simulationTimeMs += scaledDelta;
+            // Hitch guard: after a window drag or debugger pause, drop
+            // the excess time instead of running hundreds of catch-up
+            // steps in one frame.
+            const float maxMs = kFixedStepMs * kMaxStepsPerFrame;
+            if (accumulatorMs > maxMs)
+                accumulatorMs = maxMs;
+
+            while (accumulatorMs >= kFixedStepMs)
+            {
+                stepsToRun++;
+                accumulatorMs -= kFixedStepMs;
+            }
+        }
 
         for (auto &obj : world.GetObjects())
         {
@@ -588,13 +618,47 @@ void Engine::Update(float deltaMs, int iterations)
                                    (!t->keyHold || glfwGetKey(window, t->fireKey) == GLFW_PRESS);
         }
 
-        if (settings.recording)
+               for (int step = 0; step < stepsToRun; ++step)
         {
-            if (++recordFrameCounter % settings.recordInterval == 0)
-                recorder.Record(world.CaptureSnapshot(), simulationTimeMs);
+            simulationTimeMs += kFixedStepMs;
+
+            if (settings.recording)
+            {
+                if (++recordFrameCounter % settings.recordInterval == 0)
+                    recorder.Record(world.CaptureSnapshot(), simulationTimeMs);
+            }
+
+            static const bool kPerfLog = std::getenv("FIZIX_PERF") != nullptr;
+            if (kPerfLog)
+            {
+                const auto t0 = std::chrono::steady_clock::now();
+                world.Update(kFixedStepMs, iterations, selectedBody, draggedBody);
+                const auto t1 = std::chrono::steady_clock::now();
+
+                static double accumMs = 0.0;
+                static int frames = 0;
+                accumMs += std::chrono::duration<double, std::milli>(t1 - t0).count();
+                if (++frames == 60)
+                {
+                    std::printf("[perf] bodies=%zu physics=%.3f ms/frame (avg over 60 frames)\n",
+                                world.RigidbodyCount(), accumMs / frames);
+                    std::fflush(stdout);
+                    accumMs = 0.0;
+                    frames = 0;
+                }
+            }
+            else
+            {
+                world.Update(kFixedStepMs, iterations, selectedBody, draggedBody);
+            }
         }
 
-        world.Update(scaledDelta, iterations, selectedBody, draggedBody);
+        // While paused (or when no full step accumulated), still tick the
+        // world once with dt = 0 so pause-time interactions keep working:
+        // dragging a body into another still separates them, exactly as
+        // the old code did when scaledDelta was 0.
+        if (stepsToRun == 0)
+            world.Update(0.0f, iterations, selectedBody, draggedBody);
 
         CheckSpawning();
         CheckCannon();
@@ -880,6 +944,49 @@ void Engine::InclineProblemScene()
     world.Add(std::make_unique<shape::Box>(
         Vec2(970, 590), Vec2(0, 0), Vec2(0, 0),
         100, 100, white, 100, 1, RigidbodyType::Dynamic));
+}
+
+void Engine::StressTestScene()
+{
+    // Benchmark scene: a dense shower of 140 dynamic bodies over the default
+    // ground box. Reproducible on purpose — do not randomize.
+    // Launch: FIZIX_SCENE=stress FIZIX_PERF=1 ./App
+    using physics::RigidbodyType;
+    using shape::Ball;
+    using shape::Box;
+
+    const std::array<float, 4> white{1.0f, 1.0f, 1.0f, 1.0f};
+    const std::array<float, 4> skyBlue{0.313726f, 0.627451f, 1.0f, 1.0f};
+
+    // Side walls so no body escapes — keeps the body count constant, which
+    // keeps benchmark runs comparable.
+    world.Add(std::make_unique<Box>(
+        Vec2(-9.75f, 10.0f), Vec2(0, 0), Vec2(0, 0),
+        0.5f, 20.0f, white, 100, 0, RigidbodyType::Static));
+    world.Add(std::make_unique<Box>(
+        Vec2(9.75f, 10.0f), Vec2(0, 0), Vec2(0, 0),
+        0.5f, 20.0f, white, 100, 0, RigidbodyType::Static));
+
+    constexpr int kCols = 14;
+    constexpr int kRows = 10;
+    for (int row = 0; row < kRows; ++row)
+    {
+        for (int col = 0; col < kCols; ++col)
+        {
+            // Small deterministic jitter so columns don't stack perfectly
+            const float jitter = 0.11f * static_cast<float>((row + col) % 3 - 1);
+            const Vec2 pos(-6.5f + static_cast<float>(col) + jitter,
+                           2.0f + static_cast<float>(row) * 1.1f);
+            if ((row + col) % 2 == 0)
+                world.Add(std::make_unique<Box>(
+                    pos, Vec2(0, 0), Vec2(0, 0),
+                    0.8f, 0.8f, skyBlue, 10, 0.1f, RigidbodyType::Dynamic));
+            else
+                world.Add(std::make_unique<Ball>(
+                    pos, Vec2(0, 0), Vec2(0, 0),
+                    0.4f, white, 10, 0.1f, RigidbodyType::Dynamic));
+        }
+    }
 }
 
 void Engine::ClearBodies()

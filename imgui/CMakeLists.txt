@@ -30,6 +30,20 @@ target_include_directories(imgui PUBLIC
 )
 target_link_libraries(imgui PUBLIC webgpu glfw)
 
+# imgui_impl_wgpu needs to know which flavor of WebGPU implementation it is
+# compiled against. Under Emscripten it defaults to the Dawn flavor (which is
+# what --use-port=emdawnwebgpu provides); natively we use wgpu-native.
+if (NOT EMSCRIPTEN)
+	target_compile_definitions(imgui PUBLIC IMGUI_IMPL_WEBGPU_BACKEND_WGPU)
+endif()
+
+# imgui_impl_wgpu.cpp contains a macOS surface helper that uses Objective-C
+# (Cocoa/CAMetalLayer), so on Apple it must be built as Objective-C++
+# (instruction from the top of that helper in imgui_impl_wgpu.cpp).
+if (APPLE AND NOT EMSCRIPTEN)
+	set_source_files_properties(backends/imgui_impl_wgpu.cpp PROPERTIES COMPILE_FLAGS "-x objective-c++")
+endif()
+
 set_target_properties(imgui PROPERTIES
     CXX_STANDARD 17
     CXX_STANDARD_REQUIRED ON

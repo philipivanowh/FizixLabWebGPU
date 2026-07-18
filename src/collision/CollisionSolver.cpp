@@ -83,8 +83,12 @@ void CollisionSolver::ResolveWithRotationAndFriction(
     float staticFriction;
     float kineticFriction;
 
-    auto *inclineA = dynamic_cast<shape::Incline *>(&bodyA);
-    auto *inclineB = dynamic_cast<shape::Incline *>(&bodyB);
+    auto *inclineA = shape::KindOf(bodyA) == shape::ShapeType::Incline
+                         ? static_cast<shape::Incline *>(&bodyA)
+                         : nullptr;
+    auto *inclineB = shape::KindOf(bodyB) == shape::ShapeType::Incline
+                         ? static_cast<shape::Incline *>(&bodyB)
+                         : nullptr;
 
     if (inclineA && inclineB)
     {

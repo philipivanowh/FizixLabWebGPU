@@ -38,4 +38,13 @@ namespace shape
 
         ShapeType GetShapeType() const { return shapeType; }
     };
+
+    // Every Rigidbody in World::objects is a Shape (all spawn paths construct
+    // shape subclasses, including rope endpoint Balls), so this static_cast is
+    // safe. Replaces dynamic_cast in the per-substep hot paths, where RTTI
+    // lookups dominated the profile.
+    inline ShapeType KindOf(const physics::Rigidbody &body)
+    {
+        return static_cast<const Shape &>(body).shapeType;
+    }
 }

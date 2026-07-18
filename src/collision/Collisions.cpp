@@ -215,14 +215,16 @@ namespace collision
 		math::Vec2 contact2 = math::Vec2();
 		int contactCount = 0;
 
-		const shape::Box *boxA = dynamic_cast<const shape::Box *>(&bodyA);
-		const shape::Box *boxB = dynamic_cast<const shape::Box *>(&bodyB);
-		const shape::Ball *ballA = dynamic_cast<const shape::Ball *>(&bodyA);
-		const shape::Ball *ballB = dynamic_cast<const shape::Ball *>(&bodyB);
-		const shape::Incline *inclineA = dynamic_cast<const shape::Incline *>(&bodyA);
-		const shape::Incline *inclineB = dynamic_cast<const shape::Incline *>(&bodyB);
-		const shape::Spring *springA = dynamic_cast<const shape::Spring *>(&bodyA);
-		const shape::Spring *springB = dynamic_cast<const shape::Spring *>(&bodyB);
+		const shape::ShapeType kindA = shape::KindOf(bodyA);
+		const shape::ShapeType kindB = shape::KindOf(bodyB);
+		const shape::Box *boxA = kindA == shape::ShapeType::Box ? static_cast<const shape::Box *>(&bodyA) : nullptr;
+		const shape::Box *boxB = kindB == shape::ShapeType::Box ? static_cast<const shape::Box *>(&bodyB) : nullptr;
+		const shape::Ball *ballA = kindA == shape::ShapeType::Ball ? static_cast<const shape::Ball *>(&bodyA) : nullptr;
+		const shape::Ball *ballB = kindB == shape::ShapeType::Ball ? static_cast<const shape::Ball *>(&bodyB) : nullptr;
+		const shape::Incline *inclineA = kindA == shape::ShapeType::Incline ? static_cast<const shape::Incline *>(&bodyA) : nullptr;
+		const shape::Incline *inclineB = kindB == shape::ShapeType::Incline ? static_cast<const shape::Incline *>(&bodyB) : nullptr;
+		const shape::Spring *springA = kindA == shape::ShapeType::Spring ? static_cast<const shape::Spring *>(&bodyA) : nullptr;
+		const shape::Spring *springB = kindB == shape::ShapeType::Spring ? static_cast<const shape::Spring *>(&bodyB) : nullptr;
 
 		if (boxA)
 		{
@@ -368,16 +370,18 @@ namespace collision
 	{
 		HitInfo hit;
 
-		const shape::Box *boxA = dynamic_cast<const shape::Box *>(&bodyA);
-		const shape::Box *boxB = dynamic_cast<const shape::Box *>(&bodyB);
-		const shape::Ball *ballA = dynamic_cast<const shape::Ball *>(&bodyA);
-		const shape::Ball *ballB = dynamic_cast<const shape::Ball *>(&bodyB);
-		const shape::Incline *inclineA = dynamic_cast<const shape::Incline *>(&bodyA);
-		const shape::Incline *inclineB = dynamic_cast<const shape::Incline *>(&bodyB);
-		const shape::Spring *springA = dynamic_cast<const shape::Spring *>(&bodyA);
-		const shape::Spring *springB = dynamic_cast<const shape::Spring *>(&bodyB);
-		const shape::Trigger *triggerA = dynamic_cast<const shape::Trigger *>(&bodyA);
-		const shape::Trigger *triggerB = dynamic_cast<const shape::Trigger *>(&bodyB);
+		const shape::ShapeType kindA = shape::KindOf(bodyA);
+		const shape::ShapeType kindB = shape::KindOf(bodyB);
+		const shape::Box *boxA = kindA == shape::ShapeType::Box ? static_cast<const shape::Box *>(&bodyA) : nullptr;
+		const shape::Box *boxB = kindB == shape::ShapeType::Box ? static_cast<const shape::Box *>(&bodyB) : nullptr;
+		const shape::Ball *ballA = kindA == shape::ShapeType::Ball ? static_cast<const shape::Ball *>(&bodyA) : nullptr;
+		const shape::Ball *ballB = kindB == shape::ShapeType::Ball ? static_cast<const shape::Ball *>(&bodyB) : nullptr;
+		const shape::Incline *inclineA = kindA == shape::ShapeType::Incline ? static_cast<const shape::Incline *>(&bodyA) : nullptr;
+		const shape::Incline *inclineB = kindB == shape::ShapeType::Incline ? static_cast<const shape::Incline *>(&bodyB) : nullptr;
+		const shape::Spring *springA = kindA == shape::ShapeType::Spring ? static_cast<const shape::Spring *>(&bodyA) : nullptr;
+		const shape::Spring *springB = kindB == shape::ShapeType::Spring ? static_cast<const shape::Spring *>(&bodyB) : nullptr;
+		const shape::Trigger *triggerA = kindA == shape::ShapeType::Trigger ? static_cast<const shape::Trigger *>(&bodyA) : nullptr;
+		const shape::Trigger *triggerB = kindB == shape::ShapeType::Trigger ? static_cast<const shape::Trigger *>(&bodyB) : nullptr;
 
 		if (springA)
 		{
