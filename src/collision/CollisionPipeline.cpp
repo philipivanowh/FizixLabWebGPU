@@ -2,14 +2,14 @@
 
 #include "collision/Collisions.hpp"
 #include "physics/Rigidbody.hpp"
-#include "shape/Shape.hpp"
+#include "shape/Cannon.hpp"
 
-#include <algorithm>
 #include <cmath>
 #include <cstdint>
+#include <unordered_map>
+#include <unordered_set>
 
-void CollisionPipeline::BuildPairs(const std::vector<std::unique_ptr<physics::Rigidbody>>& bodies,
-                                   float dtSeconds)
+void CollisionPipeline::BuildPairs(const std::vector<std::unique_ptr<physics::Rigidbody>>& bodies)
 {
 	pairs.clear();
 
@@ -18,44 +18,20 @@ void CollisionPipeline::BuildPairs(const std::vector<std::unique_ptr<physics::Ri
 		return;
 	}
 
-	aabbs.clear();
-	collidable.clear();
+	std::vector<collision::AABB> aabbs;
 	aabbs.reserve(bodies.size());
+	std::vector<bool> collidable;
 	collidable.reserve(bodies.size());
 
-	// Fat AABBs: the margin covers the body's travel over the whole frame
-	// plus a size-relative slop, so the pair list built from them remains a
-	// valid superset for every sub-step of the frame.
-	float extentSum = 0.0f;
-	int extentCount = 0;
 	for (const auto& body : bodies)
 	{
-		collision::AABB box = body->GetAABB();
-		const float extentX = box.max.x - box.min.x;
-		const float extentY = box.max.y - box.min.y;
-		const float speed = body->linearVel.Length();
-		const float margin = 1.5f * speed * dtSeconds +
-		                     0.05f * std::max(extentX, extentY);
-		box.min.x -= margin;
-		box.min.y -= margin;
-		box.max.x += margin;
-		box.max.y += margin;
-		aabbs.push_back(box);
-		collidable.push_back(shape::KindOf(*body) != shape::ShapeType::Cannon ? 1 : 0);
-
-		if (body->bodyType == physics::RigidbodyType::Dynamic)
-		{
-			extentSum += std::max(extentX, extentY);
-			++extentCount;
-		}
+		aabbs.push_back(body->GetAABB());
+		collidable.push_back(dynamic_cast<const shape::Cannon*>(body.get()) == nullptr);
 	}
 
-	// Cell size adapts to the average dynamic-body size so the grid works
-	// for meter-scale and pixel-scale scenes alike (a fixed cell size
-	// degenerates one of the two into a single giant cell = O(n²)).
-	const float averageExtent = extentCount > 0 ? extentSum / static_cast<float>(extentCount) : 1.0f;
-	const float cellSize = std::max(2.0f * averageExtent, 1e-3f);
 	const float inverseCellSize = 1.0f / cellSize;
+	std::unordered_map<std::uint64_t, std::vector<size_t>> grid;
+	grid.reserve(bodies.size());
 
 	auto cellKey = [](int x, int y) -> std::uint64_t
 	{
@@ -64,9 +40,6 @@ void CollisionPipeline::BuildPairs(const std::vector<std::unique_ptr<physics::Ri
 		return (keyX << 32) | keyY;
 	};
 
-	// Flat sort-based grid: (cell, body) entries sorted by cell. No per-cell
-	// heap containers, no hash maps — just two sorts over reused buffers.
-	cellEntries.clear();
 	for (size_t i = 0; i < bodies.size(); ++i)
 	{
 		if (!collidable[i])
@@ -83,55 +56,56 @@ void CollisionPipeline::BuildPairs(const std::vector<std::unique_ptr<physics::Ri
 		{
 			for (int y = minY; y <= maxY; ++y)
 			{
-				cellEntries.emplace_back(cellKey(x, y), static_cast<std::uint32_t>(i));
+				grid[cellKey(x, y)].push_back(i);
 			}
 		}
 	}
 
-	std::sort(cellEntries.begin(), cellEntries.end());
+	std::unordered_set<std::uint64_t> pairSet;
+	pairSet.reserve(bodies.size() * 4);
 
-	// Candidate pairs = bodies sharing a cell. Duplicates (bodies sharing
-	// several cells) are removed with a sort+unique over packed index pairs.
-	pairKeys.clear();
-	for (size_t start = 0; start < cellEntries.size();)
+	for (const auto& cell : grid)
 	{
-		size_t end = start + 1;
-		while (end < cellEntries.size() && cellEntries[end].first == cellEntries[start].first)
+		const auto& indices = cell.second;
+		if (indices.size() < 2)
 		{
-			++end;
+			continue;
 		}
 
-		for (size_t a = start; a + 1 < end; ++a)
+		for (size_t a = 0; a + 1 < indices.size(); ++a)
 		{
-			const std::uint32_t i = cellEntries[a].second;
-			for (size_t b = a + 1; b < end; ++b)
-			{
-				const std::uint32_t j = cellEntries[b].second;
+			const size_t i = indices[a];
+			physics::Rigidbody& bodyA = *bodies[i];
 
-				if (bodies[i]->bodyType == physics::RigidbodyType::Static &&
-					bodies[j]->bodyType == physics::RigidbodyType::Static)
+			for (size_t b = a + 1; b < indices.size(); ++b)
+			{
+				const size_t j = indices[b];
+				physics::Rigidbody& bodyB = *bodies[j];
+
+				if (bodyA.bodyType == physics::RigidbodyType::Static &&
+					bodyB.bodyType == physics::RigidbodyType::Static)
 				{
 					continue;
 				}
 
-				const std::uint32_t minIndex = i < j ? i : j;
-				const std::uint32_t maxIndex = i < j ? j : i;
-				pairKeys.push_back((static_cast<std::uint64_t>(minIndex) << 32) | maxIndex);
+				const size_t minIndex = i < j ? i : j;
+				const size_t maxIndex = i < j ? j : i;
+				const std::uint64_t pairKey =
+					(static_cast<std::uint64_t>(minIndex) << 32) |
+					static_cast<std::uint64_t>(maxIndex);
+
+				if (!pairSet.insert(pairKey).second)
+				{
+					continue;
+				}
+
+				if (!IntersectAABBs(aabbs[i], aabbs[j]))
+				{
+					continue;
+				}
+
+				pairs.emplace_back(minIndex, maxIndex);
 			}
-		}
-		start = end;
-	}
-
-	std::sort(pairKeys.begin(), pairKeys.end());
-	pairKeys.erase(std::unique(pairKeys.begin(), pairKeys.end()), pairKeys.end());
-
-	for (const std::uint64_t key : pairKeys)
-	{
-		const size_t i = static_cast<size_t>(key >> 32);
-		const size_t j = static_cast<size_t>(key & 0xffffffffu);
-		if (IntersectAABBs(aabbs[i], aabbs[j]))
-		{
-			pairs.emplace_back(i, j);
 		}
 	}
 }

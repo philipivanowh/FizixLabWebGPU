@@ -197,11 +197,6 @@ void World::Initialize(Settings *settings)
 	this->settings = settings;
 }
 
-std::vector<shape::Rope> &World::GetRopes()
-{
-	return ropes;
-}
-
 physics::Rigidbody *World::PickBody(const math::Vec2 &p)
 {
 	// Helper lambda to perform the actual intersection math
@@ -279,6 +274,7 @@ math::Vec2 World::SnapToNearestDynamicObject(const math::Vec2 &position, float s
 	return nearestBody ? nearestBody->pos : position;
 }
 
+
 void World::Update(float deltaMs, int iterations,
 				   physics::Rigidbody *&selectedBody,
 				   physics::Rigidbody *&draggedBody)
@@ -292,44 +288,7 @@ void World::Update(float deltaMs, int iterations,
 	for (const auto &object : objects)
 		object->BeginFrameForces();
 
-	// Build static-body list once — passed to rope node collision every sub-step.
-	// Triggers are excluded: they are never physical barriers.
-	std::vector<physics::Rigidbody *> staticBodies;
-	for (const auto &obj : objects)
-	{
-		if (obj->bodyType == physics::RigidbodyType::Static &&
-			shape::KindOf(*obj) != shape::ShapeType::Trigger && !obj->isRopeNode)
-			staticBodies.push_back(obj.get());
-	}
-
 	std::vector<math::Vec2> prevPositions(objects.size());
-	std::vector<math::Vec2> integratedPositions(objects.size());
-
-	// Broadphase once per frame (Box2D-style): BuildPairs fattens every AABB
-	// by the body's expected travel over the whole frame, so the candidate
-	// list stays a valid superset for all sub-steps. Pair filtering (triggers,
-	// thrusters, rope adjacency) is frame-constant, so it is hoisted here too.
-	collisionPipeline.BuildPairs(objects, deltaMs / 1000.0f);
-	std::vector<CollisionPipeline::Pair> activePairs;
-	activePairs.reserve(collisionPipeline.GetPairs().size());
-	for (const auto &pair : collisionPipeline.GetPairs())
-	{
-		physics::Rigidbody &bodyA = *objects[pair.first];
-		physics::Rigidbody &bodyB = *objects[pair.second];
-
-		const shape::ShapeType kindA = shape::KindOf(bodyA);
-		const shape::ShapeType kindB = shape::KindOf(bodyB);
-		if (kindA == shape::ShapeType::Trigger || kindB == shape::ShapeType::Trigger)
-			continue;
-		if (kindA == shape::ShapeType::Thruster || kindB == shape::ShapeType::Thruster)
-			continue;
-
-		// Skip only for the degenerate 2-node rope (endpoints are adjacent)
-		if (SameRopeAndAdjacent(bodyA, bodyB))
-			continue;
-
-		activePairs.push_back(pair);
-	}
 
 	for (int currIteration = 0; currIteration < iterations; currIteration++)
 	{
@@ -359,17 +318,6 @@ void World::Update(float deltaMs, int iterations,
 		for (const auto &object : objects)
 			object->Update(deltaMs, iterations);
 
-		
-		// Rope: integrate middle nodes + run stick constraints
-		for (auto &rope : ropes)
-		{
-			rope.Solve(deltaMs,iterations);
-		}
-
-		// Rope: thin static-only collision for middle nodes
-		
-		for (auto &rope : ropes)
-			rope.SolveNodeCollisions(staticBodies);
 
 		// Springs: update compression/forces before collision resolution so the
 		// collider length tracks the moving top plate within the same tick.
@@ -378,20 +326,29 @@ void World::Update(float deltaMs, int iterations,
 			: (deltaMs / 1000.0f);
 		for (auto &rb : objects)
 		{
-			if (shape::KindOf(*rb) == shape::ShapeType::Spring)
-				static_cast<shape::Spring *>(rb.get())->PhysicsUpdate(dtSeconds, objects);
+			if (auto *spring = dynamic_cast<shape::Spring *>(rb.get()))
+				spring->PhysicsUpdate(dtSeconds, objects);
 		}
 
+		std::vector<math::Vec2> integratedPositions(objects.size());
 		for (size_t i = 0; i < objects.size(); ++i)
 			integratedPositions[i] = objects[i]->pos;
 
 		// Main collision pipeline — endpoints participate normally.
 		// Middle nodes are not in objects so they never appear here.
-		// (Pairs were built and filtered once, before the sub-step loop.)
-		for (const auto &pair : activePairs)
+		collisionPipeline.BuildPairs(objects);
+		for (const auto &pair : collisionPipeline.GetPairs())
 		{
 			physics::Rigidbody &bodyA = *objects[pair.first];
 			physics::Rigidbody &bodyB = *objects[pair.second];
+
+			if (dynamic_cast<shape::Trigger *>(&bodyA) ||
+				dynamic_cast<shape::Trigger *>(&bodyB))
+				continue;
+			if (dynamic_cast<shape::Thruster *>(&bodyA) ||
+				dynamic_cast<shape::Thruster *>(&bodyB))
+				continue;
+
 
 			collisionSolver.ResolveIfColliding(bodyA, bodyB);
 
@@ -410,9 +367,6 @@ void World::Update(float deltaMs, int iterations,
 		// }
 	}
 
-	for (auto &rope : ropes)
-		rope.UpdateTensionDisplay();
-
 	UpdateTriggerCollisions();
 
 	for (const auto &object : objects)
@@ -424,26 +378,18 @@ void World::Update(float deltaMs, int iterations,
 		RemoveObjects(deltaMs, selectedBody, draggedBody);
 }
 
+
 void World::Draw(Renderer &renderer) const
 {
 	// Trails sit behind everything
 	DrawTrails(renderer);
 
 	// Draw all regular bodies.
-	// isRopeNode skips the two endpoint Ball bodies — the rope draws them
-	// as part of its line segments so they don't render as circles.
 	for (const auto &object : objects)
 	{
-		if (object->isRopeNode)
-			continue;
 		renderer.DrawShape(*object, object->isHighlighted);
 	}
 
-	// Draw each rope: segment lines + taut highlight + pin anchor discs.
-	// Middle nodes are pure verlet positions and are never in objects, so
-	// they have no DrawShape call at all — DrawRope is their only renderer.
-	for (const auto &rope : ropes)
-		renderer.DrawRope(rope);
 }
 
 size_t World::RigidbodyCount() const
@@ -522,57 +468,6 @@ void World::RemoveObjects(float deltaMs, physics::Rigidbody *&selectedBody, phys
 	}
 }
 
-shape::Rope &World::AddRope(const shape::Rope::SpawnParams &p)
-{
-	ropes.emplace_back();
-	shape::Rope &rope = ropes.back();
-
-	// Step 1: get the two endpoint Ball unique_ptrs — no World knowledge needed
-	std::vector<std::unique_ptr<physics::Rigidbody>> endpoints = rope.Build(p);
-
-	// Step 2: World takes ownership, collect raw back-pointers
-	std::vector<physics::Rigidbody *> rawPtrs;
-	rawPtrs.reserve(endpoints.size());
-	for (auto &ep : endpoints)
-	{
-		rawPtrs.push_back(ep.get());
-		Add(std::move(ep));
-	}
-
-	// Step 3: Rope builds all RopeNodes (including middle) + constraints
-	rope.RegisterEndpoints(rawPtrs, p);
-
-	return rope;
-}
-
-// Returns true when bodyA and bodyB belong to the SAME rope AND share a direct
-// constraint.  Used to suppress CollisionSolver on adjacent node pairs.
-bool World::SameRopeAndAdjacent(const physics::Rigidbody &bodyA,
-								const physics::Rigidbody &bodyB) const
-{
-	for (const auto &rope : ropes)
-	{
-		if (rope.ContainsBody(&bodyA) && rope.ContainsBody(&bodyB))
-			return rope.AreAdjacent(&bodyA, &bodyB);
-	}
-	return false;
-}
-
-// Returns a pointer to the Rope that owns `body`, or nullptr.
-shape::Rope *World::FindRopeForBody(physics::Rigidbody *body)
-{
-	for (auto &rope : ropes)
-	{
-		if (rope.ContainsBody(body))
-			return &rope;
-	}
-	return nullptr;
-}
-
-const std::vector<shape::Rope> &World::GetRopes() const
-{
-	return ropes;
-}
 
 void World::UpdateTriggerCollisions()
 {
@@ -638,7 +533,6 @@ void World::ClearObjects()
 	}
 	objects.clear();
 	trails.clear();
-	ropes.clear();
 }
 
 void World::SetCameraInfo(const math::Vec2 &pos, float zoom)

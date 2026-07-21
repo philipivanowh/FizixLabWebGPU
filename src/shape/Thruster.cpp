@@ -104,7 +104,6 @@ namespace shape
           keyHold(keyHoldMode),
           fireKey(fireKey_)
     {
-        shapeType = ShapeType::Thruster;   
         angleDegrees = angleDegs;
         rotation = math::DegToRad(angleDegrees-90.0f);
 

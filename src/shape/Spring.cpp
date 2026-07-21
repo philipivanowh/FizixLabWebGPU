@@ -75,7 +75,6 @@ Spring::Spring(const math::Vec2&          p,
       color(colorValue)
 {
 
-    shapeType = ShapeType::Spring;
     plateColor = {
         colorValue[0] * 0.68f,
         colorValue[1] * 0.68f,

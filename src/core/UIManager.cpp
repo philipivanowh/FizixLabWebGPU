@@ -287,7 +287,6 @@ void UIManager::InitializeImGui(Renderer &renderer, Settings *settings, World *w
     initInfo.DepthStencilFormat = WGPUTextureFormat_Undefined;
     ImGui_ImplWGPU_Init(&initInfo);
 }
-
 void UIManager::TerminateImGui()
 {
     ImGui_ImplWGPU_Shutdown();
@@ -694,9 +693,6 @@ void UIManager::RenderSimPanel(std::size_t bodyCount)
             case shape::ShapeType::Trigger:
                 type = "Trigger";
                 break;
-            case shape::ShapeType::Rope:
-                type = "Rope";
-                break;
             case shape::ShapeType::Spring:
                 type = "Spring";
                 break;
@@ -879,7 +875,8 @@ void UIManager::RenderInspectorPanel(physics::Rigidbody *body)
     ImGui::DragFloat2("##pos", &posInMeters.x, 0.01f);
 
     // Update body position in pixels
-    body->pos = posInMeters * SimulationConstants::PIXELS_PER_METER;
+    //body->pos = posInMeters * SimulationConstants::PIXELS_PER_METER;
+    body->TranslateTo(posInMeters * SimulationConstants::PIXELS_PER_METER);
 
     // Pause/unpause simulation when position is being edited
     positionBeingEdited = ImGui::IsItemActive();
@@ -2440,7 +2437,7 @@ void UIManager::RenderSpawnBasics()
 {
     SectionHead("SHAPE & PLACEMENT");
     // If you want to include Rope replace it with this comment line
-    const char *shapes[] = {"Ball", "Incline", "Box", "Cannon", "Thruster", "Trigger", "Rope", "Spring"};
+    const char *shapes[] = {"Ball", "Incline", "Box", "Cannon", "Thruster", "Trigger", "Spring"};
     // const char *shapes[] = {"Ball", "Incline", "Box", "Cannon", "Thruster", "Trigger", "Spring"};
     int si = (int)spawnSettings.shapeType;
     ImGui::SetNextItemWidth(-1);
@@ -2574,22 +2571,7 @@ void UIManager::RenderSpawnConfigurationControls()
         SectionHead("CONFIGURATION");
         RenderSpringSpawnConfiguration();
     }
-    else if (spawnSettings.shapeType == shape::ShapeType::Rope)
-    {
-        SectionHead("CONFIGURATION");
-        RenderRopeSpawnConfiguration();
-    }
-}
 
-void UIManager::RenderRopeSpawnConfiguration()
-{
-    ImGui::DragFloat2("End Position", &spawnSettings.ropeEndPosition.x, 0.1f);
-    ImGui::SliderInt("Segments", &spawnSettings.ropeSegments, 2, 40);
-    ImGui::SliderFloat("Stiffness", &spawnSettings.ropeStiffness, 0.1f, 1.0f);
-    ImGui::SliderFloat("Damping", &spawnSettings.ropeDamping, 0.9f, 1.0f);
-    ImGui::SliderInt("Iterations", &spawnSettings.ropeStickIterations, 2, 20);
-    ImGui::Checkbox("Pin Start", &spawnSettings.ropePinStart);
-    ImGui::Checkbox("Pin End", &spawnSettings.ropePinEnd);
 }
 
 void UIManager::RenderSpawnActions()

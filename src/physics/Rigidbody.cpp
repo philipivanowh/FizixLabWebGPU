@@ -53,7 +53,7 @@ namespace physics
 
 	void Rigidbody::SetMass(float newMass){
 		mass = (newMass > 0.0f) ? newMass : 1.0f;
-		invMass = (bodyType != RigidbodyType::Static) ? 1.0f / mass : 1.0f;
+		invMass = (bodyType != RigidbodyType::Static) ? 1.0f / mass : 0.0f;
 		UpdateMassProperties();
 	}
 
@@ -95,9 +95,8 @@ namespace physics
 			ClearForces();
 			UpdateForces(dtSeconds);
 			linearAcc = netForce / mass;
-			
-			pos += (linearVel * static_cast<float>(dtSeconds)) + (linearAcc * static_cast<float>(dtSeconds) * 0.5f);
-			linearVel += (linearAcc * static_cast<float>(dtSeconds));
+			linearVel = linearVel + (linearAcc * static_cast<float>(dtSeconds));
+			pos = pos + (linearVel * static_cast<float>(dtSeconds));
 			rotation = std::fmod((rotation + angularVel * static_cast<float>(dtSeconds)), 360.0f);
 
 			netForce = math::Vec2();

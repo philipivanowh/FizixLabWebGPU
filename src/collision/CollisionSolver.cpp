@@ -83,12 +83,8 @@ void CollisionSolver::ResolveWithRotationAndFriction(
     float staticFriction;
     float kineticFriction;
 
-    auto *inclineA = shape::KindOf(bodyA) == shape::ShapeType::Incline
-                         ? static_cast<shape::Incline *>(&bodyA)
-                         : nullptr;
-    auto *inclineB = shape::KindOf(bodyB) == shape::ShapeType::Incline
-                         ? static_cast<shape::Incline *>(&bodyB)
-                         : nullptr;
+    auto *inclineA = dynamic_cast<shape::Incline *>(&bodyA);
+    auto *inclineB = dynamic_cast<shape::Incline *>(&bodyB);
 
     if (inclineA && inclineB)
     {
@@ -111,7 +107,6 @@ void CollisionSolver::ResolveWithRotationAndFriction(
     else
     {
         // Neither is an incline - average the friction coefficients
-        // (geometric mean is more physically accurate than arithmetic mean)
         staticFriction = std::sqrt(bodyA.staticFriction * bodyB.staticFriction);
         kineticFriction = std::sqrt(bodyA.kineticFriction * bodyB.kineticFriction);
     }
@@ -154,7 +149,8 @@ void CollisionSolver::ResolveWithRotationAndFriction(
 
         const float raPerpDotN = math::Vec2::Dot(raPerp, normal);
         const float rbPerpDotN = math::Vec2::Dot(rbPerp, normal);
-        const float denom = bodyA.invMass + bodyB.invMass + raPerpDotN * raPerpDotN * bodyA.invInertia + rbPerpDotN * rbPerpDotN * bodyB.invInertia;
+
+        const float denom = bodyA.invMass + bodyB.invMass + (raPerpDotN * raPerpDotN) * bodyA.invInertia + (rbPerpDotN * rbPerpDotN) * bodyB.invInertia;
 
         float j = -(1.0f + restitution) * contactVelMag;
         j /= denom;
@@ -189,9 +185,6 @@ void CollisionSolver::ResolveWithRotationAndFriction(
     // =========================================================================
     for (int i = 0; i < contactCount; i++)
     {
-        // ── FIX: Coulomb's law requires a non-zero normal force.
-        // If j == 0 the contact was skipped above (bodies separating) so
-        // there is no normal force and therefore no friction.
         const float j = jList[i];
         if (j <= 0.0f)
             continue;

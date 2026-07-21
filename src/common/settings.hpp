@@ -54,8 +54,8 @@ enum class DragMode
 
 namespace WindowConstants
 {
-    constexpr int defaultWindowWidth = 1980;
-    constexpr int defaultWindowHeight = 1080;
+    constexpr int defaultWindowWidth = 1500;
+    constexpr int defaultWindowHeight = 800;
 }
 
 class Settings

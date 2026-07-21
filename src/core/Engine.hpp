@@ -31,7 +31,6 @@ public:
 
 	static void AddDefaultObjects();
 	static void InclineProblemScene();
-	static void StressTestScene();
 	static void CheckSpawning();
 	static void CheckCannon();
 	static void CheckSpring();

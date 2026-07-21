@@ -34,13 +34,7 @@ struct SpawnSettings
     std::array<float, 4> color = {255.0f, 255.0f, 255.0f, 1.0f};
     float restitution = 0.4f;
     physics::RigidbodyType bodyType = physics::RigidbodyType::Dynamic;
-    math::Vec2 ropeEndPosition{0.0f, 0.0f};
-    int ropeSegments = 12;
-    float ropeStiffness = 1.0f;
-    float ropeDamping = 0.995f;
-    int ropeStickIterations = 10;
-    bool ropePinStart = true;
-    bool ropePinEnd = false;
+    
 
     // Spring
     float springRestLength = 1.5f;  // metres (converted to pixels on spawn)
@@ -172,7 +166,6 @@ private:
     void RenderCannonSpawnConfiguration();
     void RenderTriggerSpawnConfiguration();
     void RenderThrusterSpawnConfiguration();
-    void RenderRopeSpawnConfiguration();
     void RenderSpringSpawnConfiguration();
 
     // ── Spawner sub-sections ─────────────────────────────────────

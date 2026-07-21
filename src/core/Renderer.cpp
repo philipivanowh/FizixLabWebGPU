@@ -1085,8 +1085,6 @@ void Renderer::FlushTextLabels()
 void Renderer::DrawFBD(physics::Rigidbody &body)
 {
 
-	if (body.isRopeNode) // ← add this guard
-		return;
 	std::vector<math::Vec2> forcesToDraw;
 	const auto &displayForces = body.GetForcesForDisplay();
 	forcesToDraw.reserve(displayForces.size());
@@ -1257,112 +1255,6 @@ void Renderer::EnsureVertexBufferSize(int size)
 	bufferDesc.mappedAtCreation = false;
 	vertexBuffer = device.createBuffer(bufferDesc);
 }
-
-void Renderer::DrawRope(const shape::Rope &rope)
-{
-    const auto &nodes = rope.GetNodes();
-    const auto &constraints = rope.GetConstraints();
-
-    if (nodes.size() < 2)
-        return;
-
-    std::vector<float> lineVertices;
-    lineVertices.reserve(nodes.size() * 4);
-
-    // ── Build segment lines ─────────────────────────
-    for (size_t i = 0; i < nodes.size() - 1; i++)
-    {
-        const auto &a = nodes[i];
-        const auto &b = nodes[i + 1];
-
-        lineVertices.push_back(a.pos.x);
-        lineVertices.push_back(a.pos.y);
-        lineVertices.push_back(b.pos.x);
-        lineVertices.push_back(b.pos.y);
-    }
-
-    EnsureVertexBufferSize(lineVertices.size());
-    queue.writeBuffer(vertexBuffer, 0,
-                      lineVertices.data(),
-                      lineVertices.size() * sizeof(float));
-
-    const std::array<float,4> ropeColor = {0.8f,0.7f,0.5f,1.0f};
-
-    const uint32_t uniformOffset =
-        UpdateUniforms(math::Vec2(0,0), ropeColor);
-
-    renderPass.setPipeline(linePipeline);
-    renderPass.setBindGroup(0, uniformBindGroup, 1, &uniformOffset);
-    renderPass.setVertexBuffer(0, vertexBuffer, 0,
-                               lineVertices.size() * sizeof(float));
-
-    renderPass.draw(lineVertices.size()/2, 1, 0, 0);
-
-    renderPass.setPipeline(pipeline);
-
-    // ── Draw endpoint pins ─────────────────────────
-    for (const auto &node : nodes)
-    {
-        if (!node.pinned)
-            continue;
-
-        const float radius = 6.0f;
-        const int segments = 20;
-
-        std::vector<float> circleVerts;
-
-        for (int i = 0; i < segments; i++)
-        {
-            float a1 = (float)i / segments * 2 * math::PI;
-            float a2 = (float)(i+1) / segments * 2 * math::PI;
-
-            circleVerts.push_back(0);
-            circleVerts.push_back(0);
-
-            circleVerts.push_back(std::cos(a1)*radius);
-            circleVerts.push_back(std::sin(a1)*radius);
-
-            circleVerts.push_back(std::cos(a2)*radius);
-            circleVerts.push_back(std::sin(a2)*radius);
-        }
-
-        EnsureVertexBufferSize(circleVerts.size());
-        queue.writeBuffer(vertexBuffer,0,
-                          circleVerts.data(),
-                          circleVerts.size()*sizeof(float));
-
-        std::array<float,4> pinColor = {0.9f,0.8f,0.2f,1.0f};
-
-        uint32_t off = UpdateUniforms(node.pos,pinColor);
-
-        renderPass.setBindGroup(0,uniformBindGroup,1,&off);
-        renderPass.setVertexBuffer(0,vertexBuffer,0,
-                                   circleVerts.size()*sizeof(float));
-
-        renderPass.draw(circleVerts.size()/2,1,0,0);
-    }
-
-    // ── Draw tension labels ─────────────────────────
-    if(settings->showFBDLabels)
-    {
-        for(const auto &c : constraints)
-        {
-            math::Vec2 mid =
-                (c.a->pos + c.b->pos) * 0.5f;
-
-            char buffer[64];
-            std::snprintf(buffer,sizeof(buffer),
-                          "T=%.1fN",
-                          c.tensionMagnitude);
-
-            std::array<float,4> textColor =
-                {0.95f,0.95f,0.2f,1.0f};
-
-            DrawTextWorld(buffer,mid,textColor);
-        }
-    }
-}
-
 
 void Renderer::DrawBox(const shape::Box &box)
 {

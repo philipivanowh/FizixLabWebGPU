@@ -12,10 +12,6 @@
 #include "math/Math.hpp"
 
 #include <array>
-#include <chrono>
-#include <cstdio>
-#include <cstdlib>
-#include <cstring>
 #include <memory>
 #include <cmath>
 #include <string>
@@ -64,9 +60,6 @@ float Engine::simulationTimeMs = 0.0f;
 shape::Thruster *Engine::draggingThruster = nullptr;
 physics::Rigidbody *Engine::thrusterSnapTarget = nullptr;
 
-// -- Rope drag state -------------
-shape::RopeNode *Engine::draggedRopeNode = nullptr;
-shape::Rope *Engine::draggedRope = nullptr;
 
 // ================================================================
 // INIT / SHUTDOWN
@@ -79,11 +72,6 @@ bool Engine::Initialize()
     uiManager.InitializeImGui(renderer, &settings, &world);
     world.Initialize(&settings);
     AddDefaultObjects();
-
-    // Benchmark hook: FIZIX_SCENE=stress ./App loads a dense scene,
-    // FIZIX_PERF=1 ./App prints physics-step timings to stdout.
-    if (const char *scene = std::getenv("FIZIX_SCENE"); scene && std::strcmp(scene, "stress") == 0)
-        StressTestScene();
     return true;
 }
 
@@ -145,21 +133,7 @@ void Engine::CheckSpawning()
             false,             // always-on
             req.thrustKey));
     }
-    // Rope is very unstable at this stage so it will be avoided uncomment it if you want to see it
-    else if (req.shapeType == shape::ShapeType::Rope)
-    {
-        shape::Rope::SpawnParams rp;
-        rp.startWorld = req.position;
-        rp.endWorld = req.ropeEndPosition;
-        rp.segmentCount = req.ropeSegments;
-        rp.segmentMass = req.mass;
-        rp.stiffness = req.ropeStiffness;
-        rp.stickIterations = req.ropeStickIterations;
-        rp.damping = req.ropeDamping;
-        rp.pinStart = req.ropePinStart;
-        rp.pinEnd = req.ropePinEnd;
-        world.AddRope(rp);
-    }
+
     else if (req.shapeType == shape::ShapeType::Spring)
     {
         const float PPM = SimulationConstants::PIXELS_PER_METER;
@@ -299,24 +273,6 @@ void Engine::Update(float deltaMs, int iterations)
     if (pressedLeft && !mouseDownLeft && !overUI)
     {
         mouseDownLeft = true;
-
-        // ── NEW: rope node pick — checked before regular PickBody ─────────
-        // Rope nodes are tiny so we offer a generous 20 px grab radius.
-        {
-            constexpr float ROPE_PICK_RADIUS = 20.0f;
-            for (auto &rope : world.GetRopes())
-            {
-                shape::RopeNode *node = rope.PickNode(mouseWorld, ROPE_PICK_RADIUS);
-                if (node)
-                {
-                    draggedRopeNode = node;
-                    draggedRope = &rope;
-                    isPanning = false;
-                    continue;
-                }
-            }
-        }
-
         {
             physics::Rigidbody *clickedBody = world.PickBody(mouseWorld);
 
@@ -370,7 +326,7 @@ void Engine::Update(float deltaMs, int iterations)
 
     // ── Hold counter — promote select → drag ──────────────────────
     if (!draggingThruster && mouseDownLeft && selectedBody && !draggedBody &&
-        !isPanning && !draggedRopeNode) // ← don't promote while rope-dragging
+        !isPanning)
     {
         selectedBodyHoldFrames++;
 
@@ -400,14 +356,6 @@ void Engine::Update(float deltaMs, int iterations)
     // ── Mouse release ─────────────────────────────────────────────
     if (!pressedLeft)
     {
-        // ── NEW: rope drag release ────────────────────────────────
-        if (draggedRope)
-        {
-            draggedRope->ReleaseNode();
-            draggedRope = nullptr;
-            draggedRopeNode = nullptr;
-        }
-
         if (draggingThruster)
         {
             if (thrusterSnapTarget)
@@ -464,9 +412,6 @@ void Engine::Update(float deltaMs, int iterations)
     if (mouseDownRight)
         mouseDeltaScale = mouseWorld - mouseInitialPos;
 
-    // ── NEW: rope node drag — move node to cursor each frame ──────
-    if (draggedRopeNode && draggedRope && mouseDownLeft)
-        draggedRope->DragNode(draggedRopeNode, mouseWorld);
 
     // ── Thruster: move with mouse + find snap target ──────────────
     if (draggingThruster && mouseDownLeft)
@@ -567,13 +512,16 @@ void Engine::Update(float deltaMs, int iterations)
     }
     else
     {
-        // ── Fixed timestep ────────────────────────────────────────
-        // Physics always advances in steps of exactly kFixedStepMs of
-        // simulation time, no matter the display frame rate or the
-        // playback speed. timeScale feeds the accumulator, so slow-mo
-        // runs FEWER steps per real second — never smaller ones.
-        constexpr float kFixedStepMs = 1000.0f / 60.0f;
-        constexpr int kMaxStepsPerFrame = 5;
+        // ── Fixed physics timestep ────────────────────────────────────
+        // Physics always advances in constant increments of kFixedStepMs of
+        // simulation time, independent of the render frame rate. Real elapsed
+        // time is accumulated and drained one fixed tick at a time, so the
+        // same scene evolves identically at 30, 60 or 144 fps. timeScale
+        // feeds the accumulator, so slow-mo / fast-forward change how MANY
+        // ticks run per real second — never the tick size (which would change
+        // the physics itself).
+        constexpr float kFixedStepMs = 1000.0f / 60.0f; // 60 Hz physics tick
+        constexpr int kMaxStepsPerFrame = 5;            // hitch guard: no spiral of death
 
         static float accumulatorMs = 0.0f;
 
@@ -581,22 +529,21 @@ void Engine::Update(float deltaMs, int iterations)
 
         if (spawnNudgeFrames > 0)
         {
-            stepsToRun = 1;
+            stepsToRun = 1; // one tick so a spawned body appears even while paused
             spawnNudgeFrames--;
         }
         else if (settings.stepOneFrame)
         {
-            stepsToRun = 1;
+            stepsToRun = 1; // "O" key: advance exactly one fixed tick
             settings.stepOneFrame = false;
         }
         else if (!settings.paused)
         {
             accumulatorMs += deltaMs * settings.timeScale;
 
-            // Hitch guard: after a window drag or debugger pause, drop
-            // the excess time instead of running hundreds of catch-up
-            // steps in one frame.
-            const float maxMs = kFixedStepMs * kMaxStepsPerFrame;
+            // After a stall (window drag, debugger pause, tab switch) drop the
+            // excess instead of running a huge catch-up burst in one frame.
+            const float maxMs = kFixedStepMs * static_cast<float>(kMaxStepsPerFrame);
             if (accumulatorMs > maxMs)
                 accumulatorMs = maxMs;
 
@@ -607,6 +554,7 @@ void Engine::Update(float deltaMs, int iterations)
             }
         }
 
+        // Thruster key state: sampled once per rendered frame (reads the keyboard).
         for (auto &obj : world.GetObjects())
         {
             auto *t = dynamic_cast<shape::Thruster *>(obj.get());
@@ -618,7 +566,7 @@ void Engine::Update(float deltaMs, int iterations)
                                    (!t->keyHold || glfwGetKey(window, t->fireKey) == GLFW_PRESS);
         }
 
-               for (int step = 0; step < stepsToRun; ++step)
+        for (int step = 0; step < stepsToRun; ++step)
         {
             simulationTimeMs += kFixedStepMs;
 
@@ -628,36 +576,15 @@ void Engine::Update(float deltaMs, int iterations)
                     recorder.Record(world.CaptureSnapshot(), simulationTimeMs);
             }
 
-            static const bool kPerfLog = std::getenv("FIZIX_PERF") != nullptr;
-            if (kPerfLog)
-            {
-                const auto t0 = std::chrono::steady_clock::now();
-                world.Update(kFixedStepMs, iterations, selectedBody, draggedBody);
-                const auto t1 = std::chrono::steady_clock::now();
-
-                static double accumMs = 0.0;
-                static int frames = 0;
-                accumMs += std::chrono::duration<double, std::milli>(t1 - t0).count();
-                if (++frames == 60)
-                {
-                    std::printf("[perf] bodies=%zu physics=%.3f ms/frame (avg over 60 frames)\n",
-                                world.RigidbodyCount(), accumMs / frames);
-                    std::fflush(stdout);
-                    accumMs = 0.0;
-                    frames = 0;
-                }
-            }
-            else
-            {
-                world.Update(kFixedStepMs, iterations, selectedBody, draggedBody);
-            }
+            world.Update(kFixedStepMs, iterations, selectedBody, draggedBody);
         }
 
-        // While paused (or when no full step accumulated), still tick the
-        // world once with dt = 0 so pause-time interactions keep working:
-        // dragging a body into another still separates them, exactly as
-        // the old code did when scaledDelta was 0.
-        if (stepsToRun == 0)
+        // While paused, tick the world once with dt = 0 so pause-time
+        // interactions keep working — dragging a body into another still
+        // separates them (position correction is dt-independent), as before
+        // when scaledDelta was 0. When running, frames between ticks (at high
+        // fps) intentionally do no physics work at all — the ticks carry it.
+        if (stepsToRun == 0 && settings.paused)
             world.Update(0.0f, iterations, selectedBody, draggedBody);
 
         CheckSpawning();
@@ -944,49 +871,6 @@ void Engine::InclineProblemScene()
     world.Add(std::make_unique<shape::Box>(
         Vec2(970, 590), Vec2(0, 0), Vec2(0, 0),
         100, 100, white, 100, 1, RigidbodyType::Dynamic));
-}
-
-void Engine::StressTestScene()
-{
-    // Benchmark scene: a dense shower of 140 dynamic bodies over the default
-    // ground box. Reproducible on purpose — do not randomize.
-    // Launch: FIZIX_SCENE=stress FIZIX_PERF=1 ./App
-    using physics::RigidbodyType;
-    using shape::Ball;
-    using shape::Box;
-
-    const std::array<float, 4> white{1.0f, 1.0f, 1.0f, 1.0f};
-    const std::array<float, 4> skyBlue{0.313726f, 0.627451f, 1.0f, 1.0f};
-
-    // Side walls so no body escapes — keeps the body count constant, which
-    // keeps benchmark runs comparable.
-    world.Add(std::make_unique<Box>(
-        Vec2(-9.75f, 10.0f), Vec2(0, 0), Vec2(0, 0),
-        0.5f, 20.0f, white, 100, 0, RigidbodyType::Static));
-    world.Add(std::make_unique<Box>(
-        Vec2(9.75f, 10.0f), Vec2(0, 0), Vec2(0, 0),
-        0.5f, 20.0f, white, 100, 0, RigidbodyType::Static));
-
-    constexpr int kCols = 14;
-    constexpr int kRows = 10;
-    for (int row = 0; row < kRows; ++row)
-    {
-        for (int col = 0; col < kCols; ++col)
-        {
-            // Small deterministic jitter so columns don't stack perfectly
-            const float jitter = 0.11f * static_cast<float>((row + col) % 3 - 1);
-            const Vec2 pos(-6.5f + static_cast<float>(col) + jitter,
-                           2.0f + static_cast<float>(row) * 1.1f);
-            if ((row + col) % 2 == 0)
-                world.Add(std::make_unique<Box>(
-                    pos, Vec2(0, 0), Vec2(0, 0),
-                    0.8f, 0.8f, skyBlue, 10, 0.1f, RigidbodyType::Dynamic));
-            else
-                world.Add(std::make_unique<Ball>(
-                    pos, Vec2(0, 0), Vec2(0, 0),
-                    0.4f, white, 10, 0.1f, RigidbodyType::Dynamic));
-        }
-    }
 }
 
 void Engine::ClearBodies()
