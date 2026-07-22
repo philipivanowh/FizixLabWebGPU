@@ -3,7 +3,30 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>FizixLab</title>
+
+  <title>FizixLab — Interactive Physics Sandbox</title>
+  <meta name="description" content="FizixLab is a free browser-based physics sandbox for kinematics and dynamics. Drop boxes, balls, springs, inclines and cannons, watch forces and free-body diagrams update live, and check your textbook answers in real time. Runs on WebGPU.">
+  <meta name="keywords" content="physics sandbox, physics simulator, free body diagram, FBD, kinematics, dynamics, projectile motion, incline, friction, spring, WebGPU, online physics, interactive physics">
+  <meta name="author" content="Philip Hersin">
+  <meta name="robots" content="index, follow">
+  <link rel="canonical" href="https://fizixlab.com/">
+  <link rel="icon" type="image/x-icon" href="favicon.ico">
+
+  <!-- Google Search Console — HTML-tag verification (only if you pick the
+       "URL prefix" property). Paste the tag Google gives you here. Not needed
+       if you verify with a "Domain" property via a DNS TXT record. -->
+  <!-- <meta name="google-site-verification" content="PASTE_YOUR_CODE_HERE"> -->
+
+  <!-- Link-preview cards when the URL is shared (Discord, iMessage, Twitter, …) -->
+  <meta property="og:type" content="website">
+  <meta property="og:title" content="FizixLab — Interactive Physics Sandbox">
+  <meta property="og:description" content="A free browser physics sandbox: drop boxes, balls, springs and cannons, visualize forces and free-body diagrams, and check textbook answers live.">
+  <meta property="og:url" content="https://fizixlab.com/">
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:title" content="FizixLab — Interactive Physics Sandbox">
+  <meta name="twitter:description" content="A free browser physics sandbox with live force and free-body-diagram visualization. Built on WebGPU.">
+  <link rel="icon" href="assets/favicon.ico" type="image/x-icon" />
+
   <style>
     html, body {
       margin: 0;
@@ -38,16 +61,32 @@
       pointer-events: none;
     }
     #status .title {
+      margin: 0;
       font-size: 20px;
+      font-weight: 400;
       letter-spacing: 0.2em;
+      text-transform: uppercase;
       color: #c7d5ea;
+    }
+    #status .tagline {
+      margin: 0;
+      max-width: 30em;
+      padding: 0 20px;
+      font-size: 13px;
+      line-height: 1.5;
+      text-align: center;
+      color: #6b7d94;
+    }
+    #statusText {
+      margin: 0;
     }
   </style>
 </head>
 <body>
   <div id="status">
-    <div class="title">FIZIXLAB</div>
-    <div id="statusText">loading&hellip;</div>
+    <h1 class="title">FizixLab</h1>
+    <p id="statusText">loading&hellip;</p>
+    <p class="tagline">An interactive physics sandbox for kinematics &amp; dynamics. Drop boxes, balls, springs, inclines and cannons, watch forces and free-body diagrams update in real time, and check your textbook answers. Runs in your browser on WebGPU.</p>
   </div>
   <canvas id="canvas" oncontextmenu="event.preventDefault()" tabindex="-1"></canvas>
   <script>

@@ -39,6 +39,8 @@ jobs:
           mkdir -p site
           cp build-web/App.html site/index.html
           cp build-web/App.js build-web/App.wasm build-web/App.data site/
+          cp web/robots.txt web/sitemap.xml site/
+          cp src/assets/favicon.ico site/
 
       - name: Upload Pages artifact
         uses: actions/upload-pages-artifact@v3
