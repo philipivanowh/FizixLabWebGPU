@@ -91,6 +91,10 @@ if (EMSCRIPTEN)
 		"SHELL:--preload-file ${CMAKE_CURRENT_SOURCE_DIR}/src/shaders@/src/shaders"
 	)
 
+	target_link_options(App PRIVATE
+		"SHELL:--preload-file ${CMAKE_CURRENT_SOURCE_DIR}/src/assets@/src/assets"
+	)
+
 	# Custom minimal page: fullscreen canvas, no Emscripten branding
 	target_link_options(App PRIVATE
 		"SHELL:--shell-file ${CMAKE_CURRENT_SOURCE_DIR}/web/shell.html"
