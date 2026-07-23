@@ -2,6 +2,7 @@
 
 #include "physics/Rigidbody.hpp"
 #include "shape/Shape.hpp"
+#include "common/settings.hpp"
 
 #include <array>
 #include <vector>
@@ -23,9 +24,12 @@ public:
 	
 	float ComputeInertia() const override;
 	std::vector<math::Vec2> GetRotatedVertices() const;
+	void UpdateVertices();
 	std::vector<float> GetVertexLocalPos() const override;
 	std::vector<math::Vec2> GetVertexWorldPos() const override;
 	std::array<float, 4> GetColor() const override { return color; }
+	void SetWidth(float widthMeters);
+	void SetHeight(float heightMeters);
 
 	float width = 0.0f;
 	float height = 0.0f;

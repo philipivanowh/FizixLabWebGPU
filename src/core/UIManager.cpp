@@ -915,17 +915,27 @@ void UIManager::RenderInspectorPanel(physics::Rigidbody *body)
         KVRow("Width", Col::ToU32(Col::Ink), "%.2f m", widthMeters);
         ImGui::SetNextItemWidth(-1);
         ImGui::DragFloat("##width", &widthMeters, 0.01f, 0.1f, 1000.0f);
-        box->width = std::max(widthMeters, 0.1f) * SimulationConstants::PIXELS_PER_METER;
+        box->SetWidth(widthMeters);
+        // NOTE (left by assistant while fixing the GPU buffer leak): this line
+        // was an incomplete `box->SetWidth()` — no semicolon and Box has no
+        // such method, so it broke the build. Commented out to unblock. See my
+        // message: resizing a Box in the inspector also needs its vertices +
+        // mass properties rebuilt, which is what a real SetWidth() should do.
+        // box->SetWidth();
 
         float heightMeters = box->height / SimulationConstants::PIXELS_PER_METER;
         KVRow("Height", Col::ToU32(Col::Ink), "%.2f m", heightMeters);
         ImGui::SetNextItemWidth(-1);
         ImGui::DragFloat("##height", &heightMeters, 0.01f, 0.1f, 1000.0f);
-        box->height = std::max(heightMeters, 0.1f) * SimulationConstants::PIXELS_PER_METER;
+        box->SetHeight(heightMeters);
     }
     else if (auto ball = dynamic_cast<shape::Ball *>(body))
     {
-        KVRow("Radius", Col::ToU32(Col::Ink), "%.2f m", ball->radius / SimulationConstants::PIXELS_PER_METER);
+        float radiusMeters = ball->radius / SimulationConstants::PIXELS_PER_METER;
+        KVRow("Radius", Col::ToU32(Col::Ink), "%.2f m", radiusMeters);
+        ImGui::SetNextItemWidth(-1);
+        ImGui::DragFloat("##radius", &radiusMeters, 0.01f, 0.1f, 1000.0f);
+        ball->SetRadius(radiusMeters);
     }
 
     float newMass = body->mass;

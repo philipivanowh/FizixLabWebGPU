@@ -20,9 +20,9 @@ namespace shape
 		: Shape(pos, vel, acc, massValue, restitution, RigidbodyType), radius(radiusValue * SimulationConstants::PIXELS_PER_METER), color(colorValue)
 	{
 		
+		shapeType = ShapeType::Ball;
 		GenerateVertices();
 		verticesSize = static_cast<int>(vertices.size());
-
 		UpdateMassProperties();
 	}
 
@@ -47,6 +47,12 @@ namespace shape
 			prevY = newY;
 		}
 
+	}
+
+	void Ball::SetRadius(float radiusInMeters){
+		radius = std::max(radiusInMeters, 0.1f) * SimulationConstants::PIXELS_PER_METER;
+		GenerateVertices();
+		UpdateMassProperties();
 	}
 
 	std::vector<float> Ball::GetVertexLocalPos() const

@@ -22,6 +22,7 @@ namespace shape
                      TriggerAction actionValue)
         : Shape(pos, vel, acc, massValue, restitution, RigidbodyTypeValue), width(widthValue * SimulationConstants::PIXELS_PER_METER), height(heightValue * SimulationConstants::PIXELS_PER_METER), color(colorValue), originalColor(colorValue), action(actionValue)
     {
+        shapeType = ShapeType::Trigger; 
         verticesSize = 12; // 4 for outer box + 4 for inner box (mini-scaled) = 8 total vertices, but since we are using two triangles per face, we need to multiply by 3/2
         UpdateMassProperties();
 

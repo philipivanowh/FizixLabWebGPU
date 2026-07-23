@@ -100,7 +100,22 @@ private:
 	BindGroupLayout uniformBindGroupLayout;
 	BindGroup uniformBindGroup;
 	Buffer uniformBuffer;
+
+	// Non-owning alias to the current draw's slot in vertexBufferPool below.
+	// Draw code writes/binds through this exactly as before.
 	Buffer vertexBuffer;
+
+	// Per-frame vertex buffer pool. Previously every draw call created a brand
+	// new GPU buffer and overwrote vertexBuffer without releasing the old one —
+	// leaking one GPU buffer per draw, per frame (the long-run stall). Now the
+	// buffers are reused across frames: vertexBufferIndex resets each frame,
+	// each draw takes the next slot, and a slot is only reallocated (old buffer
+	// released first) when its geometry needs more room. All buffers are freed
+	// once in Terminate().
+	std::vector<Buffer> vertexBufferPool;
+	std::vector<uint64_t> vertexBufferCapacities;
+	size_t vertexBufferIndex = 0;
+
 	uint32_t vertexCount;
 	CommandEncoder encoder;
 	TextureView targetView;

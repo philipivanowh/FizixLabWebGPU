@@ -179,6 +179,9 @@ Cannon::Cannon(const math::Vec2& pos,
       barrelAngleDegrees(angle),
       color(colorValue)
 {
+
+    shapeType = ShapeType::Cannon;
+
     // ── Barrel color family ──────────────────────────────────────
     barrelColor      = colorValue;                     // base metal tone
     breechColor      = DarkenColor(colorValue, 0.78f); // heavier, darker rear block
@@ -193,7 +196,7 @@ Cannon::Cannon(const math::Vec2& pos,
 
     // carriageColor is always wood-brown (set in header)
 
-    GenerateVertices();
+    UpdateVertices();
     verticesSize = static_cast<int>(vertices.size());
     UpdateMassProperties();
 }
@@ -203,7 +206,7 @@ Cannon::Cannon(const math::Vec2& pos,
 //  hit-testing (not for rendering).  Wheel outer circle + barrel
 //  trapezoid is sufficient for a tight bounding approximation.
 // ================================================================
-void Cannon::GenerateVertices() const
+void Cannon::UpdateVertices() const
 {
     vertices.clear();
 
@@ -390,13 +393,13 @@ std::vector<float> Cannon::GetBoreVertexLocalPos() const
 
 std::vector<float> Cannon::GetVertexLocalPos() const
 {
-    GenerateVertices();
+    UpdateVertices();
     return ToFloats(vertices);
 }
 
 std::vector<math::Vec2> Cannon::GetVertexWorldPos() const
 {
-    GenerateVertices();
+    UpdateVertices();
     std::vector<math::Vec2> out;
     out.reserve(vertices.size());
     for (const auto& v : vertices)

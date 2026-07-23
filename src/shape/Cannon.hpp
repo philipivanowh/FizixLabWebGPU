@@ -16,7 +16,7 @@ public:
     ~Cannon() override = default;
 
     // ── Geometry generation ──────────────────────────────────────
-    void GenerateVertices() const;
+    void UpdateVertices() const;
 
     float ComputeInertia() const override;
 

@@ -21,8 +21,14 @@ namespace shape
 			 physics::RigidbodyType RigidbodyTypeValue)
 		: Shape(pos, vel, acc, massValue, restitution, RigidbodyTypeValue), width(widthValue * SimulationConstants::PIXELS_PER_METER), height(heightValue * SimulationConstants::PIXELS_PER_METER), color(colorValue)
 	{
+		shapeType = ShapeType::Box;
 		verticesSize = 6;
 		UpdateMassProperties();
+		UpdateVertices();
+
+	}
+
+	void Box::UpdateVertices() {
 
 		float halfWidth = width / 2.0f;
 		float halfHeight = height / 2.0f;
@@ -32,6 +38,18 @@ namespace shape
 			math::Vec2(halfWidth, halfHeight),
 			math::Vec2(-halfWidth, halfHeight)};
 	}
+
+	void Box::SetWidth(float widthMeters){
+		width = std::max(widthMeters, 0.1f) * SimulationConstants::PIXELS_PER_METER;
+		UpdateVertices();
+		UpdateMassProperties();
+	}
+	void Box::SetHeight(float heightMeters){
+		height = std::max(heightMeters, 0.1f) * SimulationConstants::PIXELS_PER_METER;
+		UpdateVertices();
+		UpdateMassProperties();
+	}
+
 
 	std::vector<float> Box::GetVertexLocalPos() const
 	{

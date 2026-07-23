@@ -198,7 +198,15 @@ bool Renderer::Initialize(Settings *settings, GLFWscrollfun scrollCallback)
 void Renderer::Terminate()
 {
 	// 2D Shape Pipeline
-	vertexBuffer.release();
+	// Release every pooled vertex buffer. NB: vertexBuffer is only a
+	// non-owning alias into this pool, so it must NOT be released separately.
+	for (auto &buf : vertexBufferPool)
+	{
+		if (buf)
+			buf.release();
+	}
+	vertexBufferPool.clear();
+	vertexBufferCapacities.clear();
 	uniformBuffer.release();
 	uniformBindGroup.release();
 	uniformBindGroupLayout.release();
@@ -531,6 +539,9 @@ void Renderer::BeginFrame()
 	renderPass.setPipeline(pipeline);
 	uniformBufferOffset = 0;
 
+	// Start reusing the vertex buffer pool from the top for this frame.
+	vertexBufferIndex = 0;
+
 	DrawGrid();
 }
 
@@ -712,24 +723,10 @@ Limits Renderer::GetRequiredLimits(Adapter adapter) const
 void Renderer::InitializeBuffers()
 {
 	std::cout << "Initializing buffers..." << std::endl;
-	// Vertex buffer data
-	// There are 2 floats per vertex, one for x and one for y.
-	std::vector<float> vertexData = {
-		// Define a first triangle:
-		-100, 0,
-		100, 0,
-		50, 100};
-	vertexCount = static_cast<uint32_t>(vertexData.size() / 2);
-
-	// Create vertex buffer
-	BufferDescriptor bufferDesc;
-	bufferDesc.size = vertexData.size() * sizeof(float);
-	bufferDesc.usage = BufferUsage::CopyDst | BufferUsage::Vertex; // Vertex usage here!
-	bufferDesc.mappedAtCreation = false;
-	vertexBuffer = device.createBuffer(bufferDesc);
-
-	// Upload geometry data to the buffer
-	queue.writeBuffer(vertexBuffer, 0, vertexData.data(), bufferDesc.size);
+	// Vertex buffers are now allocated on demand from the per-frame pool in
+	// EnsureVertexBufferSize (see Renderer.hpp), so there is no placeholder
+	// buffer to pre-create here. Each draw sets vertexCount itself.
+	vertexCount = 0;
 }
 
 void Renderer::DrawHighlightOutline(physics::Rigidbody &body)
@@ -1249,11 +1246,38 @@ void Renderer::DrawMeasuringRectangle(math::Vec2 &start, math::Vec2 &size)
 
 void Renderer::EnsureVertexBufferSize(int size)
 {
-	BufferDescriptor bufferDesc;
-	bufferDesc.size = size * sizeof(float);
-	bufferDesc.usage = BufferUsage::CopyDst | BufferUsage::Vertex;
-	bufferDesc.mappedAtCreation = false;
-	vertexBuffer = device.createBuffer(bufferDesc);
+	const uint64_t needed = static_cast<uint64_t>(size) * sizeof(float);
+
+	// Grow the pool if this frame issues more draws than any previous frame.
+	if (vertexBufferIndex >= vertexBufferPool.size())
+	{
+		vertexBufferPool.emplace_back();     // default handle (null)
+		vertexBufferCapacities.push_back(0);
+	}
+
+	// Reuse this slot's buffer if it is already big enough; otherwise release
+	// the old GPU buffer and allocate a larger one (with headroom so we stop
+	// reallocating quickly). This is the fix: no per-draw buffer is orphaned.
+	if (!vertexBufferPool[vertexBufferIndex] ||
+		needed > vertexBufferCapacities[vertexBufferIndex])
+	{
+		if (vertexBufferPool[vertexBufferIndex])
+			vertexBufferPool[vertexBufferIndex].release();
+
+		const uint64_t capacity = needed + needed / 2; // 1.5x headroom
+		BufferDescriptor bufferDesc;
+		bufferDesc.size = capacity;
+		bufferDesc.usage = BufferUsage::CopyDst | BufferUsage::Vertex;
+		bufferDesc.mappedAtCreation = false;
+		vertexBufferPool[vertexBufferIndex] = device.createBuffer(bufferDesc);
+		vertexBufferCapacities[vertexBufferIndex] = capacity;
+	}
+
+	// Hand this draw its own pooled buffer, then advance so the next draw in
+	// the frame gets a distinct slot (all draws record into one command buffer,
+	// so each needs its own buffer alive until submit).
+	vertexBuffer = vertexBufferPool[vertexBufferIndex];
+	vertexBufferIndex++;
 }
 
 void Renderer::DrawBox(const shape::Box &box)
