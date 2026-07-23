@@ -90,6 +90,11 @@ public:
     //--------Drag-----------
     DragMode dragMode = DragMode::physicsDrag;
 
+    // Grid unit (in meters) that Precision dragging snaps to. The visual grid
+    // draws 1 m minor cells; this is the placement snap increment set from the
+    // Simulation panel.
+    float gridUnit = 1.0f;
+
     // --- Time Control ---
 
     float timeScale = 1.0f; // 0 = paused, 1 = normal, 0.1 = slow-mo

@@ -720,6 +720,16 @@ void UIManager::RenderSimPanel(std::size_t bodyCount)
     ImGui::Combo("##drag", &dragIdx, dragType, 2);
     settings->dragMode = (DragMode)dragIdx;
 
+    // Grid unit: the snap increment (in metres) used by Precision drag. Objects
+    // dragged in Precision mode jump in whole multiples of this.
+    ImGui::Spacing();
+    ImGui::TextColored(Col::InkMid, "Grid Unit (m)");
+    ImGui::PushStyleColor(ImGuiCol_SliderGrab, Col::Blue);
+    ImGui::PushStyleColor(ImGuiCol_SliderGrabActive, Col::BlueHov);
+    ImGui::SetNextItemWidth(-1);
+    ImGui::SliderFloat("##gridunit", &settings->gridUnit, 0.1f, 10.0f, "%.2f m");
+    ImGui::PopStyleColor(2);
+
     ImGui::Spacing();
     SectionHead("RECORDING");
 

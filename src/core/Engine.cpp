@@ -450,10 +450,15 @@ void Engine::Update(float deltaMs, int iterations)
     {
         if (draggedBody->bodyType == physics::RigidbodyType::Static)
         {
-            if (!(dynamic_cast<shape::Cannon *>(draggedBody)))
-                draggedBody->TranslateTo(mouseWorld + staticDragOffset);
-            else
-                draggedBody->TranslateTo(mouseWorld);
+            Vec2 target = dynamic_cast<shape::Cannon *>(draggedBody)
+                              ? mouseWorld
+                              : mouseWorld + staticDragOffset;
+
+            // Precision mode = grid mode: snap the target to whole grid units.
+            if (settings.dragMode == DragMode::percisionDrag)
+                target = world.SnapToGrid(target, settings.gridUnit);
+
+            draggedBody->TranslateTo(target);
         }
         else if (draggedBody->bodyType == physics::RigidbodyType::Dynamic)
         {
@@ -471,7 +476,8 @@ void Engine::Update(float deltaMs, int iterations)
             switch (settings.dragMode)
             {
             case DragMode::percisionDrag:
-                draggedBody->TranslateTo(mouseWorld);
+                // Grid drag: snap the body's centre to whole grid units.
+                draggedBody->TranslateTo(world.SnapToGrid(mouseWorld, settings.gridUnit));
                 break;
             case DragMode::physicsDrag:
             {

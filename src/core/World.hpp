@@ -72,6 +72,11 @@ public:
 	// helps the UI snap measurements when the user clicks near an object.
 	math::Vec2 SnapToNearestDynamicObject(const math::Vec2 &position, float snapRadius);
 
+	// Snap a world-space (pixel) position to the nearest multiple of
+	// gridUnitMeters. Used by Precision (grid) dragging so bodies move in
+	// whole grid steps. gridUnitMeters <= 0 returns the position unchanged.
+	math::Vec2 SnapToGrid(const math::Vec2 &worldPos, float gridUnitMeters) const;
+
 	void RemoveObject(physics::Rigidbody *draggedBody);
 
 private:

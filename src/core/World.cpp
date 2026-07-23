@@ -7,6 +7,8 @@
 #include "collision/Collisions.hpp"
 #include "common/settings.hpp"
 
+#include <cmath>
+
 WorldSnapshot World::CaptureSnapshot() const
 {
 	WorldSnapshot snap;
@@ -272,6 +274,19 @@ math::Vec2 World::SnapToNearestDynamicObject(const math::Vec2 &position, float s
 
 	// Return snapped position or original position if no snap
 	return nearestBody ? nearestBody->pos : position;
+}
+
+math::Vec2 World::SnapToGrid(const math::Vec2 &worldPos, float gridUnitMeters) const
+{
+	if (gridUnitMeters <= 0.0f)
+		return worldPos;
+
+	// One grid cell in world pixels. Snapping to multiples of this from the
+	// origin lines the body's centre up with the on-screen grid (which is
+	// anchored at the origin too).
+	const float cell = gridUnitMeters * SimulationConstants::PIXELS_PER_METER;
+	return math::Vec2(std::round(worldPos.x / cell) * cell,
+					  std::round(worldPos.y / cell) * cell);
 }
 
 
